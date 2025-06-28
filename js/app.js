@@ -1,6 +1,6 @@
 import { GRID_SIZE } from './config.js';
 import { updateStatus, addMessageToChatLog, addThinkingDetails, getCanvasContext, setLoadingState } from './utils.js';
-import { getMqttDevice } from './mqttManager.js';
+// import { getMqttDevice } from './mqttManager.js'; // Removed
 import {
     initStateManager,
     getTagDatabase,
@@ -15,8 +15,9 @@ import {
 import { componentFactory, initComponentFactory } from './componentFactory.js';
 import { initKonvaManager } from './konvaManager.js';
 import { initUiManager } from './uiManager.js';
-import { initDeviceManager } from './deviceManager.js';
+import { initDeviceManager, getDeviceById } from './deviceManager.js';
 import { initAiAssistant } from './aiAssistant.js';
+import { initTopicExplorer } from './topicExplorer.js'; // Import Topic Explorer
 
 // --- Variabel Global Utama ---
 let isSimulationMode = false;
@@ -54,7 +55,7 @@ window.addEventListener("load", () => {
         konvaRefs,
         () => isSimulationMode,
         setIsSimulationModeAndInterval,
-        getMqttDevice // Pass the function to get a device
+        getDeviceById // Pass the function to get a device by ID
     );
 
     konvaRefs = initKonvaManager(
@@ -79,7 +80,7 @@ window.addEventListener("load", () => {
         konvaRefs.tr,
         undoBtn,
         redoBtn,
-        getMqttDevice // Pass the function to get a device
+        getDeviceById // Pass the function to get a device by ID
     );
 
     initComponentFactory(
@@ -102,10 +103,14 @@ window.addEventListener("load", () => {
         () => chatHistory,
         (newHistory) => { chatHistory = newHistory; },
         konvaRefs,
-        getMqttDevice // Pass the function to get a device
+        getDeviceById // Pass the function to get a device by ID
     );
 
-    initDeviceManager();
+    // Create the socket connection for /devices namespace once
+    const deviceSocket = io('/devices');
+
+    initDeviceManager(deviceSocket); // Pass the socket instance
+    initTopicExplorer(deviceSocket); // Pass the same socket instance
 
     saveState();
     addMessageToChatLog(chatLog, chatHistory, "model", "Halo! Saya asisten AI Anda. Apa yang bisa saya bantu rancang hari ini?");
