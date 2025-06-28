@@ -1,139 +1,139 @@
-// Pastikan Paho MQTT Client sudah dimuat secara global atau impor jika memungkinkan
-// import Paho from 'paho-mqtt'; // Jika menggunakan npm package
+import { getTagDatabase, setTagValue } from './stateManager.js';
+import { getLayer } from './konvaManager.js';
 
-let mqttClient = null;
-let mqttConnected = false;
-let mqttReconnectInterval = null;
+const mqttDevices = new Map(); // Menyimpan instance client MQTT berdasarkan ID device
 
-// Fungsi ini akan dipanggil dari app.js untuk menginisialisasi dengan elemen UI dan state
-export function initMqtt(uiUpdateStatus, getLayer, getTagDatabase, getMqttElements) {
-    const { mqttHostInput, mqttPortInput, mqttConnectBtn } = getMqttElements();
-
-    function connectMqttInternal(host, port, username, password) {
-        if (mqttClient && mqttClient.isConnected()) {
-            mqttClient.disconnect();
-        }
-
-        const clientId = "hmi_client_" + Math.random().toString(16).substr(2, 8);
-        // const uri = `ws://${host}:${port}/mqtt`; // Assuming WebSocket for browser, Paho client handles this
-
-        uiUpdateStatus(`Menghubungkan ke MQTT broker di ${host}:${port}...`, 0);
-
-        mqttClient = new Paho.MQTT.Client(host, Number(port), "/mqtt", clientId);
-
-        mqttClient.onConnectionLost = (responseObject) => onConnectionLostInternal(responseObject, host, port, uiUpdateStatus);
-        mqttClient.onMessageArrived = (message) => onMessageArrivedInternal(message, getLayer, getTagDatabase);
-
-        const connectOptions = {
-            onSuccess: () => onConnectSuccessInternal(uiUpdateStatus, getLayer, mqttConnectBtn),
-            onFailure: (responseObject) => onConnectFailureInternal(responseObject, uiUpdateStatus, mqttConnectBtn),
-            cleanSession: true,
-            reconnect: false, // We'll handle reconnect manually
-            useSSL: port === 8883 || port === 8084, // asumsi port SSL umum
-        };
-
-        if (username) {
-            connectOptions.userName = username;
-        }
-        if (password) {
-            connectOptions.password = password;
-        }
-
-        try {
-            mqttClient.connect(connectOptions);
-        } catch (e) {
-            console.error("MQTT Connect Error:", e);
-            uiUpdateStatus(`Gagal koneksi MQTT: ${e.message}`, 5000);
-            mqttConnected = false;
-            mqttConnectBtn.textContent = "Connect";
-            mqttConnectBtn.classList.remove("bg-red-600", "hover:bg-red-700");
-            mqttConnectBtn.classList.add("bg-blue-600", "hover:bg-blue-700");
-        }
+// Fungsi untuk membuat dan mengelola instance device MQTT
+export function createMqttDevice(device) {
+    if (mqttDevices.has(device.id)) {
+        console.log(`Device ${device.name} sudah ada.`);
+        return mqttDevices.get(device.id);
     }
 
-    function onConnectSuccessInternal(uiUpdateStatus, getLayer, mqttConnectBtn) {
-        mqttConnected = true;
-        uiUpdateStatus("Terhubung ke MQTT broker!", 3000);
-        mqttConnectBtn.textContent = "Disconnect";
-        mqttConnectBtn.classList.remove("bg-blue-600", "hover:bg-blue-700");
-        mqttConnectBtn.classList.add("bg-red-600", "hover:bg-red-700");
-        clearInterval(mqttReconnectInterval); // Hentikan interval reconnect jika berhasil terhubung
+    const clientId = `hmi_client_${device.id}`;
+    const client = new Paho.MQTT.Client(device.host, Number(device.port), "/mqtt", clientId);
 
-        const layer = getLayer();
-        if (layer) {
-            layer.find(".hmi-component").forEach(node => {
-                if (node.attrs.address) {
-                    mqttClient.subscribe(node.attrs.address);
-                    console.log(`Subscribed to ${node.attrs.address}`);
-                }
-            });
-        }
+    const deviceState = {
+        id: device.id,
+        name: device.name,
+        client: client,
+        connected: false,
+        reconnectInterval: null,
+    };
+
+    client.onConnectionLost = (responseObject) => onConnectionLost(responseObject, deviceState, device);
+    client.onMessageArrived = onMessageArrived;
+
+    mqttDevices.set(device.id, deviceState);
+    connectMqtt(deviceState, device);
+
+    return deviceState;
+}
+
+function connectMqtt(deviceState, deviceConfig) {
+    const connectOptions = {
+        onSuccess: () => onConnectSuccess(deviceState),
+        onFailure: (responseObject) => onConnectFailure(responseObject, deviceState),
+        cleanSession: true,
+        useSSL: Number(deviceConfig.port) === 8883 || Number(deviceConfig.port) === 8084,
+    };
+
+    try {
+        console.log(`Menghubungkan ke ${deviceConfig.name} di ${deviceConfig.host}:${deviceConfig.port}...`);
+        deviceState.client.connect(connectOptions);
+    } catch (e) {
+        console.error(`[${deviceState.name}] MQTT Connect Error:`, e);
+        updateDeviceStatus(deviceState.id, false);
     }
+}
 
-    function onConnectFailureInternal(responseObject, uiUpdateStatus, mqttConnectBtn) {
-        mqttConnected = false;
-        uiUpdateStatus(`Koneksi MQTT gagal: ${responseObject.errorMessage}`, 5000);
-        mqttConnectBtn.textContent = "Connect";
-        mqttConnectBtn.classList.remove("bg-red-600", "hover:bg-red-700");
-        mqttConnectBtn.classList.add("bg-blue-600", "hover:bg-blue-700");
-    }
+function onConnectSuccess(deviceState) {
+    console.log(`[${deviceState.name}] Terhubung ke MQTT broker.`);
+    deviceState.connected = true;
+    updateDeviceStatus(deviceState.id, true);
+    clearInterval(deviceState.reconnectInterval);
 
-    function onConnectionLostInternal(responseObject, host, port, uiUpdateStatus) {
-        mqttConnected = false;
-        if (responseObject.errorCode !== 0) {
-            uiUpdateStatus(`Koneksi MQTT terputus: ${responseObject.errorMessage}. Mencoba menghubungkan kembali...`, 0);
-            if (mqttReconnectInterval) clearInterval(mqttReconnectInterval); // Hapus interval lama jika ada
-            mqttReconnectInterval = setInterval(() => {
-                // Kita butuh host dan port terbaru dari input fields, jadi panggil getMqttElements lagi
-                const { mqttHostInput: currentHostInput, mqttPortInput: currentPortInput } = getMqttElements();
-                connectMqttInternal(currentHostInput.value, currentPortInput.value);
-            }, 5000);
-        }
-    }
-
-    function onMessageArrivedInternal(message, getLayer, getTagDatabase) {
-        const tagDatabase = getTagDatabase();
-        tagDatabase[message.destinationName] = parseFloat(message.payloadString); // Asumsi payload adalah angka
-        const layer = getLayer();
-        if (layer) {
-            layer.find(".hmi-component").forEach(n => n.updateState?.());
-        }
-    }
-
-    mqttConnectBtn.addEventListener("click", () => {
-        if (mqttConnected) {
-            if (mqttClient) {
-                mqttClient.disconnect();
+    // Subscribe ke semua topik yang relevan saat koneksi berhasil
+    const layer = getLayer();
+    if (layer) {
+        layer.find('.hmi-component').forEach(node => {
+            if (node.attrs.deviceId === deviceState.id && node.attrs.address) {
+                subscribeToTopic(deviceState, node.attrs.address);
             }
-            mqttConnected = false;
-            mqttConnectBtn.textContent = "Connect";
-            mqttConnectBtn.classList.remove("bg-red-600", "hover:bg-red-700");
-            mqttConnectBtn.classList.add("bg-blue-600", "hover:bg-blue-700");
-            uiUpdateStatus("Terputus dari MQTT broker.", 3000);
-            clearInterval(mqttReconnectInterval);
-        } else {
-            const host = mqttHostInput.value;
-            const port = mqttPortInput.value;
-            connectMqttInternal(host, port);
-        }
-    });
-
-    // Fungsi untuk melakukan subscribe saat komponen baru ditambahkan atau addressnya diubah
-    function subscribeToComponentAddress(address) {
-        if (mqttConnected && mqttClient && address) {
-            mqttClient.subscribe(address);
-            console.log(`Subscribed to ${address}`);
-        }
+        });
     }
+}
 
-    // Fungsi untuk unsubscribe saat komponen dihapus atau addressnya diubah
-    function unsubscribeFromComponentAddress(address) {
-        if (mqttConnected && mqttClient && address) {
-            mqttClient.unsubscribe(address);
-            console.log(`Unsubscribed from ${address}`);
-        }
+function onConnectFailure(responseObject, deviceState) {
+    console.error(`[${deviceState.name}] Koneksi MQTT gagal: ${responseObject.errorMessage}`);
+    deviceState.connected = false;
+    updateDeviceStatus(deviceState.id, false);
+}
+
+function onConnectionLost(responseObject, deviceState, deviceConfig) {
+    console.log(`[${deviceState.name}] Koneksi MQTT terputus: ${responseObject.errorMessage}.`);
+    deviceState.connected = false;
+    updateDeviceStatus(deviceState.id, false);
+    // Implementasi reconnect logic jika diperlukan
+    // deviceState.reconnectInterval = setInterval(() => connectMqtt(deviceState, deviceConfig), 5000);
+}
+
+function onMessageArrived(message) {
+    const topic = message.destinationName;
+    const value = parseFloat(message.payloadString);
+    
+    // Update state terpusat
+    setTagValue(topic, value);
+
+    // Update komponen di canvas
+    const layer = getLayer();
+    if (layer) {
+        layer.find('.hmi-component').forEach(n => {
+            // Cek apakah komponen ini terikat dengan topik yang pesannya masuk
+            // Ini memerlukan cara untuk menautkan komponen ke device dan topik
+            // Untuk sekarang, kita asumsikan address adalah topiknya
+            if (n.attrs.address === topic) {
+                n.updateState?.();
+            }
+        });
     }
+}
 
-    // Ekspor fungsi yang mungkin perlu dipanggil dari luar modul ini
-    return { subscribeToComponentAddress, unsubscribeFromComponentAddress };
+export function disconnectMqttDevice(deviceId) {
+    const deviceState = mqttDevices.get(deviceId);
+    if (deviceState && deviceState.client.isConnected()) {
+        deviceState.client.disconnect();
+        console.log(`[${deviceState.name}] Terputus dari MQTT broker.`);
+    }
+    clearInterval(deviceState.reconnectInterval);
+    mqttDevices.delete(deviceId);
+    updateDeviceStatus(deviceId, false);
+}
+
+export function subscribeToTopic(deviceState, topic) {
+    if (deviceState && deviceState.connected && topic) {
+        deviceState.client.subscribe(topic);
+        console.log(`[${deviceState.name}] Subscribed to ${topic}`);
+    }
+}
+
+export function unsubscribeFromTopic(deviceState, topic) {
+    if (deviceState && deviceState.connected && topic) {
+        deviceState.client.unsubscribe(topic);
+        console.log(`[${deviceState.name}] Unsubscribed from ${topic}`);
+    }
+}
+
+// Fungsi untuk mengupdate UI status di Device Manager
+function updateDeviceStatus(deviceId, isConnected) {
+    const statusDot = document.querySelector(`.device-status[data-id="${deviceId}"]`);
+    if (statusDot) {
+        statusDot.classList.toggle('bg-green-500', isConnected);
+        statusDot.classList.toggle('bg-red-500', !isConnected);
+        statusDot.title = isConnected ? 'Connected' : 'Disconnected';
+    }
+}
+
+export function getMqttDevice(deviceId) {
+    return mqttDevices.get(deviceId);
 }
