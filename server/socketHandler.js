@@ -1,5 +1,10 @@
 // server/socketHandler.js
-const { initializeDevice, getDeviceInstance, getAllDeviceInstances, removeDevice } = require('./deviceHandler');
+const {
+    initializeDevice,
+    getDeviceInstance,
+    getAllDeviceInstances,
+    removeDevice
+} = require('./deviceManager'); // Updated import path
 
 // In-memory store for device configurations.
 // TODO: Replace with a persistent storage solution (e.g., JSON file, database).
