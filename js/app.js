@@ -1,6 +1,5 @@
 import { GRID_SIZE } from './config.js';
 import { updateStatus, addMessageToChatLog, addThinkingDetails, getCanvasContext, setLoadingState } from './utils.js';
-// import { getMqttDevice } from './mqttManager.js'; // Removed
 import {
     initStateManager,
     getTagDatabase,
