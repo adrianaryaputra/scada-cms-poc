@@ -1,175 +1,245 @@
 // server/socketHandler.js
 const { initializeDevice, getDeviceInstance, getAllDeviceInstances, removeDevice } = require('./deviceHandler');
 
-// This will be populated from localStorage or a database in a real app
-let serverSideDeviceStore = [];
+// In-memory store for device configurations.
+// TODO: Replace with a persistent storage solution (e.g., JSON file, database).
+let serverSideDeviceConfigs = [];
 
+/**
+ * Sets up Socket.IO event handlers for the /devices namespace.
+ * @param {object} io - The Socket.IO server instance.
+ */
 function setupSocketHandlers(io) {
     const deviceNamespace = io.of('/devices');
 
     deviceNamespace.on('connection', (socket) => {
-        console.log(`Client ${socket.id} connected to /devices namespace`);
+        // console.log(`Client ${socket.id} connected to /devices namespace`);
 
-        // Send current list of devices to newly connected client
-        socket.emit('initial_device_list', serverSideDeviceStore.map(dev => ({...dev, connected: getDeviceInstance(dev.id)?.connected || false }) ));
+        // Send the current list of device configurations and their live statuses
+        // to the newly connected client.
+        socket.emit('initial_device_list', serverSideDeviceConfigs.map(devConfig => {
+            const deviceInstance = getDeviceInstance(devConfig.id);
+            return {
+                ...devConfig,
+                connected: deviceInstance?.connected || false,
+                // Include other relevant status info if available, e.g., from deviceInstance.getStatus()
+            };
+        }));
 
-        // Handle device CRUD operations
+        // --- Device CRUD Operations ---
+
         socket.on('add_device', (deviceConfig) => {
-            console.log('Received add_device request:', deviceConfig);
-            const existingDevice = serverSideDeviceStore.find(d => d.id === deviceConfig.id);
+            // console.log(`[Socket ${socket.id}] Received 'add_device' request:`, deviceConfig);
+            const existingDevice = serverSideDeviceConfigs.find(d => d.id === deviceConfig.id);
             if (!existingDevice) {
-                serverSideDeviceStore.push(deviceConfig);
-                const deviceInstance = initializeDevice(deviceConfig, io); // Pass io for data emission
-                // Broadcast updated device list to all clients in the namespace
-                deviceNamespace.emit('device_added', {...deviceConfig, connected: deviceInstance?.connected || false});
-                // Persist serverSideDeviceStore (e.g., to a file or DB)
-            } else {
-                // Handle error: device already exists or send update
-                socket.emit('operation_error', { message: `Device with ID ${deviceConfig.id} already exists.` });
-            }
-        });
+                serverSideDeviceConfigs.push(deviceConfig);
+                const deviceInstance = initializeDevice(deviceConfig, io); // Pass io for device to emit updates
 
-        socket.on('edit_device', (deviceConfig) => {
-            console.log('Received edit_device request:', deviceConfig);
-            const index = serverSideDeviceStore.findIndex(d => d.id === deviceConfig.id);
-            if (index > -1) {
-                // Disconnect and remove old instance
-                removeDevice(deviceConfig.id);
-
-                serverSideDeviceStore[index] = deviceConfig;
-                const deviceInstance = initializeDevice(deviceConfig, io);
-                deviceNamespace.emit('device_updated', {...deviceConfig, connected: deviceInstance?.connected || false});
-                // Persist serverSideDeviceStore
-            } else {
-                socket.emit('operation_error', { message: `Device with ID ${deviceConfig.id} not found for editing.` });
-            }
-        });
-
-        socket.on('delete_device', (deviceId) => {
-            console.log('Received delete_device request for ID:', deviceId);
-            const index = serverSideDeviceStore.findIndex(d => d.id === deviceId);
-            if (index > -1) {
-                removeDevice(deviceId);
-                serverSideDeviceStore.splice(index, 1);
-                deviceNamespace.emit('device_deleted', deviceId);
-                // Persist serverSideDeviceStore
-            } else {
-                socket.emit('operation_error', { message: `Device with ID ${deviceId} not found for deletion.` });
-            }
-        });
-
-        socket.on('request_device_data', (deviceId) => {
-            const device = getDeviceInstance(deviceId);
-            if (device) {
-                // This is more for polled devices. MQTT pushes data.
-                // For now, just acknowledge. Real implementation might trigger a read.
-                console.log(`Data request for ${deviceId}. Device type: ${device.type}`);
-            }
-        });
-
-        socket.on('write_to_device', (data) => { // This event name might become ambiguous.
-                                                 // Consider renaming to 'write_to_device_address' or similar if keeping.
-                                                 // For now, we'll assume MqttDevice.writeData was a typo and it meant writeVariable.
-            // data = { deviceId, address, value } OR { deviceId, variableName, value }
-            console.log('Received write_to_device (or variable) request:', data);
-            const device = getDeviceInstance(data.deviceId);
-            if (device && device.connected) {
-                if (data.variableName && typeof device.writeVariable === 'function') {
-                    device.writeVariable(data.variableName, data.value);
-                } else if (data.address && typeof device.writeData === 'function') { // Fallback for non-Mqtt or older direct address writes
-                    device.writeData(data.address, data.value);
-                } else {
-                    console.warn(`[SocketHandler] Device ${data.deviceId} does not support required write method.`);
-                    socket.emit('operation_error', { message: `Device ${data.deviceId} does not support the required write method.` });
-                }
+                // Broadcast the newly added device config and its status to all clients.
+                deviceNamespace.emit('device_added', {
+                    ...deviceConfig,
+                    connected: deviceInstance?.connected || false
+                });
+                // TODO: Persist serverSideDeviceConfigs
             } else {
                 socket.emit('operation_error', {
-                    message: `Device ${data.deviceId} not found or not connected. Cannot write.`
+                    message: `Device with ID ${deviceConfig.id} already exists.`,
+                    deviceId: deviceConfig.id
                 });
             }
         });
 
-        socket.on('disconnect', () => {
-            console.log(`Client ${socket.id} disconnected from /devices namespace`);
-            // Clean up any temporary subscriptions for this socket
-            getAllDeviceInstances().forEach(device => {
-                if (device.type === 'mqtt' && typeof device.temporarySubscriptions?.has === 'function' && device.temporarySubscriptions.has(socket.id)) {
-                    const tempTopicsForSocket = new Set(device.temporarySubscriptions.get(socket.id)); // Iterate over a copy
-                    tempTopicsForSocket.forEach(topic => {
-                        if (typeof device.handleTemporaryUnsubscribe === 'function') {
-                            device.handleTemporaryUnsubscribe(topic, socket.id);
-                        }
-                    });
-                }
-            });
+        socket.on('edit_device', (deviceConfig) => {
+            // console.log(`[Socket ${socket.id}] Received 'edit_device' request:`, deviceConfig);
+            const index = serverSideDeviceConfigs.findIndex(d => d.id === deviceConfig.id);
+            if (index > -1) {
+                // Stop and remove the old device instance before re-initializing.
+                removeDevice(deviceConfig.id);
+
+                serverSideDeviceConfigs[index] = deviceConfig;
+                const deviceInstance = initializeDevice(deviceConfig, io);
+
+                deviceNamespace.emit('device_updated', {
+                    ...deviceConfig,
+                    connected: deviceInstance?.connected || false
+                });
+                // TODO: Persist serverSideDeviceConfigs
+            } else {
+                socket.emit('operation_error', {
+                    message: `Device with ID ${deviceConfig.id} not found for editing.`,
+                    deviceId: deviceConfig.id
+                });
+            }
         });
 
-        // Event handlers for MQTT Temporary Subscriptions
+        socket.on('delete_device', (deviceId) => {
+            // console.log(`[Socket ${socket.id}] Received 'delete_device' request for ID: ${deviceId}`);
+            const index = serverSideDeviceConfigs.findIndex(d => d.id === deviceId);
+            if (index > -1) {
+                removeDevice(deviceId); // Disconnect and remove the device instance.
+                serverSideDeviceConfigs.splice(index, 1);
+                deviceNamespace.emit('device_deleted', deviceId);
+                // TODO: Persist serverSideDeviceConfigs
+            } else {
+                socket.emit('operation_error', {
+                    message: `Device with ID ${deviceId} not found for deletion.`,
+                    deviceId: deviceId
+                });
+            }
+        });
+
+        // --- Device Interaction ---
+
+        socket.on('request_device_data', (deviceId) => {
+            // console.log(`[Socket ${socket.id}] Received 'request_device_data' for device: ${deviceId}`);
+            const device = getDeviceInstance(deviceId);
+            if (device && typeof device.readData === 'function') {
+                // This is primarily for polled devices. MQTT devices push data automatically.
+                // The readData method in the device should handle emitting data via socket.
+                device.readData();
+            } else if (device) {
+                console.warn(`[SocketHandler] Device ${deviceId} (${device.type}) does not have a readData method or is not a polled type.`);
+            } else {
+                 socket.emit('operation_error', { message: `Device ${deviceId} not found for data request.`});
+            }
+        });
+
+        socket.on('write_to_device', (data) => {
+            // console.log(`[Socket ${socket.id}] Received 'write_to_device' request:`, data);
+            const { deviceId, variableName, address, value } = data;
+            const device = getDeviceInstance(deviceId);
+
+            if (device && device.connected) {
+                if (variableName && typeof device.writeVariable === 'function') {
+                    device.writeVariable(variableName, value);
+                } else if (address && typeof device.writeData === 'function') {
+                    // Fallback for devices that use direct address writing (e.g., Modbus)
+                    device.writeData(address, value);
+                } else {
+                    console.warn(`[SocketHandler] Device ${deviceId} (${device.type}) does not support the required write method (writeVariable or writeData).`);
+                    socket.emit('operation_error', {
+                        message: `Device ${deviceId} does not support the required write method for the provided parameters.`,
+                        details: { deviceId, variableNameProvided: !!variableName, addressProvided: !!address }
+                    });
+                }
+            } else {
+                socket.emit('operation_error', {
+                    message: `Device ${deviceId} not found or not connected. Cannot write.`,
+                    details: { deviceId, connected: device?.connected }
+                });
+            }
+        });
+
+        // --- MQTT Temporary Subscriptions ---
+
         socket.on('client_temp_subscribe_request', ({ deviceId, topic }) => {
-            console.log(`[Socket ${socket.id}] Received client_temp_subscribe_request for device ${deviceId}, topic ${topic}`);
+            // console.log(`[Socket ${socket.id}] Received 'client_temp_subscribe_request' for device ${deviceId}, topic: ${topic}`);
             const device = getDeviceInstance(deviceId);
             if (device && device.type === 'mqtt' && typeof device.handleTemporarySubscribe === 'function') {
                 device.handleTemporarySubscribe(topic, socket.id);
             } else {
-                socket.emit('operation_error', { message: `Device ${deviceId} not found or does not support temporary subscriptions.` });
+                socket.emit('operation_error', {
+                    message: `Device ${deviceId} not found or does not support temporary MQTT subscriptions.`,
+                    details: { deviceId, topic }
+                });
             }
         });
 
         socket.on('client_temp_unsubscribe_request', ({ deviceId, topic }) => {
-            console.log(`[Socket ${socket.id}] Received client_temp_unsubscribe_request for device ${deviceId}, topic ${topic}`);
+            // console.log(`[Socket ${socket.id}] Received 'client_temp_unsubscribe_request' for device ${deviceId}, topic: ${topic}`);
             const device = getDeviceInstance(deviceId);
             if (device && device.type === 'mqtt' && typeof device.handleTemporaryUnsubscribe === 'function') {
-                device.handleTemporaryUnsubscribe(topic, socket.id);
+                // The device.handleTemporaryUnsubscribe method is responsible for broker unsubscription
+                // only if the topic is no longer needed by any client or variable.
+                device.handleTemporaryUnsubscribe(topic, socket.id, false); // isDisconnecting = false
             } else {
-                // No error message needed if device/topic wasn't tracked for this socket anyway
-                console.warn(`[Socket ${socket.id}] Could not process temp unsubscribe for device ${deviceId}, topic ${topic}. Device not found or incorrect type.`);
+                // No explicit error message to client if device/topic wasn't tracked,
+                // as it might be a redundant request or for a non-MQTT device.
+                console.warn(`[SocketHandler] Could not process temp unsubscribe for device ${deviceId}, topic ${topic}. Device not found, not MQTT, or no unsubscribe handler.`);
             }
         });
 
+        // --- Periodic Status Updates & Disconnect Handling ---
 
-        // Periodically emit status updates for all devices
-        // This is a simple way to keep clients updated. More sophisticated would be event-driven from Device instances.
-        // Note: MqttDevice now also emits 'device_status_update' and 'device_statuses' on change.
-        // This interval ensures even non-MQTT devices or polled devices could have their status broadcasted.
+        // Periodically emit status updates for all devices.
+        // This serves as a heartbeat and ensures clients have reasonably up-to-date statuses,
+        // especially for devices that don't proactively report all status changes.
+        // MqttDevice._updateStatusAndEmit also sends 'device_status_update' and 'device_statuses' on changes.
+        const statusIntervalMs = 15000; // Emit all statuses every 15 seconds
         const statusInterval = setInterval(() => {
-            const deviceStatuses = getAllDeviceInstances().map(d => ({
+            const allDeviceStatuses = getAllDeviceInstances().map(d => ({
                 id: d.id,
+                name: d.name,
+                type: d.type,
                 connected: d.connected,
-                name: d.name, // Adding name and type for richer status updates
-                type: d.type
+                // timestamp: new Date().toISOString() // Can be added if needed by client
             }));
-            if (deviceStatuses.length > 0) {
-                 socket.emit('device_statuses', deviceStatuses);
+            if (allDeviceStatuses.length > 0) {
+                 socket.emit('device_statuses', allDeviceStatuses);
             }
-        }, 5000); // Emit status every 5 seconds
+        }, statusIntervalMs);
 
-        // Clear interval when the specific socket disconnects
-        const originalDisconnectHandler = socket.listeners('disconnect')[0]; // Get the first (and likely only) disconnect handler
-        socket.removeAllListeners('disconnect'); // Remove existing to avoid multiple calls to clearInterval
-        socket.on('disconnect', () => {
-            if (originalDisconnectHandler) {
-                originalDisconnectHandler(); // Call the original logic (logging, temp sub cleanup)
-            }
+        // Enhanced disconnect handling
+        const handleDisconnect = () => {
+            // console.log(`Client ${socket.id} disconnected from /devices namespace.`);
             clearInterval(statusInterval);
-            console.log(`[Socket ${socket.id}] Cleared statusInterval.`);
-        });
+            // console.log(`[Socket ${socket.id}] Cleared statusInterval due to disconnect.`);
 
+            // Clean up any MQTT temporary subscriptions for this socket
+            getAllDeviceInstances().forEach(device => {
+                if (device.type === 'mqtt' &&
+                    typeof device.temporarySubscriptions?.has === 'function' &&
+                    device.temporarySubscriptions.has(socket.id) &&
+                    typeof device.handleTemporaryUnsubscribe === 'function') {
+
+                    // Iterate over a copy of the filters, as the original set might be modified
+                    const tempFiltersForSocket = new Set(device.temporarySubscriptions.get(socket.id));
+                    tempFiltersForSocket.forEach(filter => {
+                        // console.log(`[Socket ${socket.id}] Cleaning up temp MQTT sub: Device ${device.id}, Filter ${filter}`);
+                        device.handleTemporaryUnsubscribe(filter, socket.id, true); // isDisconnecting = true
+                    });
+                }
+            });
+        };
+
+        // Replace default 'disconnect' listener if it exists, or just add ours.
+        // This ensures we don't accidentally remove other important disconnect logic if added by Socket.IO itself.
+        const existingDisconnectListeners = socket.listeners('disconnect');
+        if (existingDisconnectListeners.length > 0) {
+            socket.removeAllListeners('disconnect');
+            socket.on('disconnect', () => {
+                existingDisconnectListeners.forEach(listener => listener.call(socket)); // Call original listeners
+                handleDisconnect(); // Call our custom disconnect logic
+            });
+        } else {
+            socket.on('disconnect', handleDisconnect);
+        }
     });
 
-    // Load initial devices from storage (e.g., a JSON file or database)
-    // For now, we'll keep it in memory and assume devices are added via UI
-    // In a real app, you'd load persisted devices here and initialize them:
-    // loadPersistedDevices().forEach(config => initializeDevice(config, io));
-    // And serverSideDeviceStore would be initialized with these.
+    // TODO: Load initial device configurations from persistent storage when server starts.
+    // Example:
+    // loadPersistedDeviceConfigs().then(configs => {
+    //     serverSideDeviceConfigs = configs;
+    //     serverSideDeviceConfigs.forEach(config => initializeDevice(config, io));
+    // }).catch(err => console.error("Failed to load persisted device configs:", err));
 }
 
-// Example of how device data could be pushed from deviceHandler to clients
-// This function would be called by a device instance (e.g., MqttDevice on message)
-// This is illustrative; actual implementation hooks into Device class events or callbacks.
+/**
+ * Example function for broadcasting generic device data.
+ * This would typically be called from within a Device instance when it has new data.
+ * @param {object} io - The Socket.IO server instance.
+ * @param {string} deviceId - The ID of the device.
+ * @param {object} data - The data payload (e.g., { address, value, timestamp }).
+ */
 function broadcastDeviceData(io, deviceId, data) {
-    // data typically { address, value, timestamp }
-    io.of('/devices').emit('device_data', { deviceId, ...data });
+    // Ensure data has a timestamp if not provided
+    const payload = {
+        deviceId,
+        ...data,
+        timestamp: data.timestamp || new Date().toISOString()
+    };
+    io.of('/devices').emit('device_data', payload);
 }
 
 
-module.exports = { setupSocketHandlers, broadcastDeviceData, serverSideDeviceStore };
+module.exports = { setupSocketHandlers, broadcastDeviceData, serverSideDeviceStore: serverSideDeviceConfigs };
