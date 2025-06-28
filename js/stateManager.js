@@ -180,36 +180,96 @@ export function updateUndoRedoButtons() {
     }
 }
 
-// Fungsi untuk memperbarui tag database, berguna saat komponen dibuat atau address diubah
-export function updateTagDatabase(address, value) {
-    if (!(address in tagDatabase)) {
-        tagDatabase[address] = value;
+// // Fungsi untuk memperbarui tag database, berguna saat komponen dibuat atau address diubah
+// export function updateTagDatabase(address, value) { // To be replaced by setDeviceVariableValue
+//     if (!(address in tagDatabase)) {
+//         tagDatabase[address] = value;
+//     }
+// }
+
+// export function deleteFromTagDatabase(address) { // To be replaced by more specific deletion
+//     delete tagDatabase[address];
+// }
+
+
+// New functions for variable-based state
+export function getDeviceVariableValue(deviceId, variableName) {
+    if (tagDatabase[deviceId]) {
+        return tagDatabase[deviceId][variableName];
+    }
+    return undefined;
+}
+
+export function setDeviceVariableValue(deviceId, variableName, value) {
+    if (!tagDatabase[deviceId]) {
+        tagDatabase[deviceId] = {};
+    }
+    tagDatabase[deviceId][variableName] = value;
+    // console.log(`Set variable value: Device ${deviceId}, Var ${variableName} =`, value, tagDatabase);
+
+    // Notify relevant components to update.
+    // This requires components to be findable by deviceId and variableName.
+    // Or, a more generic event can be dispatched that components listen to if they are active.
+    if (layerRef) {
+        layerRef.find('.hmi-component').forEach(node => {
+            // Assumption: components will have deviceId and variableName attributes
+            if (node.attrs.deviceId === deviceId && node.attrs.variableName === variableName) {
+                node.updateState?.(); // Trigger component's own update method
+            }
+        });
     }
 }
 
-export function deleteFromTagDatabase(address) {
-    delete tagDatabase[address];
-}
-
-export function getComponentAddressValue(address) {
-    return tagDatabase[address];
-}
-
-export function setComponentAddressValue(address, value) {
-    tagDatabase[address] = value;
-}
-
-// Fungsi untuk mengganti address di tagDatabase (misal saat diedit di context menu)
-export function replaceTagAddress(oldAddress, newAddress) {
-    if (oldAddress !== newAddress && tagDatabase.hasOwnProperty(oldAddress)) {
-        tagDatabase[newAddress] = tagDatabase[oldAddress];
-        delete tagDatabase[oldAddress];
-        // Client-side subscription logic removed. Server manages subscriptions.
-        // if (mqttFuncsRef) { // mqttFuncsRef is no longer for this
-        //     // mqttFuncsRef.unsubscribeFromComponentAddress(oldAddress);
-        //     // mqttFuncsRef.subscribeToComponentAddress(newAddress);
-        // }
-        return true; // Berhasil diganti
+export function deleteDeviceState(deviceId) {
+    if (tagDatabase[deviceId]) {
+        delete tagDatabase[deviceId];
+        console.log(`State for device ${deviceId} deleted.`);
     }
-    return false; // Tidak ada perubahan atau oldAddress tidak ada
+}
+
+export function deleteDeviceVariableState(deviceId, variableName) {
+    if (tagDatabase[deviceId] && tagDatabase[deviceId].hasOwnProperty(variableName)) {
+        delete tagDatabase[deviceId][variableName];
+        console.log(`State for variable ${variableName} of device ${deviceId} deleted.`);
+    }
+}
+
+
+// // Fungsi untuk mengganti address di tagDatabase (misal saat diedit di context menu)
+// // This function is likely obsolete as direct address manipulation is replaced by variable binding.
+// export function replaceTagAddress(oldAddress, newAddress) {
+//     if (oldAddress !== newAddress && tagDatabase.hasOwnProperty(oldAddress)) {
+//         tagDatabase[newAddress] = tagDatabase[oldAddress];
+//         delete tagDatabase[oldAddress];
+//         // Client-side subscription logic removed. Server manages subscriptions.
+//         return true; // Berhasil diganti
+//     }
+//     return false; // Tidak ada perubahan atau oldAddress tidak ada
+// }
+
+// Old functions (to be phased out or removed if no longer used by other modules after refactor)
+// For now, let's keep them but comment out their direct usage if possible,
+// or make them call the new functions with some default/global deviceId if that makes sense.
+export function getComponentAddressValue(address) { // Legacy support or for non-device-specific global tags
+    // This might represent a global variable not tied to a device.
+    // Or, if all tags become device-bound, this needs a deviceId.
+    // For now, let's assume it might access a "global" device or a flat part of tagDatabase.
+    return tagDatabase[address]; // This will break if tagDatabase is purely device-scoped.
+                                 // Needs decision: are there global tags or are all tags device variables?
+                                 // Assuming for now all data comes via device variables.
+     console.warn("getComponentAddressValue (legacy) called. Ensure this is intended for non-device-specific tags or update to getDeviceVariableValue.");
+     return undefined;
+}
+
+export function setComponentAddressValue(address, value, deviceId = "_global") { // Legacy support
+    // If deviceId is provided and it's not the placeholder, use new method.
+    if (deviceId && deviceId !== "_global") {
+        setDeviceVariableValue(deviceId, address, value); // Assuming address here might be used as variableName for legacy
+    } else {
+        // If truly global, tagDatabase structure needs to accommodate it, e.g. tagDatabase["_global"][address]
+        // For now, this will put it at the root, which might conflict with device IDs.
+        // This indicates a need for clearer separation if global tags are to be supported alongside device variables.
+        console.warn(`setComponentAddressValue (legacy) called for address: ${address}. Consider scoping to a device or specific global context.`);
+        tagDatabase[address] = value; // This is potentially problematic.
+    }
 }

@@ -15,8 +15,9 @@ import {
 import { componentFactory, initComponentFactory } from './componentFactory.js';
 import { initKonvaManager } from './konvaManager.js';
 import { initUiManager } from './uiManager.js';
-import { initDeviceManager, getDeviceById } from './deviceManager.js'; // Added getDeviceById
+import { initDeviceManager, getDeviceById } from './deviceManager.js';
 import { initAiAssistant } from './aiAssistant.js';
+import { initTopicExplorer } from './topicExplorer.js'; // Import Topic Explorer
 
 // --- Variabel Global Utama ---
 let isSimulationMode = false;
@@ -105,7 +106,11 @@ window.addEventListener("load", () => {
         getDeviceById // Pass the function to get a device by ID
     );
 
-    initDeviceManager(io); // Pass the global io object from index.html
+    // Create the socket connection for /devices namespace once
+    const deviceSocket = io('/devices');
+
+    initDeviceManager(deviceSocket); // Pass the socket instance
+    initTopicExplorer(deviceSocket); // Pass the same socket instance
 
     saveState();
     addMessageToChatLog(chatLog, chatHistory, "model", "Halo! Saya asisten AI Anda. Apa yang bisa saya bantu rancang hari ini?");

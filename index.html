@@ -229,10 +229,96 @@
                             <label for="mqtt-basepath" class="block text-sm font-medium text-gray-300">Base Path (Opsional)</label>
                             <input type="text" id="mqtt-basepath" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
                         </div>
+
+                        <!-- MQTT Device Variables Section -->
+                        <div class="mt-6 pt-4 border-t border-gray-700">
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="text-md font-semibold text-cyan-200">Device Variables (MQTT)</h4>
+                                <button type="button" id="add-mqtt-variable-btn" class="bg-sky-600 hover:bg-sky-700 text-white py-1 px-3 rounded-md text-sm">Add Variable</button>
+                            </div>
+                            <div id="mqtt-variables-container" class="space-y-3 max-h-60 overflow-y-auto pr-2">
+                                <!-- Variable rows will be injected here by JavaScript -->
+                            </div>
+                        </div>
+                         <!-- Template for a single variable row (hidden) -->
+                        <template id="mqtt-variable-row-template">
+                            <div class="mqtt-variable-row p-3 border border-gray-600 rounded-lg space-y-2 bg-gray-700/50">
+                                <input type="hidden" class="variable-id">
+                                <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
+                                    <div>
+                                        <label class="block font-medium text-gray-300">Var Name</label>
+                                        <input type="text" class="variable-name w-full bg-gray-600 border-gray-500 rounded p-1" placeholder="e.g., motorSpeed">
+                                    </div>
+                                    <div>
+                                        <label class="block font-medium text-gray-300">Data Type</label>
+                                        <select class="variable-datatype w-full bg-gray-600 border-gray-500 rounded p-1">
+                                            <option value="string">String</option>
+                                            <option value="number">Number</option>
+                                            <option value="boolean">Boolean</option>
+                                            <option value="json">JSON</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="text-xs">
+                                    <label class="block font-medium text-gray-300">Description</label>
+                                    <input type="text" class="variable-description w-full bg-gray-600 border-gray-500 rounded p-1" placeholder="Optional description">
+                                </div>
+                                <div class="pt-1 border-t border-gray-600/50">
+                                    <div class="flex items-center justify-start text-xs mt-1">
+                                        <input type="checkbox" class="variable-enable-subscribe h-4 w-4 bg-gray-600 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600 mr-2">
+                                        <label class="font-medium text-gray-200">Subscribe</label>
+                                    </div>
+                                    <div class="variable-subscribe-options pl-5 space-y-1 mt-1" style="display: none;"> <!-- Hidden by default, shown if checkbox is checked -->
+                                        <div>
+                                            <label class="block font-medium text-gray-300">Sub Topic</label>
+                                            <input type="text" class="variable-subscribe-topic w-full bg-gray-600 border-gray-500 rounded p-1" placeholder="topic/to/subscribe">
+                                        </div>
+                                        <div>
+                                            <label class="block font-medium text-gray-300">JSON Path (Optional)</label>
+                                            <input type="text" class="variable-jsonpath-subscribe w-full bg-gray-600 border-gray-500 rounded p-1" placeholder="e.g., data.value">
+                                        </div>
+                                        <div>
+                                            <label class="block font-medium text-gray-300">Sub QoS</label>
+                                            <select class="variable-qos-subscribe w-full bg-gray-600 border-gray-500 rounded p-1">
+                                                <option value="0">0</option>
+                                                <option value="1">1</option>
+                                                <option value="2">2</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="pt-1 border-t border-gray-600/50">
+                                    <div class="flex items-center justify-start text-xs mt-1">
+                                        <input type="checkbox" class="variable-enable-publish h-4 w-4 bg-gray-600 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600 mr-2">
+                                        <label class="font-medium text-gray-200">Publish</label>
+                                    </div>
+                                    <div class="variable-publish-options pl-5 space-y-1 mt-1" style="display: none;"> <!-- Hidden by default -->
+                                        <div>
+                                            <label class="block font-medium text-gray-300">Pub Topic</label>
+                                            <input type="text" class="variable-publish-topic w-full bg-gray-600 border-gray-500 rounded p-1" placeholder="topic/to/publish">
+                                        </div>
+                                        <div>
+                                            <label class="block font-medium text-gray-300">Pub QoS</label>
+                                            <select class="variable-qos-publish w-full bg-gray-600 border-gray-500 rounded p-1">
+                                                <option value="0">0</option>
+                                                <option value="1">1</option>
+                                                <option value="2">2</option>
+                                            </select>
+                                        </div>
+                                        <div class="flex items-center text-xs mt-1">
+                                             <input type="checkbox" class="variable-retain-publish h-3 w-3 bg-gray-600 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600 mr-1.5">
+                                             <label class="font-medium text-gray-300">Retain</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button type="button" class="remove-mqtt-variable-btn text-red-400 hover:text-red-300 text-xs font-semibold float-right">Remove Variable</button>
+                            </div>
+                        </template>
                     </div>
 
                     <!-- Modbus TCP Fields -->
                     <div id="modbus-tcp-fields" style="display: none;">
+                        <p class="text-sm text-gray-400 italic my-2">Modbus TCP variable configuration will be added here.</p>
                         <div class="mb-4">
                             <label for="modbus-tcp-host" class="block text-sm font-medium text-gray-300">IP Address</label>
                             <input type="text" id="modbus-tcp-host" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white" placeholder="e.g., 192.168.1.10">
@@ -249,6 +335,7 @@
 
                     <!-- Modbus RTU Fields -->
                     <div id="modbus-rtu-fields" style="display: none;">
+                        <p class="text-sm text-gray-400 italic my-2">Modbus RTU variable configuration will be added here.</p>
                         <div class="mb-4">
                             <label for="modbus-rtu-serial-port" class="block text-sm font-medium text-gray-300">Serial Port</label>
                             <input type="text" id="modbus-rtu-serial-port" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white" placeholder="e.g., /dev/ttyUSB0 or COM3">
@@ -424,5 +511,38 @@
         </div>
 
         <script type="module" src="js/app.js"></script>
+
+        <!-- MQTT Topic Explorer Modal -->
+        <div id="mqtt-topic-explorer-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-80 z-[150] flex items-center justify-center p-4">
+            <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg max-h-[90vh] flex flex-col">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 id="topic-explorer-title" class="text-xl font-bold text-cyan-300">MQTT Topic Explorer</h2>
+                    <button id="close-topic-explorer-modal" class="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+                </div>
+
+                <div class="mb-3">
+                    <label for="explorer-topic-input" class="block text-sm font-medium text-gray-300">Topic to Explore (use # for wildcard)</label>
+                    <div class="flex space-x-2 mt-1">
+                        <input type="text" id="explorer-topic-input" class="flex-grow bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white" placeholder="e.g., device/+/data">
+                        <button id="explorer-subscribe-btn" class="bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-4 rounded-lg text-sm">Subscribe</button>
+                    </div>
+                </div>
+
+                <div class="mb-3 flex-grow min-h-0 overflow-y-auto border border-gray-700 rounded-md p-2 bg-gray-900/50">
+                    <h4 class="text-sm font-semibold text-cyan-200 mb-1">Received Messages:</h4>
+                    <pre id="explorer-message-log" class="text-xs text-gray-300 whitespace-pre-wrap break-all"></pre>
+                </div>
+
+                <div class="mb-4">
+                    <label for="explorer-json-path" class="block text-sm font-medium text-gray-300">Selected JSON Path (click in JSON above)</label>
+                    <input type="text" id="explorer-json-path" readonly class="w-full bg-gray-700 border-gray-600 rounded-lg p-2 text-sm text-gray-400 mt-1" placeholder="Click on a value in a JSON message...">
+                </div>
+
+                <div class="flex justify-end space-x-3 pt-3 border-t border-gray-700">
+                    <button type="button" id="explorer-use-topic-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Use Topic</button>
+                    <button type="button" id="explorer-use-topic-path-btn" class="bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Use Topic & Path</button>
+                </div>
+            </div>
+        </div>
     </body>
 </html>

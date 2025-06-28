@@ -1,4 +1,5 @@
-import { setComponentAddressValue } from './stateManager.js';
+import { setDeviceVariableValue, deleteDeviceState as deleteDeviceStateFromManager } from './stateManager.js';
+import { openTopicExplorer } from './topicExplorer.js'; // Import openTopicExplorer
 // import { getLayer } from './konvaManager.js'; // getLayer might not be needed if Konva updates via stateManager
 
 let localDeviceCache = [];
@@ -49,6 +50,10 @@ export function initDeviceManager(ioClient) { // Renamed 'io' to 'ioClient' for 
     mqttFields = document.getElementById('mqtt-fields');
     modbusTcpFields = document.getElementById('modbus-tcp-fields');
     modbusRtuFields = document.getElementById('modbus-rtu-fields');
+    // MQTT Variables UI elements
+    const addMqttVariableBtn = document.getElementById('add-mqtt-variable-btn');
+    const mqttVariablesContainer = document.getElementById('mqtt-variables-container');
+
 
     // Check if all crucial Modal and Form elements are found
     if (!deviceManagerModal || !deviceFormModal || !deviceList || !deviceForm) {
@@ -69,6 +74,24 @@ export function initDeviceManager(ioClient) { // Renamed 'io' to 'ioClient' for 
     if(cancelDeviceForm) cancelDeviceForm.addEventListener('click', closeDeviceForm);
     if(deviceForm) deviceForm.addEventListener('submit', handleFormSubmit);
     if(deviceTypeInput) deviceTypeInput.addEventListener('change', toggleDeviceFields);
+
+    // MQTT Variables UI event listeners
+    if (addMqttVariableBtn) {
+        addMqttVariableBtn.addEventListener('click', () => addVariableRow());
+    }
+    if (mqttVariablesContainer) {
+        mqttVariablesContainer.addEventListener('click', function(event) {
+            if (event.target.classList.contains('remove-mqtt-variable-btn')) {
+                removeVariableRow(event.target);
+            } else if (event.target.classList.contains('variable-enable-subscribe')) {
+                const optionsDiv = event.target.closest('.mqtt-variable-row').querySelector('.variable-subscribe-options');
+                if(optionsDiv) optionsDiv.style.display = event.target.checked ? 'block' : 'none';
+            } else if (event.target.classList.contains('variable-enable-publish')) {
+                 const optionsDiv = event.target.closest('.mqtt-variable-row').querySelector('.variable-publish-options');
+                if(optionsDiv) optionsDiv.style.display = event.target.checked ? 'block' : 'none';
+            }
+        });
+    }
 
 
     // Socket.IO event listeners
@@ -114,8 +137,21 @@ export function initDeviceManager(ioClient) { // Renamed 'io' to 'ioClient' for 
     socket.on('device_deleted', (deviceId) => {
         console.log('Device deleted by server:', deviceId);
         localDeviceCache = localDeviceCache.filter(d => d.id !== deviceId);
+        deleteDeviceStateFromManager(deviceId); // Also clear its state from stateManager
         renderDeviceList();
     });
+
+    // Listen for individual device status updates (e.g., connect/disconnect)
+    socket.on('device_status_update', (statusUpdate) => {
+        console.log('Received device_status_update:', statusUpdate);
+        const device = localDeviceCache.find(d => d.id === statusUpdate.deviceId);
+        if (device) {
+            device.connected = statusUpdate.connected;
+            // Optionally update other fields if included, like device.name if it can change server-side
+        }
+        renderDeviceList(); // Re-render to show updated status
+    });
+
 
     socket.on('device_statuses', (statuses) => {
         if (!Array.isArray(statuses)) return;
@@ -128,10 +164,25 @@ export function initDeviceManager(ioClient) { // Renamed 'io' to 'ioClient' for 
         renderDeviceList();
     });
 
+    // Commenting out old 'device_data' listener as 'device_variable_update' is preferred
+    /*
     socket.on('device_data', (data) => {
         // data = { deviceId, address, value, timestamp? }
         if(data && typeof data.address !== 'undefined' && typeof data.value !== 'undefined') {
+            // This was the old way, stateManager.setComponentAddressValue might try to adapt
+            // by treating address as variableName if deviceId is present.
             setComponentAddressValue(data.address, data.value, data.deviceId);
+        }
+    });
+    */
+
+    socket.on('device_variable_update', (data) => {
+        // data = { deviceId, variableName, value }
+        // console.log('Received device_variable_update:', data);
+        if (data && typeof data.deviceId !== 'undefined' && typeof data.variableName !== 'undefined' && typeof data.value !== 'undefined') {
+            setDeviceVariableValue(data.deviceId, data.variableName, data.value);
+        } else {
+            console.warn("Received malformed device_variable_update:", data);
         }
     });
 
@@ -147,38 +198,114 @@ function openDeviceManager() {
     if(deviceManagerModal) deviceManagerModal.classList.remove('hidden');
 }
 
+// Helper function to add a new variable row to the form
+function addVariableRow(variableData = {}) {
+    const container = document.getElementById('mqtt-variables-container');
+    const template = document.getElementById('mqtt-variable-row-template');
+    if (!container || !template) {
+        console.error("MQTT variable container or template not found.");
+        return;
+    }
+
+    const clone = template.content.cloneNode(true);
+    const varRow = clone.querySelector('.mqtt-variable-row');
+
+    if (variableData.varId) {
+        varRow.querySelector('.variable-id').value = variableData.varId;
+    } else {
+         varRow.querySelector('.variable-id').value = `var-${crypto.randomUUID()}`; // Assign new ID if not present
+    }
+    varRow.querySelector('.variable-name').value = variableData.name || '';
+    varRow.querySelector('.variable-description').value = variableData.description || '';
+    varRow.querySelector('.variable-datatype').value = variableData.dataType || 'string';
+
+    const enableSubCheckbox = varRow.querySelector('.variable-enable-subscribe');
+    const subOptionsDiv = varRow.querySelector('.variable-subscribe-options');
+    enableSubCheckbox.checked = variableData.enableSubscribe || false;
+    subOptionsDiv.style.display = enableSubCheckbox.checked ? 'block' : 'none';
+    varRow.querySelector('.variable-subscribe-topic').value = variableData.subscribeTopic || '';
+    varRow.querySelector('.variable-jsonpath-subscribe').value = variableData.jsonPathSubscribe || '';
+    varRow.querySelector('.variable-qos-subscribe').value = variableData.qosSubscribe || 0;
+
+    const enablePubCheckbox = varRow.querySelector('.variable-enable-publish');
+    const pubOptionsDiv = varRow.querySelector('.variable-publish-options');
+    enablePubCheckbox.checked = variableData.enablePublish || false;
+    pubOptionsDiv.style.display = enablePubCheckbox.checked ? 'block' : 'none';
+    varRow.querySelector('.variable-publish-topic').value = variableData.publishTopic || '';
+    varRow.querySelector('.variable-qos-publish').value = variableData.qosPublish || 0;
+    varRow.querySelector('.variable-retain-publish').checked = variableData.retainPublish || false;
+
+    // Add Explore button for subscribe topic
+    const subTopicInput = varRow.querySelector('.variable-subscribe-topic');
+    const exploreButton = document.createElement('button');
+    exploreButton.type = 'button';
+    exploreButton.textContent = 'Explore';
+    exploreButton.classList.add('text-xs', 'bg-cyan-700', 'hover:bg-cyan-800', 'text-white', 'py-0.5', 'px-1.5', 'rounded', 'ml-1');
+    exploreButton.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent row click or other parent events
+        const currentDeviceId = deviceIdInput.value; // Get device ID from the main form
+        const currentDeviceName = deviceNameInput.value;
+        if (!currentDeviceId) {
+            alert("Please save the device first or ensure Device ID is set to use Topic Explorer.");
+            return;
+        }
+        openTopicExplorer(currentDeviceId, currentDeviceName, varRow, subTopicInput.value);
+    });
+    // Insert button after the subTopicInput's parent div for better layout, or adjust as needed
+    subTopicInput.parentNode.classList.add('flex', 'items-center');
+    subTopicInput.parentNode.appendChild(exploreButton);
+
+    container.appendChild(clone);
+}
+
+// Helper function to remove a variable row
+function removeVariableRow(buttonElement) {
+    buttonElement.closest('.mqtt-variable-row').remove();
+}
+
+
 function closeDeviceManager() {
     if(deviceManagerModal) deviceManagerModal.classList.add('hidden');
 }
 
 function openDeviceForm(device = null) {
-    if(!deviceFormModal || !deviceForm) {
+    if (!deviceFormModal || !deviceForm) {
         console.error("Device form modal or form element not found.");
         return;
     }
-    deviceForm.reset();
-    if(deviceIdInput) {
+    deviceForm.reset(); // Reset general form fields
+    const mqttVariablesContainer = document.getElementById('mqtt-variables-container');
+    if (mqttVariablesContainer) {
+        mqttVariablesContainer.innerHTML = ''; // Clear existing variable rows
+    }
+
+    if (deviceIdInput) {
         deviceIdInput.value = '';
         deviceIdInput.readOnly = false;
     }
 
     if (device && typeof device === 'object') {
-        if(deviceFormTitle) deviceFormTitle.textContent = 'Edit Device';
-        if(deviceIdInput) {
+        if (deviceFormTitle) deviceFormTitle.textContent = 'Edit Device';
+        if (deviceIdInput) {
             deviceIdInput.value = device.id || '';
             deviceIdInput.readOnly = true;
         }
-        if(deviceNameInput) deviceNameInput.value = device.name || '';
-        if(deviceTypeInput) deviceTypeInput.value = device.type || '';
+        if (deviceNameInput) deviceNameInput.value = device.name || '';
+        if (deviceTypeInput) deviceTypeInput.value = device.type || '';
 
-        // Populate fields based on type
+        // Populate common device fields
         if (device.type === 'mqtt') {
-            if(document.getElementById('mqtt-protocol')) document.getElementById('mqtt-protocol').value = device.protocol || 'ws';
+            if(document.getElementById('mqtt-protocol')) document.getElementById('mqtt-protocol').value = device.protocol || 'mqtt';
             if(document.getElementById('mqtt-host')) document.getElementById('mqtt-host').value = device.host || '';
             if(document.getElementById('mqtt-port')) document.getElementById('mqtt-port').value = device.port || '';
             if(document.getElementById('mqtt-username')) document.getElementById('mqtt-username').value = device.username || '';
             if(document.getElementById('mqtt-password')) document.getElementById('mqtt-password').value = device.password || '';
             if(document.getElementById('mqtt-basepath')) document.getElementById('mqtt-basepath').value = device.basepath || '';
+
+            // Populate MQTT variables
+            if (Array.isArray(device.variables)) {
+                device.variables.forEach(variableData => addVariableRow(variableData));
+            }
         } else if (device.type === 'modbus-tcp') {
             if(document.getElementById('modbus-tcp-host')) document.getElementById('modbus-tcp-host').value = device.host || '';
             if(document.getElementById('modbus-tcp-port')) document.getElementById('modbus-tcp-port').value = device.port || '502';
@@ -189,11 +316,16 @@ function openDeviceForm(device = null) {
             if(document.getElementById('modbus-rtu-unit-id')) document.getElementById('modbus-rtu-unit-id').value = device.unitId || '1';
         }
     } else {
-        if(deviceFormTitle) deviceFormTitle.textContent = 'Tambah Device';
+        if (deviceFormTitle) deviceFormTitle.textContent = 'Tambah Device';
+        // Optionally add one empty variable row for new MQTT devices
+        if (deviceTypeInput && deviceTypeInput.value === 'mqtt') {
+            addVariableRow();
+        }
     }
-    toggleDeviceFields();
-    deviceFormModal.classList.remove('hidden');
+    toggleDeviceFields(); // Ensure correct sections are visible based on device type
+    if (deviceFormModal) deviceFormModal.classList.remove('hidden');
 }
+
 
 function closeDeviceForm() {
     if(deviceFormModal) deviceFormModal.classList.add('hidden');
@@ -243,12 +375,37 @@ function handleFormSubmit(e) {
 
     // Populate type-specific data
     if (deviceData.type === 'mqtt') {
-        deviceData.protocol = document.getElementById('mqtt-protocol')?.value || 'ws';
+        deviceData.protocol = document.getElementById('mqtt-protocol')?.value || 'mqtt';
         deviceData.host = document.getElementById('mqtt-host')?.value.trim() || '';
         deviceData.port = document.getElementById('mqtt-port')?.value.trim() || '';
-        deviceData.username = document.getElementById('mqtt-username')?.value || ''; // Passwords/usernames usually not trimmed
+        deviceData.username = document.getElementById('mqtt-username')?.value || '';
         deviceData.password = document.getElementById('mqtt-password')?.value || '';
         deviceData.basepath = document.getElementById('mqtt-basepath')?.value.trim() || '';
+
+        // Collect MQTT Variables
+        deviceData.variables = [];
+        const variableRows = document.querySelectorAll('#mqtt-variables-container .mqtt-variable-row');
+        variableRows.forEach(row => {
+            const variable = {
+                varId: row.querySelector('.variable-id')?.value || `var-${crypto.randomUUID()}`,
+                name: row.querySelector('.variable-name')?.value.trim(),
+                description: row.querySelector('.variable-description')?.value.trim(),
+                dataType: row.querySelector('.variable-datatype')?.value,
+                enableSubscribe: row.querySelector('.variable-enable-subscribe')?.checked,
+                subscribeTopic: row.querySelector('.variable-subscribe-topic')?.value.trim(),
+                jsonPathSubscribe: row.querySelector('.variable-jsonpath-subscribe')?.value.trim(),
+                qosSubscribe: parseInt(row.querySelector('.variable-qos-subscribe')?.value || '0', 10),
+                enablePublish: row.querySelector('.variable-enable-publish')?.checked,
+                publishTopic: row.querySelector('.variable-publish-topic')?.value.trim(),
+                qosPublish: parseInt(row.querySelector('.variable-qos-publish')?.value || '0', 10),
+                retainPublish: row.querySelector('.variable-retain-publish')?.checked
+            };
+            // Only add variable if name is provided
+            if (variable.name) {
+                deviceData.variables.push(variable);
+            }
+        });
+
     } else if (deviceData.type === 'modbus-tcp') {
         deviceData.host = document.getElementById('modbus-tcp-host')?.value.trim() || '';
         deviceData.port = document.getElementById('modbus-tcp-port')?.value.trim() || '502';

@@ -195,13 +195,35 @@ function populateContextMenu(node) {
     const attrs = node.attrs;
     contextMenuTitleEl.textContent = `Edit ${attrs.componentType}`;
 
-    const devices = getDevices();
-    let deviceOptions = devices.map(d => `<option value="${d.id}" ${attrs.deviceId === d.id ? 'selected' : ''}>${d.name}</option>`).join('');
+    const devices = getDevices(); // This is an array of device config objects
+    let deviceOptionsHtml = '<option value="">-- Select Device --</option>';
+    deviceOptionsHtml += devices.map(d => `<option value="${d.id}" ${attrs.deviceId === d.id ? 'selected' : ''}>${d.name} (ID: ${d.id.substring(0,8)})</option>`).join('');
+
+    let variableOptionsHtml = '<option value="">-- Select Variable --</option>';
+    if (attrs.deviceId) {
+        const selectedDevice = devices.find(d => d.id === attrs.deviceId);
+        if (selectedDevice && Array.isArray(selectedDevice.variables)) {
+            variableOptionsHtml += selectedDevice.variables
+                .map(v => `<option value="${v.name}" ${attrs.variableName === v.name ? 'selected' : ''}>${v.name}</option>`)
+                .join('');
+        }
+    }
 
     let html = '';
-    if (attrs.componentType !== 'label') {
-        html += `<div class="mb-2"><label class="font-bold text-cyan-200">Device</label><select data-prop="deviceId" class="w-full bg-gray-600 p-1 rounded mt-1">${deviceOptions}</select></div>`;
-        html += `<div class="mb-2"><label class="font-bold text-cyan-200">Topic (Tag)</label><input type="text" data-prop="address" value="${attrs.address || ''}" class="w-full bg-gray-600 p-1 rounded mt-1 font-mono"></div>`;
+    if (attrs.componentType !== 'label') { // Labels don't bind to data
+        html += `<div class="mb-2">
+                    <label class="font-bold text-cyan-200">Device</label>
+                    <select data-prop="deviceId" id="context-menu-device-select" class="w-full bg-gray-600 p-1 rounded mt-1 text-xs">
+                        ${deviceOptionsHtml}
+                    </select>
+                 </div>`;
+        html += `<div class="mb-2">
+                    <label class="font-bold text-cyan-200">Variable</label>
+                    <select data-prop="variableName" id="context-menu-variable-select" class="w-full bg-gray-600 p-1 rounded mt-1 text-xs" ${!attrs.deviceId ? 'disabled' : ''}>
+                        ${variableOptionsHtml}
+                    </select>
+                 </div>`;
+        // The old "address" input is removed as it's now handled by device variables
     }
     html += `<div class="mb-2"><label class="font-bold">Label</label><input type="text" data-prop="label" value="${attrs.label || ""}" class="w-full bg-gray-600 p-1 rounded mt-1"></div>`;
 
@@ -245,24 +267,35 @@ function setupEventListeners(getDeviceByIdFunc) { // Renamed parameter
             const prop = e.target.dataset.prop;
             let value = e.target.type === "number" ? parseFloat(e.target.value) : e.target.value;
 
-            // const oldDeviceId = currentContextMenuNode.attrs.deviceId; // No longer needed for client-side (un)sub
-            // const oldAddress = currentContextMenuNode.attrs.address; // No longer needed for client-side (un)sub
-
-            currentContextMenuNode.setAttr(prop, value);
-
-            // const newDeviceId = currentContextMenuNode.attrs.deviceId; // No longer needed for client-side (un)sub
-            // const newAddress = currentContextMenuNode.attrs.address; // No longer needed for client-side (un)sub
-
-            // Client-side subscription logic removed.
-            // The server will manage subscriptions based on the updated component configuration
-            // when the overall HMI state is saved or if specific update events are implemented.
-            // For example, if getDeviceByIdFunc was used here to check device.connected,
-            // that could still be done if needed for UI feedback, but not for sub/unsub.
+            // If deviceId changed, clear variableName and repopulate variable dropdown
+            if (prop === 'deviceId') {
+                currentContextMenuNode.setAttr('variableName', ''); // Clear selected variable
+                currentContextMenuNode.setAttr(prop, value); // Set new deviceId
+                populateContextMenu(currentContextMenuNode); // Re-populate to update variable dropdown
+                                                          // This will cause a recursive call if not handled, but input event should be fine
+            } else {
+                currentContextMenuNode.setAttr(prop, value);
+            }
 
             currentContextMenuNode.updateState?.();
-            // Consider if saveState() should be called here or after context menu closes.
-            // If changes here should immediately reflect on the server for subscription updates,
-            // an event might need to be emitted to the server.
+            // saveState(); // Consider calling saveState() immediately or on context menu close
+        });
+
+        // Add change listener specifically for device select to update variable select
+        // This is needed because 'input' event might not fire reliably for select changes in all browsers
+        // and we need to ensure the variable dropdown is updated.
+        contextMenuContentEl.addEventListener('change', (e) => {
+            if (!currentContextMenuNode) return;
+            const target = e.target;
+            if (target.id === 'context-menu-device-select') {
+                 currentContextMenuNode.setAttr('deviceId', target.value);
+                 currentContextMenuNode.setAttr('variableName', ''); // Clear selected variable
+                 // Re-render the context menu content to update the variable dropdown
+                 populateContextMenu(currentContextMenuNode);
+            } else if (target.id === 'context-menu-variable-select') {
+                currentContextMenuNode.setAttr('variableName', target.value);
+            }
+            currentContextMenuNode.updateState?.();
         });
     }
 
