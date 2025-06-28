@@ -67,7 +67,12 @@ function closeDeviceForm() {
 }
 
 function toggleDeviceFields() {
-    mqttFields.style.display = deviceTypeInput.value === 'mqtt' ? 'block' : 'none';
+    const selectedType = deviceTypeInput.value;
+    if (selectedType === 'mqtt') {
+        mqttFields.style.display = 'block';
+    } else {
+        mqttFields.style.display = 'none';
+    }
 }
 
 function handleFormSubmit(e) {
@@ -81,6 +86,8 @@ function handleFormSubmit(e) {
     if (deviceData.type === 'mqtt') {
         deviceData.host = document.getElementById('mqtt-host').value;
         deviceData.port = document.getElementById('mqtt-port').value;
+    } else if (deviceData.type === 'external') {
+        // No specific fields for external devices yet
     }
 
     saveDevice(deviceData);
@@ -93,8 +100,10 @@ function saveDevice(deviceData) {
     const index = devices.findIndex(d => d.id === deviceData.id);
 
     if (index > -1) {
-        // Disconnect the old instance if settings changed
-        disconnectMqttDevice(deviceData.id);
+        // Disconnect the old instance if settings changed and it was an MQTT device
+        if (devices[index].type === 'mqtt') {
+            disconnectMqttDevice(deviceData.id);
+        }
         devices[index] = deviceData;
     } else {
         devices.push(deviceData);
@@ -122,7 +131,7 @@ function loadDevices() {
     const storedDevices = localStorage.getItem('devices');
     if (storedDevices) {
         devices = JSON.parse(storedDevices);
-        // Connect all loaded devices
+        // Connect all loaded MQTT devices
         devices.forEach(device => {
             if (device.type === 'mqtt') {
                 createMqttDevice(device);
@@ -139,17 +148,35 @@ function renderDeviceList() {
     }
 
     devices.forEach(device => {
-        const mqttDevice = getMqttDevice(device.id);
-        const isConnected = mqttDevice ? mqttDevice.connected : false;
+        let isConnected = false;
+        let statusTitle = 'N/A';
+        let statusColorClass = 'bg-gray-500'; // Default for non-MQTT or unknown status
+
+        if (device.type === 'mqtt') {
+            const mqttDevice = getMqttDevice(device.id);
+            isConnected = mqttDevice ? mqttDevice.connected : false;
+            statusTitle = isConnected ? 'Connected' : 'Disconnected';
+            statusColorClass = isConnected ? 'bg-green-500' : 'bg-red-500';
+        } else if (device.type === 'external') {
+            // External devices don't have a direct connection status managed by mqttManager
+            statusTitle = 'External Device';
+            // Could use a different color or no color, e.g., bg-blue-500 or remove status dot
+        }
 
         const deviceElement = document.createElement('div');
         deviceElement.className = 'bg-gray-700 p-3 rounded-lg flex justify-between items-center';
+
+        let deviceInfoHtml = `<h3 class="font-bold">${device.name}</h3><p class="text-sm text-gray-400">Tipe: ${device.type}`;
+        if (device.type === 'mqtt' && device.host) {
+            deviceInfoHtml += ` (${device.host})`;
+        }
+        deviceInfoHtml += `</p>`;
+
         deviceElement.innerHTML = `
             <div class="flex items-center">
-                <span class="device-status w-3 h-3 rounded-full mr-3 ${isConnected ? 'bg-green-500' : 'bg-red-500'}" data-id="${device.id}" title="${isConnected ? 'Connected' : 'Disconnected'}"></span>
+                <span class="device-status w-3 h-3 rounded-full mr-3 ${statusColorClass}" data-id="${device.id}" title="${statusTitle}"></span>
                 <div>
-                    <h3 class="font-bold">${device.name}</h3>
-                    <p class="text-sm text-gray-400">Tipe: ${device.type} (${device.host || ''})</p>
+                    ${deviceInfoHtml}
                 </div>
             </div>
             <div class="space-x-2">

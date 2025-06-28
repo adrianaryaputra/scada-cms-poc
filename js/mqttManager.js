@@ -5,6 +5,10 @@ const mqttDevices = new Map(); // Menyimpan instance client MQTT berdasarkan ID 
 
 // Fungsi untuk membuat dan mengelola instance device MQTT
 export function createMqttDevice(device) {
+    if (device.type !== 'mqtt') {
+        // console.log(`Device ${device.name} is not an MQTT device. Skipping MQTT setup.`);
+        return null; // Or some other indicator that it's not an MQTT device
+    }
     if (mqttDevices.has(device.id)) {
         console.log(`Device ${device.name} sudah ada.`);
         return mqttDevices.get(device.id);
