@@ -4,12 +4,10 @@ import {
     getCurrentState,
     handleUndo,
     handleRedo,
-    replaceTagAddress,
-    deleteFromTagDatabase
+    deleteDeviceVariableState
 } from './stateManager.js';
 import { componentFactory } from './componentFactory.js';
 import { getDevices } from './deviceManager.js';
-import { getMqttDevice, subscribeToTopic, unsubscribeFromTopic } from './mqttManager.js';
 
 // Referensi ke elemen DOM dan state/modul lain
 let modeToggleEl, modeLabelEl, deleteBtnEl, addComponentPanelEl, contextMenuEl,
@@ -47,7 +45,7 @@ export function initUiManager(
     konvaRefs,
     getSimModeFunc,
     setSimModeFunc,
-    getMqttDeviceFunc
+    getDeviceByIdFunc // Renamed from getMqttDeviceFunc
 ) {
     konvaRefsForUi = konvaRefs;
     getIsSimulationModeFunc = getSimModeFunc;
@@ -74,7 +72,7 @@ export function initUiManager(
 
     isSimulationModeState = getIsSimulationModeFunc();
 
-    setupEventListeners(getMqttDeviceFunc);
+    setupEventListeners(getDeviceByIdFunc); // Pass renamed function
 
     if (deleteBtnEl) {
         deleteBtnEl.disabled = true;
@@ -177,13 +175,7 @@ function handlePaste() {
         saveState();
         selectNodes(newNodes); // Panggil versi lokal
         console.log(`${newNodes.length} elemen ditempel.`);
-         // Panggil subscribe MQTT untuk komponen baru jika perlu
-        const currentMqttFuncs = typeof getMqttFuncs === 'function' ? getMqttFuncs() : {};
-        if (currentMqttFuncs.subscribeToComponentAddress) {
-            newNodes.forEach(node => {
-                if (node.attrs.address) currentMqttFuncs.subscribeToComponentAddress(node.attrs.address);
-            });
-        }
+        // Client-side subscription logic removed. Server will handle subscriptions.
     }
 }
 
@@ -201,13 +193,35 @@ function populateContextMenu(node) {
     const attrs = node.attrs;
     contextMenuTitleEl.textContent = `Edit ${attrs.componentType}`;
 
-    const devices = getDevices();
-    let deviceOptions = devices.map(d => `<option value="${d.id}" ${attrs.deviceId === d.id ? 'selected' : ''}>${d.name}</option>`).join('');
+    const devices = getDevices(); // This is an array of device config objects
+    let deviceOptionsHtml = '<option value="">-- Select Device --</option>';
+    deviceOptionsHtml += devices.map(d => `<option value="${d.id}" ${attrs.deviceId === d.id ? 'selected' : ''}>${d.name} (ID: ${d.id.substring(0,8)})</option>`).join('');
+
+    let variableOptionsHtml = '<option value="">-- Select Variable --</option>';
+    if (attrs.deviceId) {
+        const selectedDevice = devices.find(d => d.id === attrs.deviceId);
+        if (selectedDevice && Array.isArray(selectedDevice.variables)) {
+            variableOptionsHtml += selectedDevice.variables
+                .map(v => `<option value="${v.name}" ${attrs.variableName === v.name ? 'selected' : ''}>${v.name}</option>`)
+                .join('');
+        }
+    }
 
     let html = '';
-    if (attrs.componentType !== 'label') {
-        html += `<div class="mb-2"><label class="font-bold text-cyan-200">Device</label><select data-prop="deviceId" class="w-full bg-gray-600 p-1 rounded mt-1">${deviceOptions}</select></div>`;
-        html += `<div class="mb-2"><label class="font-bold text-cyan-200">Topic (Tag)</label><input type="text" data-prop="address" value="${attrs.address || ''}" class="w-full bg-gray-600 p-1 rounded mt-1 font-mono"></div>`;
+    if (attrs.componentType !== 'label') { // Labels don't bind to data
+        html += `<div class="mb-2">
+                    <label class="font-bold text-cyan-200">Device</label>
+                    <select data-prop="deviceId" id="context-menu-device-select" class="w-full bg-gray-600 p-1 rounded mt-1 text-xs">
+                        ${deviceOptionsHtml}
+                    </select>
+                 </div>`;
+        html += `<div class="mb-2">
+                    <label class="font-bold text-cyan-200">Variable</label>
+                    <select data-prop="variableName" id="context-menu-variable-select" class="w-full bg-gray-600 p-1 rounded mt-1 text-xs" ${!attrs.deviceId ? 'disabled' : ''}>
+                        ${variableOptionsHtml}
+                    </select>
+                 </div>`;
+        // The old "address" input is removed as it's now handled by device variables
     }
     html += `<div class="mb-2"><label class="font-bold">Label</label><input type="text" data-prop="label" value="${attrs.label || ""}" class="w-full bg-gray-600 p-1 rounded mt-1"></div>`;
 
@@ -241,7 +255,7 @@ function populateContextMenu(node) {
     if (contextMenuContentEl) contextMenuContentEl.innerHTML = html;
 }
 
-function setupEventListeners(getMqttDeviceFunc) {
+function setupEventListeners(getDeviceByIdFunc) { // Renamed parameter
     if (modeToggleEl) modeToggleEl.addEventListener("change", (e) => setMode(e.target.checked));
 
     if (contextMenuEl) {
@@ -251,26 +265,34 @@ function setupEventListeners(getMqttDeviceFunc) {
             const prop = e.target.dataset.prop;
             let value = e.target.type === "number" ? parseFloat(e.target.value) : e.target.value;
 
-            const oldDeviceId = currentContextMenuNode.attrs.deviceId;
-            const oldAddress = currentContextMenuNode.attrs.address;
-
-            currentContextMenuNode.setAttr(prop, value);
-
-            const newDeviceId = currentContextMenuNode.attrs.deviceId;
-            const newAddress = currentContextMenuNode.attrs.address;
-
-            if (prop === 'deviceId' || prop === 'address') {
-                const oldDevice = getMqttDevice(oldDeviceId);
-                if (oldDevice && oldAddress) {
-                    unsubscribeFromTopic(oldDevice, oldAddress);
-                }
-
-                const newDevice = getMqttDevice(newDeviceId);
-                if (newDevice && newAddress) {
-                    subscribeToTopic(newDevice, newAddress);
-                }
+            // If deviceId changed, clear variableName and repopulate variable dropdown
+            if (prop === 'deviceId') {
+                currentContextMenuNode.setAttr('variableName', ''); // Clear selected variable
+                currentContextMenuNode.setAttr(prop, value); // Set new deviceId
+                populateContextMenu(currentContextMenuNode); // Re-populate to update variable dropdown
+                                                          // This will cause a recursive call if not handled, but input event should be fine
+            } else {
+                currentContextMenuNode.setAttr(prop, value);
             }
 
+            currentContextMenuNode.updateState?.();
+            // saveState(); // Consider calling saveState() immediately or on context menu close
+        });
+
+        // Add change listener specifically for device select to update variable select
+        // This is needed because 'input' event might not fire reliably for select changes in all browsers
+        // and we need to ensure the variable dropdown is updated.
+        contextMenuContentEl.addEventListener('change', (e) => {
+            if (!currentContextMenuNode) return;
+            const target = e.target;
+            if (target.id === 'context-menu-device-select') {
+                 currentContextMenuNode.setAttr('deviceId', target.value);
+                 currentContextMenuNode.setAttr('variableName', ''); // Clear selected variable
+                 // Re-render the context menu content to update the variable dropdown
+                 populateContextMenu(currentContextMenuNode);
+            } else if (target.id === 'context-menu-variable-select') {
+                currentContextMenuNode.setAttr('variableName', target.value);
+            }
             currentContextMenuNode.updateState?.();
         });
     }
@@ -295,17 +317,15 @@ function setupEventListeners(getMqttDeviceFunc) {
             if (!konvaRefsForUi.tr) return;
             const nodesToDelete = konvaRefsForUi.tr.nodes();
             if (nodesToDelete.length > 0) {
-                saveState();
+                saveState(); // Important to save state before destroying
                 nodesToDelete.forEach((node) => {
                     const deviceId = node.attrs.deviceId;
-                    const address = node.attrs.address;
-                    if (deviceId && address) {
-                        const device = getMqttDevice(deviceId);
-                        if (device) {
-                            unsubscribeFromTopic(device, address);
-                        }
+                    const variableName = node.attrs.variableName;
+                    // Client-side unsubscription logic removed.
+                    // Server will handle this based on the component being removed from the saved state.
+                    if (deviceId && variableName) {
+                        deleteDeviceVariableState(deviceId, variableName);
                     }
-                    deleteFromTagDatabase(address);
                     node.destroy();
                 });
             }

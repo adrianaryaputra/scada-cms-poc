@@ -1,10 +1,12 @@
-import { GRID_SIZE } from './config.js'; // Jika GRID_SIZE digunakan oleh komponen
+import { GRID_SIZE } from './config.js';
 import {
     saveState,
-    updateTagDatabase,
-    getComponentAddressValue,
-    setComponentAddressValue
+    // updateTagDatabase, // To be replaced or re-evaluated
+    getDeviceVariableValue, // New state accessor
+    // setComponentAddressValue // To be replaced by device/variable specific logic if components write directly
+    // For now, components will call deviceManager.writeDataToServer which uses new variable structure
 } from './stateManager.js';
+import { writeDataToServer } from './deviceManager.js'; // For components that publish data
 
 // Variabel yang mungkin dibutuhkan oleh componentFactory,
 // seperti layer, tr, isSimulationMode, dll., akan diteruskan saat inisialisasi atau sebagai argumen.
@@ -39,10 +41,19 @@ export const componentFactory = {
         const defaults = {
             x: 100,
             y: 100,
-            address: `${type.substring(0, 3).toUpperCase()}_${uniqueId.substring(7, 11)}`,
+            // address: `${type.substring(0, 3).toUpperCase()}_${uniqueId.substring(7, 11)}`, // Old way
+            deviceId: null,      // New: ID of the linked device
+            variableName: null,  // New: Name of the linked device variable
+            label: type,         // Default label based on type
         };
         const config = { ...defaults, ...props };
-        updateTagDatabase(config.address, config.state || config.value || 0);
+
+        // Initial value for a variable would be set by server push, not typically here.
+        // updateTagDatabase(config.address, config.state || config.value || 0); // Old way
+        // If a default value needs to be set in stateManager for a new component's variable,
+        // it would be: setDeviceVariableValue(config.deviceId, config.variableName, initialValue);
+        // But usually, components just reflect what's in the state, which is populated from the device.
+
         return this.creator(type, uniqueId, config);
     },
 
@@ -103,11 +114,11 @@ export const componentFactory = {
         });
         group.setAttrs({
             componentType: "bit-lamp",
-            label: "Indikator",
+            // label: "Indikator", // Default label now set in create()
             shapeType: "circle",
             offColor: "#555555",
             onColor: "#22c55e",
-            ...config,
+            ...config, // Includes deviceId, variableName, label from defaults/props
         });
         const lampShape = new Konva.Circle({
             radius: 20,
@@ -133,7 +144,9 @@ export const componentFactory = {
         });
 
         group.updateState = function () {
-            const state = getComponentAddressValue(this.attrs.address) || 0;
+            const value = getDeviceVariableValue(this.attrs.deviceId, this.attrs.variableName);
+            const state = (value === true || value === 1 || value === '1' || value === 'true' || value === 'ON') ? 1 : 0; // Normalize to 0 or 1
+
             const existingShape = this.findOne(".lamp-shape");
             let currentShapeType = existingShape instanceof Konva.Circle ? "circle" : "rect";
             if (this.attrs.shapeType !== currentShapeType) {
@@ -192,10 +205,15 @@ export const componentFactory = {
         group.on("click", (e) => {
             if (e.evt.button === 2) return; // Abaikan klik kanan
             if (isSimulationModeRef()) { // Hanya toggle state jika mode simulasi
-                 const currentVal = getComponentAddressValue(group.attrs.address) || 0;
-                 setComponentAddressValue(group.attrs.address, currentVal === 1 ? 0 : 1);
-                 group.updateState(); // Langsung update tampilan setelah state diubah
-                 return; // Jangan proses seleksi jika mode simulasi
+                if (group.attrs.deviceId && group.attrs.variableName) {
+                    const currentValue = getDeviceVariableValue(group.attrs.deviceId, group.attrs.variableName) || 0;
+                    const newValue = currentValue === 1 ? 0 : 1;
+                    writeDataToServer(group.attrs.deviceId, group.attrs.variableName, newValue);
+                    // Update tampilan akan terjadi ketika stateManager menerima update dari server
+                } else {
+                    console.warn("BitSwitch: deviceId or variableName not set. Cannot write data.");
+                }
+                return; // Jangan proses seleksi jika mode simulasi
             }
             // Logika seleksi untuk mode desain
             const isSelected = trRef.nodes().indexOf(group) >= 0;
@@ -213,7 +231,8 @@ export const componentFactory = {
             }
         });
         group.updateState = function () {
-            const state = getComponentAddressValue(this.attrs.address) || 0;
+            const value = getDeviceVariableValue(this.attrs.deviceId, this.attrs.variableName);
+            const state = (value === true || value === 1 || value === '1' || value === 'true' || value === 'ON') ? 1 : 0;
             this.findOne(".background").fill(state === 1 ? this.attrs.onColor : this.attrs.offColor);
             this.findOne(".state-text").text(state === 1 ? this.attrs.onText : this.attrs.offText);
         };
@@ -277,8 +296,12 @@ export const componentFactory = {
         });
         group.add(text);
         group.updateState = function () {
-            const value = getComponentAddressValue(this.attrs.address) || 0;
-            const stateConfig = this.attrs.states.find((s) => s.value == value) || { text: "INVALID", color: "#f0ad4e" };
+            const value = getDeviceVariableValue(this.attrs.deviceId, this.attrs.variableName) || 0;
+            // Normalize value for comparison, as it might come as string from some sources
+            const numValue = Number(value);
+            const stateConfig = this.attrs.states.find((s) => s.value == numValue) || 
+                                this.attrs.states.find((s) => String(s.value).toLowerCase() == String(value).toLowerCase()) || // Fallback for string comparison
+                                { text: "INVALID", color: "#f0ad4e" };
             this.findOne(".background").fill(stateConfig.color);
             this.findOne(".state-text").text(stateConfig.text);
         };
@@ -347,8 +370,9 @@ export const componentFactory = {
         });
         group.add(labelText);
         group.updateState = function () {
-            const value = getComponentAddressValue(this.attrs.address) || 0;
-            const val = parseFloat(value).toFixed(this.attrs.decimalPlaces);
+            const value = getDeviceVariableValue(this.attrs.deviceId, this.attrs.variableName);
+            const numValue = parseFloat(value);
+            const val = !isNaN(numValue) ? numValue.toFixed(this.attrs.decimalPlaces) : "---";
             this.findOne(".value-text").text(val);
             this.findOne(".label-text").text(this.attrs.label + ` (${this.attrs.units})`);
         };
