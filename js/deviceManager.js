@@ -52,8 +52,12 @@ function openDeviceForm(device = null) {
         deviceNameInput.value = device.name;
         deviceTypeInput.value = device.type;
         if (device.type === 'mqtt') {
+            document.getElementById('mqtt-protocol').value = device.protocol || 'ws';
             document.getElementById('mqtt-host').value = device.host;
             document.getElementById('mqtt-port').value = device.port;
+            document.getElementById('mqtt-username').value = device.username || '';
+            document.getElementById('mqtt-password').value = device.password || '';
+            document.getElementById('mqtt-basepath').value = device.basepath || '';
         }
     } else {
         deviceFormTitle.textContent = 'Tambah Device';
@@ -84,10 +88,12 @@ function handleFormSubmit(e) {
     };
 
     if (deviceData.type === 'mqtt') {
+        deviceData.protocol = document.getElementById('mqtt-protocol').value;
         deviceData.host = document.getElementById('mqtt-host').value;
         deviceData.port = document.getElementById('mqtt-port').value;
-    } else if (deviceData.type === 'external') {
-        // No specific fields for external devices yet
+        deviceData.username = document.getElementById('mqtt-username').value;
+        deviceData.password = document.getElementById('mqtt-password').value;
+        deviceData.basepath = document.getElementById('mqtt-basepath').value;
     }
 
     saveDevice(deviceData);

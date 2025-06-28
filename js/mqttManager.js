@@ -5,6 +5,9 @@ const mqttDevices = new Map(); // Menyimpan instance client MQTT berdasarkan ID 
 
 // Fungsi untuk membuat dan mengelola instance device MQTT
 export function createMqttDevice(device) {
+
+    console.log(device);
+
     if (device.type !== 'mqtt') {
         // console.log(`Device ${device.name} is not an MQTT device. Skipping MQTT setup.`);
         return null; // Or some other indicator that it's not an MQTT device
@@ -15,7 +18,7 @@ export function createMqttDevice(device) {
     }
 
     const clientId = `hmi_client_${device.id}`;
-    const client = new Paho.MQTT.Client(device.host, Number(device.port), "/mqtt", clientId);
+    const client = new Paho.MQTT.Client(device.host, Number(device.port), device.basepath || '', clientId);
 
     const deviceState = {
         id: device.id,
@@ -39,8 +42,15 @@ function connectMqtt(deviceState, deviceConfig) {
         onSuccess: () => onConnectSuccess(deviceState),
         onFailure: (responseObject) => onConnectFailure(responseObject, deviceState),
         cleanSession: true,
-        useSSL: Number(deviceConfig.port) === 8883 || Number(deviceConfig.port) === 8084,
+        useSSL: deviceConfig.protocol === 'wss' || deviceConfig.protocol === 'mqtts',
     };
+
+    if (deviceConfig.username) {
+        connectOptions.userName = deviceConfig.username;
+    }
+    if (deviceConfig.password) {
+        connectOptions.password = deviceConfig.password;
+    }
 
     try {
         console.log(`Menghubungkan ke ${deviceConfig.name} di ${deviceConfig.host}:${deviceConfig.port}...`);

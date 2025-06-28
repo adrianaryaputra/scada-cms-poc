@@ -194,12 +194,31 @@
                     </div>
                     <div id="mqtt-fields">
                         <div class="mb-4">
+                            <label for="mqtt-protocol" class="block text-sm font-medium text-gray-300">Protokol</label>
+                            <select id="mqtt-protocol" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
+                                <option value="ws">ws</option>
+                                <option value="mqtt">mqtt</option>
+                            </select>
+                        </div>
+                        <div class="mb-4">
                             <label for="mqtt-host" class="block text-sm font-medium text-gray-300">Host</label>
                             <input type="text" id="mqtt-host" value="broker.hivemq.com" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
                         </div>
                         <div class="mb-4">
                             <label for="mqtt-port" class="block text-sm font-medium text-gray-300">Port</label>
                             <input type="number" id="mqtt-port" value="8000" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
+                        </div>
+                        <div class="mb-4">
+                            <label for="mqtt-username" class="block text-sm font-medium text-gray-300">Username (Opsional)</label>
+                            <input type="text" id="mqtt-username" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
+                        </div>
+                        <div class="mb-4">
+                            <label for="mqtt-password" class="block text-sm font-medium text-gray-300">Password (Opsional)</label>
+                            <input type="password" id="mqtt-password" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
+                        </div>
+                        <div class="mb-4">
+                            <label for="mqtt-basepath" class="block text-sm font-medium text-gray-300">Base Path (Opsional)</label>
+                            <input type="text" id="mqtt-basepath" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
                         </div>
                     </div>
                     <div class="flex justify-end space-x-3">
