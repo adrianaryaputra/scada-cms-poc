@@ -1,4 +1,4 @@
-import { getTagDatabase, setTagValue } from './stateManager.js';
+import { getTagDatabase, setComponentAddressValue } from './stateManager.js';
 import { getLayer } from './konvaManager.js';
 
 const mqttDevices = new Map(); // Menyimpan instance client MQTT berdasarkan ID device
@@ -87,7 +87,7 @@ function onMessageArrived(message) {
     const value = parseFloat(message.payloadString);
     
     // Update state terpusat
-    setTagValue(topic, value);
+    setComponentAddressValue(topic, value);
 
     // Update komponen di canvas
     const layer = getLayer();
