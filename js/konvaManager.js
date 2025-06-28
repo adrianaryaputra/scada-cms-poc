@@ -233,6 +233,7 @@ function setupEventListeners() {
     });
 
     stage.on("click tap", (e) => {
+        if (e.evt.button === 2) return; // Abaikan klik kanan
         if (typeof uiHideContextMenuFunc === 'function') uiHideContextMenuFunc();
 
         if (e.evt.shiftKey) return;
@@ -318,9 +319,3 @@ export function getLayer() { return layer; }
 export function getTransformer() { return tr; }
 export function getGuideLayer() { return guideLayer; }
 export function getStage() { return stage; }
-
-export { Konva }; // Ekspor Konva jika diperlukan di tempat lain (misal app.js untuk Paho)
-                    // Meskipun Paho.MQTT.Client tidak secara langsung menggunakan Konva,
-                    // mungkin ada dependensi tidak langsung atau kebutuhan untuk mengakses Konva global.
-                    // Sebaiknya Paho di-handle di mqttManager.js secara independen.
-                    // Untuk sekarang, kita biarkan ini.

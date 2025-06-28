@@ -1,6 +1,6 @@
 import { GRID_SIZE } from './config.js';
 import { updateStatus, addMessageToChatLog, addThinkingDetails, getCanvasContext, setLoadingState } from './utils.js';
-import { initMqtt } from './mqttManager.js';
+import { getMqttDevice } from './mqttManager.js';
 import {
     initStateManager,
     getTagDatabase,
@@ -15,6 +15,7 @@ import {
 import { componentFactory, initComponentFactory } from './componentFactory.js';
 import { initKonvaManager } from './konvaManager.js';
 import { initUiManager } from './uiManager.js';
+import { initDeviceManager } from './deviceManager.js';
 import { initAiAssistant } from './aiAssistant.js';
 
 // --- Variabel Global Utama ---
@@ -24,7 +25,6 @@ let chatHistory = []; // chatHistory tetap di app.js dan di-pass ke aiAssistant
 
 // Referensi ke modul-modul
 let konvaRefs = {};
-let mqttFunctions = {};
 let uiManagerRefs = {};
 // Tidak perlu aiAssistantRefs jika tidak ada fungsi yang dipanggil dari app.js ke aiAssistant setelah init
 
@@ -37,16 +37,6 @@ const sendChatBtn = document.getElementById("send-chat-btn");
 window.addEventListener("load", () => {
     const undoBtn = document.getElementById("undo-btn");
     const redoBtn = document.getElementById("redo-btn");
-    const mqttHostInput = document.getElementById("mqtt-host");
-    const mqttPortInput = document.getElementById("mqtt-port");
-    const mqttConnectBtn = document.getElementById("mqtt-connect-btn");
-
-    mqttFunctions = initMqtt(
-        updateStatus,
-        () => konvaRefs.layer,
-        getTagDatabase,
-        () => ({ mqttHostInput, mqttPortInput, mqttConnectBtn })
-    );
 
     const setIsSimulationModeAndInterval = (value) => {
         isSimulationMode = value;
@@ -64,7 +54,7 @@ window.addEventListener("load", () => {
         konvaRefs,
         () => isSimulationMode,
         setIsSimulationModeAndInterval,
-        () => mqttFunctions
+        getMqttDevice // Pass the function to get a device
     );
 
     konvaRefs = initKonvaManager(
@@ -89,7 +79,7 @@ window.addEventListener("load", () => {
         konvaRefs.tr,
         undoBtn,
         redoBtn,
-        mqttFunctions
+        getMqttDevice // Pass the function to get a device
     );
 
     initComponentFactory(
@@ -111,8 +101,10 @@ window.addEventListener("load", () => {
         () => chatHistory,
         (newHistory) => { chatHistory = newHistory; },
         konvaRefs,
-        mqttFunctions
+        getMqttDevice // Pass the function to get a device
     );
+
+    initDeviceManager();
 
     saveState();
     addMessageToChatLog(chatLog, chatHistory, "model", "Halo! Saya asisten AI Anda. Apa yang bisa saya bantu rancang hari ini?");

@@ -133,6 +133,7 @@ export const componentFactory = {
         });
         group.add(lampShape);
         group.on("click", (e) => {
+            if (e.evt.button === 2) return; // Abaikan klik kanan
             if (isSimulationModeRef()) return;
             const isSelected = trRef.nodes().indexOf(group) >= 0;
             if (!e.evt.shiftKey) {
@@ -207,6 +208,7 @@ export const componentFactory = {
         });
         group.add(text);
         group.on("click", (e) => {
+            if (e.evt.button === 2) return; // Abaikan klik kanan
             if (isSimulationModeRef()) { // Hanya toggle state jika mode simulasi
                  const currentVal = getComponentAddressValue(group.attrs.address) || 0;
                  setComponentAddressValue(group.attrs.address, currentVal === 1 ? 0 : 1);
@@ -271,6 +273,7 @@ export const componentFactory = {
         });
         group.add(background);
         group.on("click", (e) => {
+            if (e.evt.button === 2) return; // Abaikan klik kanan
             if (isSimulationModeRef()) return;
             const isSelected = trRef.nodes().indexOf(group) >= 0;
             if (!e.evt.shiftKey) {
@@ -332,6 +335,7 @@ export const componentFactory = {
         });
         group.add(background);
         group.on("click", (e) => {
+            if (e.evt.button === 2) return; // Abaikan klik kanan
             if (isSimulationModeRef()) return;
             const isSelected = trRef.nodes().indexOf(group) >= 0;
             if (!e.evt.shiftKey) {
@@ -413,6 +417,7 @@ export const componentFactory = {
         });
 
         group.on("click", (e) => {
+            if (e.evt.button === 2) return; // Abaikan klik kanan
             if (isSimulationModeRef()) return;
             const isSelected = trRef.nodes().indexOf(group) >= 0;
             if (!e.evt.shiftKey) {
