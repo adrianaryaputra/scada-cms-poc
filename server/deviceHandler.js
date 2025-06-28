@@ -1,4 +1,5 @@
 // server/deviceHandler.js
+const mqtt = require('mqtt'); // Import MQTT library
 
 // Base class/interface for all device types
 class Device {
@@ -29,102 +30,181 @@ class Device {
     }
 
     // Method to be called when data is received from the physical device
-    onData(data) {
-        // This method should be overridden or handled by an event emitter
-        // For now, we'll assume it emits an event or calls a callback
-        console.log(`Data received from ${this.name}:`, data);
-        // In a real scenario, this would emit an event to socketHandler
-        // e.g., this.emit('data', { deviceId: this.id, data });
+    // This will be triggered by the MQTT client's 'message' event for MqttDevice
+    _handleIncomingData(topic, message) {
+        console.log(`[${this.name}] Data received on topic '${topic}': ${message.toString()}`);
+        if (this.io) {
+            this.io.of('/devices').emit('device_data', {
+                deviceId: this.id,
+                address: topic, // Topic is the address for MQTT
+                value: message.toString(), // Convert buffer to string
+            });
+        }
     }
 
-    // Method to update connection status and potentially emit an event
-    updateStatus(isConnected) {
+    // Method to update connection status and emit an event via Socket.IO
+    _updateStatusAndEmit(isConnected) {
         this.connected = isConnected;
-        console.log(`Device ${this.name} status updated: ${this.connected ? 'Connected' : 'Disconnected'}`);
-        // In a real scenario, this would emit an event to socketHandler
-        // e.g., this.emit('status', { deviceId: this.id, connected: this.connected });
+        const statusMessage = `Device ${this.name} (${this.id}) status: ${this.connected ? 'Connected' : 'Disconnected'}`;
+        console.log(statusMessage);
+        if (this.io) {
+            this.io.of('/devices').emit('device_status_update', {
+                deviceId: this.id,
+                name: this.name,
+                connected: this.connected,
+                type: this.type,
+                timestamp: new Date().toISOString()
+            });
+             // Also emit to the general device_statuses for consistency with existing client logic
+            this.io.of('/devices').emit('device_statuses', [{id: this.id, connected: this.connected}]);
+        }
     }
 }
 
 class MqttDevice extends Device {
     constructor(config, socketIoInstance) {
         super(config);
-        this.client = null; // MQTT client instance
-        this.io = socketIoInstance; // Socket.IO instance for emitting data to clients
-        // MQTT specific config: host, port, username, password, basepath, protocol
+        this.client = null;
+        this.io = socketIoInstance;
+        // Default topics to subscribe to. Can be expanded or made more dynamic.
+        this.subscriptions = new Set();
+        if (this.config.basepath) {
+            this.subscriptions.add(`${this.config.basepath}/#`); // Subscribe to all under basepath
+        } else {
+            this.subscriptions.add(`hmi/${this.id}/#`); // Default device-specific wildcard
+        }
+        // Add more specific topics based on HMI component configuration if available globally
+        // For example, by iterating through serverSideDeviceStore from socketHandler,
+        // finding components linked to this device, and adding their addresses.
+        // This part needs a more robust global state or event mechanism if topics are highly dynamic.
     }
 
     connect() {
-        // Logic to connect to MQTT broker (using a library like mqtt.js)
-        // This is a simplified example. A real implementation would use an MQTT library.
-        console.log(`Attempting to connect MQTT device: ${this.name} to ${this.config.host}:${this.config.port}`);
+        if (this.client && this.client.connected) {
+            console.log(`[${this.name}] Already connected.`);
+            return;
+        }
 
-        // Placeholder for actual MQTT connection
-        // Example using a hypothetical MQTT library structure
-        // this.client = new MqttClient({ host: this.config.host, port: this.config.port, ... });
-        // this.client.on('connect', () => {
-        //     this.updateStatus(true);
-        //     this._subscribeToTopics();
-        // });
-        // this.client.on('error', (err) => {
-        //     console.error(`MQTT connection error for ${this.name}:`, err);
-        //     this.updateStatus(false);
-        // });
-        // this.client.on('message', (topic, message) => {
-        //     this.onData({ topic, value: message.toString() });
-        //     // Emit data to web clients via Socket.IO
-        //     if (this.io) {
-        //         this.io.of('/devices').emit('device_data', {
-        //             deviceId: this.id,
-        //             address: topic, // Assuming topic is the address
-        //             value: message.toString()
-        //         });
-        //     }
-        // });
-        // this.client.connect();
+        // Construct connection URL: protocol://host:port
+        // The mqtt library handles ws, wss, mqtt, mqtts based on the URL prefix.
+        const protocol = this.config.protocol || 'mqtt'; // Default to mqtt if not specified
+        const connectUrl = `${protocol}://${this.config.host}:${this.config.port}`;
 
-        // Simulate connection for now
-        setTimeout(() => {
-            this.updateStatus(true);
-            console.log(`MQTT device ${this.name} connected (simulated).`);
-            // Simulate receiving a message
-            setTimeout(() => {
-                const simulatedTopic = `${this.config.basepath || 'hmi'}/${this.id}/status`;
-                const simulatedValue = Math.random() * 100;
-                this.onData({ topic: simulatedTopic, value: simulatedValue });
-                 if (this.io) {
-                    this.io.of('/devices').emit('device_data', {
-                        deviceId: this.id,
-                        address: simulatedTopic,
-                        value: simulatedValue.toFixed(2)
-                    });
-                }
-            }, 2000);
-        }, 1000);
+        const options = {
+            clientId: this.config.clientId || `hmi_server_${this.id}_${Date.now()}`, // Ensure unique client ID
+            username: this.config.username,
+            password: this.config.password,
+            clean: true, // Clean session
+            connectTimeout: 4000, // Milliseconds
+            reconnectPeriod: 1000, // Milliseconds, interval between two reconnections
+                                   // Default is 1000. 0 to disable auto reconnect.
+            // For SSL/TLS, the mqtt library uses properties like `ca`, `cert`, `key`, `rejectUnauthorized`
+            // These would need to be added to deviceConfig if secure connection is needed.
+            // For WSS, the URL protocol `wss://` should suffice.
+        };
+
+        console.log(`[${this.name}] Attempting to connect to MQTT broker at ${connectUrl}`);
+        this.client = mqtt.connect(connectUrl, options);
+
+        this.client.on('connect', () => {
+            this._updateStatusAndEmit(true);
+            this._subscribeToTopics();
+        });
+
+        this.client.on('error', (err) => {
+            console.error(`[${this.name}] MQTT Connection Error:`, err.message);
+            // The 'close' event will usually follow, which handles status update.
+            // If not, ensure status is updated:
+            if (!this.client.connected && this.connected) { // Check if status is desynced
+                 this._updateStatusAndEmit(false);
+            }
+        });
+
+        this.client.on('reconnect', () => {
+            console.log(`[${this.name}] Reconnecting to MQTT broker...`);
+            // Status is effectively disconnected during reconnect attempts
+            if (this.connected) this._updateStatusAndEmit(false);
+        });
+
+        this.client.on('close', () => {
+            console.log(`[${this.name}] MQTT connection closed.`);
+            this._updateStatusAndEmit(false);
+        });
+
+        this.client.on('offline', () => {
+            console.log(`[${this.name}] MQTT client offline.`);
+            this._updateStatusAndEmit(false);
+        });
+
+        this.client.on('message', (topic, message) => {
+            // message is Buffer, call superclass's method or handle here
+            this._handleIncomingData(topic, message);
+        });
     }
 
     _subscribeToTopics() {
-        // Logic to subscribe to relevant MQTT topics based on device config or HMI components
-        // e.g., if HMI components are linked to this device and have addresses (topics)
-        // This would require access to the HMI's tag database or component configurations
-        console.log(`MQTT device ${this.name}: Subscribing to topics (placeholder).`);
-        // Example: this.client.subscribe(`${this.config.basepath || 'hmi'}/${this.id}/#`);
+        if (!this.client || !this.client.connected) {
+            console.warn(`[${this.name}] Cannot subscribe, MQTT client not connected.`);
+            return;
+        }
+        this.subscriptions.forEach(topic => {
+            this.client.subscribe(topic, { qos: 0 }, (err) => { // QoS 0 for simplicity
+                if (err) {
+                    console.error(`[${this.name}] Failed to subscribe to ${topic}:`, err);
+                } else {
+                    console.log(`[${this.name}] Subscribed to ${topic}`);
+                }
+            });
+        });
     }
+
+    // Call this if subscription set changes while connected
+    updateSubscriptions(newTopicsSet) {
+        if (!this.client || !this.client.connected) return;
+
+        const topicsToUnsub = new Set([...this.subscriptions].filter(x => !newTopicsSet.has(x)));
+        const topicsToSub = new Set([...newTopicsSet].filter(x => !this.subscriptions.has(x)));
+
+        topicsToUnsub.forEach(topic => {
+            this.client.unsubscribe(topic, err => {
+                if (err) console.error(`[${this.name}] Error unsubscribing from ${topic}:`, err);
+                else console.log(`[${this.name}] Unsubscribed from ${topic}`);
+            });
+        });
+
+        topicsToSub.forEach(topic => {
+            this.client.subscribe(topic, { qos: 0 }, err => {
+                if (err) console.error(`[${this.name}] Error subscribing to ${topic}:`, err);
+                else console.log(`[${this.name}] Subscribed to ${topic}`);
+            });
+        });
+        this.subscriptions = newTopicsSet;
+    }
+
 
     disconnect() {
         if (this.client) {
-            // this.client.end(); // Method to disconnect from MQTT broker
-            console.log(`MQTT device ${this.name} disconnected.`);
+            this.client.end(true, () => { // true for force, run callback once disconnected
+                console.log(`[${this.name}] MQTT client disconnected successfully.`);
+                this._updateStatusAndEmit(false); // Ensure status is updated after explicit disconnect
+                this.client = null;
+            });
+        } else {
+            this._updateStatusAndEmit(false); // Already disconnected or never connected
         }
-        this.updateStatus(false);
     }
 
     writeData(address, value) {
-        if (this.client && this.connected) {
-            // this.client.publish(address, value.toString());
-            console.log(`MQTT: Writing to ${address} for device ${this.name}: ${value} (simulated)`);
+        if (this.client && this.client.connected) {
+            this.client.publish(address, String(value), { qos: 0, retain: false }, (err) => {
+                if (err) {
+                    console.error(`[${this.name}] MQTT publish error to ${address}:`, err);
+                } else {
+                    console.log(`[${this.name}] Published to ${address}: ${value}`);
+                }
+            });
         } else {
-            console.warn(`MQTT device ${this.name} not connected or client not initialized. Cannot write data.`);
+            console.warn(`[${this.name}] MQTT client not connected. Cannot write to ${address}.`);
         }
     }
 }

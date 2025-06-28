@@ -203,8 +203,10 @@
                         <div class="mb-4">
                             <label for="mqtt-protocol" class="block text-sm font-medium text-gray-300">Protokol</label>
                             <select id="mqtt-protocol" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
-                                <option value="ws">ws</option>
                                 <option value="mqtt">mqtt</option>
+                                <option value="mqtts">mqtts (MQTT over TLS)</option>
+                                <option value="ws">ws (MQTT over WebSocket)</option>
+                                <option value="wss">wss (MQTT over Secure WebSocket)</option>
                             </select>
                         </div>
                         <div class="mb-4">
