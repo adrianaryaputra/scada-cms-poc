@@ -6,10 +6,10 @@ import {
     saveState,
     handleUndo as smHandleUndo,
     handleRedo as smHandleRedo,
-    getUndoStack,
+    getUndoStack
     // Fungsi state lain yang mungkin dibutuhkan aiAssistant
-    replaceTagAddress,
-    deleteFromTagDatabase
+    // replaceTagAddress, // Removed as it's obsolete in stateManager
+    // deleteFromTagDatabase // Removed as it's obsolete in stateManager
 } from './stateManager.js';
 import { componentFactory, initComponentFactory } from './componentFactory.js';
 import { initKonvaManager } from './konvaManager.js';
