@@ -176,12 +176,13 @@ export function initDeviceManager(socketInstance) { // Parameter is already a so
     */
 
     socket.on('device_variable_update', (data) => {
-        // data = { deviceId, variableName, value }
-        // console.log('Received device_variable_update:', data);
+        // data = { deviceId, variableName, value, timestamp? }
+        console.log('[DeviceManager] Received device_variable_update:', data); // DEBUG LOG
         if (data && typeof data.deviceId !== 'undefined' && typeof data.variableName !== 'undefined' && typeof data.value !== 'undefined') {
+            console.log(`[DeviceManager] Calling setDeviceVariableValue with deviceId: ${data.deviceId}, variableName: ${data.variableName}, value: ${data.value}`); // DEBUG LOG
             setDeviceVariableValue(data.deviceId, data.variableName, data.value);
         } else {
-            console.warn("Received malformed device_variable_update:", data);
+            console.warn("[DeviceManager] Received malformed device_variable_update:", data);
         }
     });
 

@@ -169,17 +169,20 @@ class MqttDevice extends Device {
     _processVariableSubscriptions(topic, messageString, relayedAsTempSub) {
         const variableConfig = this.topicToVariableMap.get(topic);
         if (variableConfig) {
+            console.log(`[${this.name}] MQTT message received for variable '${variableConfig.name}' on topic '${topic}'`); // DEBUG LOG
             let value = messageString;
             if (variableConfig.jsonPath) {
                 try {
                     const messageObject = JSON.parse(messageString);
                     value = _getValueFromPath(messageObject, variableConfig.jsonPath); // Use the local helper
+                    console.log(`[${this.name}] Extracted value using JSONPath '${variableConfig.jsonPath}':`, value); // DEBUG LOG
                 } catch (e) {
-                    console.warn(`[${this.name}] Failed to parse JSON or extract path for var '${variableConfig.name}': ${e.message}`);
+                    console.warn(`[${this.name}] Failed to parse JSON or extract path for var '${variableConfig.name}': ${e.message}. Payload: ${messageString}`);
                     return;
                 }
             }
             this._emitVariableUpdateToSocket(variableConfig.name, value);
+            console.log(`[${this.name}] Emitted 'device_variable_update' for var '${variableConfig.name}' with value:`, value); // DEBUG LOG
 
         } else if (!relayedAsTempSub) {
             // console.debug(`[${this.name}] Message on topic '${topic}' did not match any variable or active temporary subscription.`);

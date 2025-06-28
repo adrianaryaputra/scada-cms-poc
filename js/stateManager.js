@@ -250,17 +250,28 @@ export function setDeviceVariableValue(deviceId, variableName, value) {
         tagDatabase[deviceId] = {};
     }
     tagDatabase[deviceId][variableName] = value;
-    // console.debug(`Set variable value: Device ${deviceId}, Var ${variableName} =`, value);
+    console.log(`[StateManager] Set variable value in tagDatabase: Device ${deviceId}, Var ${variableName} =`, value); // DEBUG LOG
 
     // Notify relevant HMI components on the Konva layer to update their visual state.
     // This implements a simple observer pattern: stateManager is the subject, components are observers.
     if (layerRef) {
+        let foundComponent = false;
         layerRef.find('.hmi-component').forEach(node => {
             // Components are expected to have deviceId and variableName attributes if they bind to device data.
             if (node.attrs.deviceId === deviceId && node.attrs.variableName === variableName) {
+                foundComponent = true;
+                console.log(`[StateManager] Found matching component (ID: ${node.id()}, Type: ${node.attrs.componentType}, Bound DeviceID: ${node.attrs.deviceId}, Bound VarName: ${node.attrs.variableName}) for Update to DeviceID: ${deviceId}, VarName: ${variableName}. Calling updateState.`);
                 node.updateState?.(); // Call the component's own updateState method, if it exists.
             }
         });
+        if (!foundComponent) {
+            console.log(`[StateManager] No component found on layer matching update for DeviceID: ${deviceId}, VarName: ${variableName}. Checking all components:`);
+            layerRef.find('.hmi-component').forEach(n => { // Changed variable name to n to avoid conflict
+                console.log(`  - Component ID: ${n.id()}, Type: ${n.attrs.componentType}, Bound DeviceID: ${n.attrs.deviceId}, Bound VarName: ${n.attrs.variableName}`);
+            });
+        }
+    } else {
+        console.warn("[StateManager] layerRef is not available. Cannot notify components to update."); // DEBUG LOG
     }
 }
 
