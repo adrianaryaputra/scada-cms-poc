@@ -90,6 +90,7 @@ window.addEventListener("load", () => {
         () => konvaRefs.stage,
         konvaRefs.getDragStartPositions,
         konvaRefs.setDragStartPositions,
+        konvaRefs.clearDragStartPositions,
         uiManagerRefs.selectNodes,
         konvaRefs.handleDragMove
     );

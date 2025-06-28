@@ -2,7 +2,8 @@
 import {
     saveState,
     getCurrentState,
-    getUndoStack,
+    handleUndo,
+    handleRedo,
     replaceTagAddress,
     deleteFromTagDatabase
 } from './stateManager.js';
@@ -23,6 +24,7 @@ let clipboard = null;
 let pasteOffset = 0;
 
 let konvaHandleContextMenuClose;
+let konvaSelectNodes;
 let getIsSimulationModeFunc;
 let setIsSimulationModeFunc;
 
@@ -50,6 +52,8 @@ export function initUiManager(
     konvaRefsForUi = konvaRefs;
     getIsSimulationModeFunc = getSimModeFunc;
     setIsSimulationModeFunc = setSimModeFunc;
+    konvaHandleContextMenuClose = konvaRefs.handleContextMenuCloseForSaveState;
+    konvaSelectNodes = konvaRefs.selectNodes;
 
     // Cache elemen DOM
     modeToggleEl = document.getElementById("mode-toggle");
@@ -109,6 +113,12 @@ export function selectNodes(nodes = []) {
     if (isSimulationModeState) return;
     if (!konvaRefsForUi.tr || !konvaRefsForUi.layer) return;
 
+    if (nodes.length === 1 && nodes[0].attrs.componentType === "label") {
+        konvaRefsForUi.tr.keepRatio(false);
+    } else {
+        konvaRefsForUi.tr.keepRatio(true);
+    }
+
     konvaRefsForUi.tr.nodes(nodes);
 
     if (deleteBtnEl) {
@@ -116,7 +126,65 @@ export function selectNodes(nodes = []) {
         deleteBtnEl.classList.toggle("btn-disabled", nodes.length === 0);
     }
 
+    konvaRefsForUi.layer.find(".hmi-component").forEach((n) => {
+        const isSelected = nodes.includes(n);
+        n.draggable(isSelected);
+    });
+
     hideContextMenu();
+}
+
+function handleCopy() {
+    console.log("handleCopy");
+    if (!konvaRefsForUi.tr) return;
+    const selectedNodes = konvaRefsForUi.tr.nodes();
+    if (selectedNodes.length === 0) {
+        clipboard = null;
+        return;
+    }
+    pasteOffset = 0; // Reset paste offset
+    clipboard = selectedNodes.map((node) => {
+        const properties = { ...node.attrs };
+        delete properties.id; // Hapus id agar unik saat paste
+        delete properties.address; // Hapus address agar unik saat paste
+        return {
+            componentType: properties.componentType,
+            properties: properties,
+        };
+    });
+    // updateStatus (dari utils.js) akan dipanggil dari app.js jika diperlukan
+    console.log(`${clipboard.length} elemen disalin.`);
+}
+
+function handlePaste() {
+    console.log("handlePaste");
+    if (!clipboard || clipboard.length === 0 || !konvaRefsForUi.layer) return;
+    const GRID_SIZE_ref = 20; // Ambil dari config.js atau pass saat init
+    pasteOffset += GRID_SIZE_ref;
+    const newNodes = [];
+    clipboard.forEach((item) => {
+        const newProps = { ...item.properties };
+        newProps.x = (newProps.x || 0) + pasteOffset; // Pastikan x dan y ada
+        newProps.y = (newProps.y || 0) + pasteOffset;
+        const newComponent = componentFactory.create(item.componentType, newProps);
+        if (newComponent) {
+            konvaRefsForUi.layer.add(newComponent);
+            newNodes.push(newComponent);
+        }
+    });
+
+    if (newNodes.length > 0) {
+        saveState();
+        selectNodes(newNodes); // Panggil versi lokal
+        console.log(`${newNodes.length} elemen ditempel.`);
+         // Panggil subscribe MQTT untuk komponen baru jika perlu
+        const currentMqttFuncs = typeof getMqttFuncs === 'function' ? getMqttFuncs() : {};
+        if (currentMqttFuncs.subscribeToComponentAddress) {
+            newNodes.forEach(node => {
+                if (node.attrs.address) currentMqttFuncs.subscribeToComponentAddress(node.attrs.address);
+            });
+        }
+    }
 }
 
 function hideContextMenu() {
@@ -252,11 +320,20 @@ function setupEventListeners(getMqttDeviceFunc) {
         if ((e.ctrlKey || e.metaKey) && !isSimulationModeState) {
             if (e.key.toLowerCase() === "c") {
                 e.preventDefault();
-                // handleCopy();
+                handleCopy();
             }
             if (e.key.toLowerCase() === "v") {
                 e.preventDefault();
-                // handlePaste();
+                handlePaste();
+            }
+            if (e.key.toLowerCase() === "z") {
+                if (e.shiftKey) {
+                    e.preventDefault();
+                    handleRedo();
+                } else {
+                    e.preventDefault();
+                    handleUndo();
+                }
             }
         }
 

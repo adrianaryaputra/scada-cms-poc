@@ -14,17 +14,20 @@ let guideLayerRef;
 let isSimulationModeRef; // Ini adalah boolean, jadi bisa langsung di-pass nilainya
 let stageRef; // Untuk getPointerPosition
 let dragStartPositionsRef; // Untuk drag multi-select
+let setDragStartPositionsRef;
+let clearDragStartPositionsRef;
 let selectNodesFuncRef; // Referensi ke fungsi selectNodes di uiManager
 let handleDragMoveFuncRef; // Referensi ke fungsi handleDragMove di konvaManager
 
-export function initComponentFactory(layer, tr, guideLayer, getIsSimulationMode, getStage, getDragStartPositions, setDragStartPositions, selectNodesFunc, handleDragMoveFunc) {
+export function initComponentFactory(layer, tr, guideLayer, getIsSimulationMode, getStage, getDragStartPositions, setDragStartPositions, clearDragStartPositions, selectNodesFunc, handleDragMoveFunc) {
     layerRef = layer;
     trRef = tr;
     guideLayerRef = guideLayer;
     isSimulationModeRef = getIsSimulationMode; // Ini adalah fungsi untuk mendapatkan nilai boolean terkini
     stageRef = getStage; // Ini adalah fungsi untuk mendapatkan stage terkini
     dragStartPositionsRef = getDragStartPositions;
-    // setDragStartPositionsRef = setDragStartPositions; // Jika ada fungsi setter terpisah
+    setDragStartPositionsRef = setDragStartPositions;
+    clearDragStartPositionsRef = clearDragStartPositions;
     selectNodesFuncRef = selectNodesFunc;
     handleDragMoveFuncRef = handleDragMoveFunc;
 
@@ -68,41 +71,20 @@ export const componentFactory = {
             group.on("dragstart", (e) => {
                 if (guideLayerRef) guideLayerRef.show();
 
-                // Catat posisi awal semua node yang dipilih dan pointer
-                // Pastikan dragStartPositionsRef di-set di sini jika akan dimodifikasi
-                // atau pastikan setDragStartPositionsRef digunakan jika ada.
-                // Untuk sementara, kita asumsikan dragStartPositionsRef adalah objek yang bisa di-mutate.
-                // Ini mungkin perlu diubah tergantung bagaimana dragStartPositions dikelola di app.js
                 const currentDragStartPositions = {
                     pointer: stageRef().getPointerPosition(),
                     nodes: {},
                 };
                 trRef.nodes().forEach((node) => {
-                    currentDragStartPositions.nodes[node.id()] = {
-                        x: node.x(),
-                        y: node.y(),
-                    };
+                    currentDragStartPositions.nodes[node.id()] = { x: node.x(), y: node.y() };
                 });
-                // Jika dragStartPositionsRef adalah objek yang bisa di-mutate langsung:
-                // Object.assign(dragStartPositionsRef, currentDragStartPositions);
-                // Jika ada fungsi setter:
-                // setDragStartPositionsRef(currentDragStartPositions);
-                // Untuk sekarang, kita akan mengembalikan nilai ini agar app.js yang mengaturnya
-                // Ini perlu disesuaikan dengan bagaimana dragStartPositions akan dikelola di app.js
-                // atau konvaManager.js nanti.
-                // Untuk sementara, kita akan asumsikan ada fungsi global atau setter di app.js
-                // yang akan menangani ini. Ini adalah bagian yang perlu perhatian saat integrasi.
-                 if (typeof window.setAppDragStartPositions === 'function') {
-                    window.setAppDragStartPositions(currentDragStartPositions);
-                }
+                setDragStartPositionsRef(currentDragStartPositions);
 
             });
             group.on("dragend", () => {
                 saveState(); // Dari stateManager
                 if (guideLayerRef) guideLayerRef.hide();
-                 if (typeof window.clearAppDragStartPositions === 'function') {
-                    window.clearAppDragStartPositions();
-                }
+                clearDragStartPositionsRef();
             });
             group.on("dragmove", (e) => {
                  if (handleDragMoveFuncRef) handleDragMoveFuncRef(e);
@@ -235,12 +217,6 @@ export const componentFactory = {
             this.findOne(".background").fill(state === 1 ? this.attrs.onColor : this.attrs.offColor);
             this.findOne(".state-text").text(state === 1 ? this.attrs.onText : this.attrs.offText);
         };
-        // group.on("click tap", () => { // Sudah ditangani di event 'click' di atas
-        //     if (isSimulationModeRef()) {
-        //         const currentVal = getComponentAddressValue(group.attrs.address) || 0;
-        //         setComponentAddressValue(group.attrs.address, currentVal === 1 ? 0 : 1);
-        //     }
-        // });
         group.updateState();
         return group;
     },
