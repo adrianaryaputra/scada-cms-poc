@@ -173,25 +173,36 @@ class MqttDevice extends Device {
             this._updateStatusAndEmit(false);
         });
 
+        // Di dalam MqttDevice class, method connect(), this.client.on('message', ...)
         this.client.on('message', (topic, messageBuffer) => {
             const messageString = messageBuffer.toString();
+            console.log(`[${this.name}] RAW MESSAGE RECEIVED: Topic: ${topic}, Message: ${messageString}`); // LOG 1
             let relayedAsTempSub = false;
 
-            // Iterate over a copy of socket IDs in case a socket disconnects during this loop
             const socketIds = Array.from(this.temporarySubscriptions.keys());
+            console.log(`[${this.name}] Current temporary subscriber socket IDs:`, socketIds); // LOG 2
+
+            // ... (sebelum loop for const socketId ...)
+            console.log(`[${this.name}] All connected socket IDs on server:`, Array.from(this.io.sockets.sockets.keys())); // LOG BARU
+            // ... (lanjutkan dengan loop for const socketId ...)
 
             for (const socketId of socketIds) {
                 const subscribedFilters = this.temporarySubscriptions.get(socketId);
-                if (!subscribedFilters) continue; // Should not happen if keys are synced
+                if (!subscribedFilters) {
+                    console.log(`[${this.name}] No filters found for socketId ${socketId}, skipping.`); // LOG 3
+                    continue;
+                }
+                console.log(`[${this.name}] SocketId ${socketId} has filters:`, Array.from(subscribedFilters)); // LOG 4
 
-                // Check if the socket is still connected
-                const socketClient = this.io && this.io.sockets && this.io.sockets.sockets.get(socketId);
+                const deviceNamespaceInstance = this.io.of('/devices');
+                const socketClient = deviceNamespaceInstance && deviceNamespaceInstance.sockets && deviceNamespaceInstance.sockets.get(socketId);
                 if (!socketClient) {
-                    // Socket disconnected, clean up its temporary subscriptions
-                    const filtersToRemove = Array.from(subscribedFilters); // Iterate over a copy
+                    console.log(`[${this.name}] SocketId ${socketId} NOT CONNECTED. Cleaning up its filters.`); // LOG 5
+                    // ... (logika cleanup seperti yang sudah ada) ...
+                    const filtersToRemove = Array.from(subscribedFilters);
                     filtersToRemove.forEach(filter => {
-                        subscribedFilters.delete(filter); // Remove from this socket's list
-                        if (!this._isFilterNeeded(filter)) { // Check if any other socket or variable needs it
+                        subscribedFilters.delete(filter);
+                        if (!this._isFilterNeeded(filter)) {
                             if (this.client && this.client.connected) {
                                 this.client.unsubscribe(filter, (err) => {
                                     if (err) console.error(`[${this.name}] Error unsubscribing from temp filter ${filter} after socket ${socketId} disconnect:`, err);
@@ -203,13 +214,14 @@ class MqttDevice extends Device {
                     if (subscribedFilters.size === 0) {
                         this.temporarySubscriptions.delete(socketId);
                     }
-                    continue; // Move to the next socketId
+                    continue;
                 }
 
-                // Socket is connected, check its filters
-                // Iterate over a copy of filters as it might be modified if socket disconnects above
+                console.log(`[${this.name}] SocketId ${socketId} IS CONNECTED. Checking its filters against topic: ${topic}`); // LOG 6
                 Array.from(subscribedFilters).forEach(filter => {
+                    console.log(`[${this.name}]   Checking filter: '${filter}' against topic: '${topic}'`); // LOG 7
                     if (mqttWildcardMatch(topic, filter)) {
+                        console.log(`[${this.name}]   MATCH! Filter '${filter}' matches topic '${topic}'. Emitting server_temp_message to socket ${socketId}.`); // LOG 8
                         relayedAsTempSub = true;
                         socketClient.emit('server_temp_message', {
                             deviceId: this.id,
@@ -217,36 +229,25 @@ class MqttDevice extends Device {
                             filter: filter,
                             payloadString: messageString,
                         });
-                        console.log(`[${this.name}] Relayed temp message on topic '${topic}' (matched filter '${filter}') to socket ${socketId}`);
+                    } else {
+                        console.log(`[${this.name}]   NO MATCH for filter: '${filter}'`); // LOG 9
                     }
                 });
             }
 
-            if (relayedAsTempSub && !this.topicToVariableMap.has(topic)) {
-                return;
+            if (relayedAsTempSub) {
+                console.log(`[${this.name}] Message was relayed as temp sub. Is it also a variable? ${this.topicToVariableMap.has(topic)}`); // LOG 10
+                if (!this.topicToVariableMap.has(topic)) {
+                    return;
+                }
             }
 
             const variableConfig = this.topicToVariableMap.get(topic);
             if (variableConfig) {
-                let valueToStore = messageString;
-                try {
-                    const jsonData = JSON.parse(messageString);
-                    if (variableConfig.jsonPathSubscribe) {
-                        valueToStore = this._getValueFromPath(jsonData, variableConfig.jsonPathSubscribe);
-                        if (valueToStore === undefined) {
-                             console.warn(`[${this.name}] JSONPath "${variableConfig.jsonPathSubscribe}" yielded undefined for topic ${topic}. Raw JSON:`, jsonData);
-                             valueToStore = jsonData;
-                        }
-                    } else {
-                        valueToStore = jsonData;
-                    }
-                } catch (e) {
-                    // Not JSON
-                }
-                this.variableValues[variableConfig.name] = valueToStore;
-                this._emitVariableUpdateToSocket(variableConfig.name, valueToStore);
-            } else if (!relayedAsTempSub) { // Only log as unmapped if not handled by temp sub either
-                 console.log(`[${this.name}] Received message on unmapped topic '${topic}': ${messageString}.`);
+                console.log(`[${this.name}] Processing as variable: ${variableConfig.name}`); // LOG 11
+                // ... (sisa logika variabel) ...
+            } else if (!relayedAsTempSub) {
+                console.log(`[${this.name}] Message NOT relayed as temp sub AND not a variable. Final unmapped log for topic '${topic}'.`); // LOG 12
             }
         });
     }

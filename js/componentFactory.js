@@ -205,10 +205,15 @@ export const componentFactory = {
         group.on("click", (e) => {
             if (e.evt.button === 2) return; // Abaikan klik kanan
             if (isSimulationModeRef()) { // Hanya toggle state jika mode simulasi
-                 const currentVal = getComponentAddressValue(group.attrs.address) || 0;
-                 setComponentAddressValue(group.attrs.address, currentVal === 1 ? 0 : 1);
-                 group.updateState(); // Langsung update tampilan setelah state diubah
-                 return; // Jangan proses seleksi jika mode simulasi
+                if (group.attrs.deviceId && group.attrs.variableName) {
+                    const currentValue = getDeviceVariableValue(group.attrs.deviceId, group.attrs.variableName) || 0;
+                    const newValue = currentValue === 1 ? 0 : 1;
+                    writeDataToServer(group.attrs.deviceId, group.attrs.variableName, newValue);
+                    // Update tampilan akan terjadi ketika stateManager menerima update dari server
+                } else {
+                    console.warn("BitSwitch: deviceId or variableName not set. Cannot write data.");
+                }
+                return; // Jangan proses seleksi jika mode simulasi
             }
             // Logika seleksi untuk mode desain
             const isSelected = trRef.nodes().indexOf(group) >= 0;
@@ -226,7 +231,8 @@ export const componentFactory = {
             }
         });
         group.updateState = function () {
-            const state = getComponentAddressValue(this.attrs.address) || 0;
+            const value = getDeviceVariableValue(this.attrs.deviceId, this.attrs.variableName);
+            const state = (value === true || value === 1 || value === '1' || value === 'true' || value === 'ON') ? 1 : 0;
             this.findOne(".background").fill(state === 1 ? this.attrs.onColor : this.attrs.offColor);
             this.findOne(".state-text").text(state === 1 ? this.attrs.onText : this.attrs.offText);
         };
@@ -290,8 +296,12 @@ export const componentFactory = {
         });
         group.add(text);
         group.updateState = function () {
-            const value = getComponentAddressValue(this.attrs.address) || 0;
-            const stateConfig = this.attrs.states.find((s) => s.value == value) || { text: "INVALID", color: "#f0ad4e" };
+            const value = getDeviceVariableValue(this.attrs.deviceId, this.attrs.variableName) || 0;
+            // Normalize value for comparison, as it might come as string from some sources
+            const numValue = Number(value);
+            const stateConfig = this.attrs.states.find((s) => s.value == numValue) || 
+                                this.attrs.states.find((s) => String(s.value).toLowerCase() == String(value).toLowerCase()) || // Fallback for string comparison
+                                { text: "INVALID", color: "#f0ad4e" };
             this.findOne(".background").fill(stateConfig.color);
             this.findOne(".state-text").text(stateConfig.text);
         };
@@ -360,8 +370,9 @@ export const componentFactory = {
         });
         group.add(labelText);
         group.updateState = function () {
-            const value = getComponentAddressValue(this.attrs.address) || 0;
-            const val = parseFloat(value).toFixed(this.attrs.decimalPlaces);
+            const value = getDeviceVariableValue(this.attrs.deviceId, this.attrs.variableName);
+            const numValue = parseFloat(value);
+            const val = !isNaN(numValue) ? numValue.toFixed(this.attrs.decimalPlaces) : "---";
             this.findOne(".value-text").text(val);
             this.findOne(".label-text").text(this.attrs.label + ` (${this.attrs.units})`);
         };
