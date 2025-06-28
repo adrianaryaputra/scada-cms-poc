@@ -4,7 +4,6 @@ import {
     getCurrentState,
     handleUndo,
     handleRedo,
-    replaceTagAddress,
     deleteDeviceVariableState
 } from './stateManager.js';
 import { componentFactory } from './componentFactory.js';
