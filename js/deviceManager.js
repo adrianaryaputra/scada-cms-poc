@@ -9,13 +9,12 @@ let socket = null;
 let deviceManagerModal, closeDeviceManagerModal, addDeviceBtn, deviceList;
 let deviceFormModal, deviceForm, deviceFormTitle, cancelDeviceForm, deviceIdInput, deviceNameInput, deviceTypeInput, mqttFields, modbusTcpFields, modbusRtuFields;
 
-export function initDeviceManager(ioClient) { // Renamed 'io' to 'ioClient' for clarity
-    if (typeof ioClient !== 'function') {
-        console.error("Socket.IO client instance (io) not provided to initDeviceManager or is not a function.");
+export function initDeviceManager(socketInstance) { // Parameter is already a socket instance
+    if (!socketInstance || typeof socketInstance.on !== 'function' || typeof socketInstance.emit !== 'function') {
+        console.error("Valid Socket.IO client instance not provided to initDeviceManager.");
         // Fallback or error display for the user that real-time features are unavailable.
         const deviceManagerBtn = document.getElementById('device-manager-btn');
         if(deviceManagerBtn) deviceManagerBtn.disabled = true;
-        // It's better to inform the user non-blockingly if possible
         const HMIcontainer = document.getElementById('hmi-container'); // Or any main app container
         if (HMIcontainer) {
             const errorDiv = document.createElement('div');
@@ -30,7 +29,7 @@ export function initDeviceManager(ioClient) { // Renamed 'io' to 'ioClient' for 
         }
         return;
     }
-    socket = ioClient('/devices');
+    socket = socketInstance; // Use the provided instance directly
 
     // Cache DOM elements
     deviceManagerModal = document.getElementById('device-manager-modal');
