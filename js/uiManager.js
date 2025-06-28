@@ -9,7 +9,7 @@ import {
 } from './stateManager.js';
 import { componentFactory } from './componentFactory.js';
 import { getDevices } from './deviceManager.js';
-import { getMqttDevice, subscribeToTopic, unsubscribeFromTopic } from './mqttManager.js';
+// import { getMqttDevice, subscribeToTopic, unsubscribeFromTopic } from './mqttManager.js'; // Removed
 
 // Referensi ke elemen DOM dan state/modul lain
 let modeToggleEl, modeLabelEl, deleteBtnEl, addComponentPanelEl, contextMenuEl,
@@ -47,7 +47,7 @@ export function initUiManager(
     konvaRefs,
     getSimModeFunc,
     setSimModeFunc,
-    getMqttDeviceFunc
+    getDeviceByIdFunc // Renamed from getMqttDeviceFunc
 ) {
     konvaRefsForUi = konvaRefs;
     getIsSimulationModeFunc = getSimModeFunc;
@@ -74,7 +74,7 @@ export function initUiManager(
 
     isSimulationModeState = getIsSimulationModeFunc();
 
-    setupEventListeners(getMqttDeviceFunc);
+    setupEventListeners(getDeviceByIdFunc); // Pass renamed function
 
     if (deleteBtnEl) {
         deleteBtnEl.disabled = true;
@@ -177,13 +177,7 @@ function handlePaste() {
         saveState();
         selectNodes(newNodes); // Panggil versi lokal
         console.log(`${newNodes.length} elemen ditempel.`);
-         // Panggil subscribe MQTT untuk komponen baru jika perlu
-        const currentMqttFuncs = typeof getMqttFuncs === 'function' ? getMqttFuncs() : {};
-        if (currentMqttFuncs.subscribeToComponentAddress) {
-            newNodes.forEach(node => {
-                if (node.attrs.address) currentMqttFuncs.subscribeToComponentAddress(node.attrs.address);
-            });
-        }
+        // Client-side subscription logic removed. Server will handle subscriptions.
     }
 }
 
@@ -241,7 +235,7 @@ function populateContextMenu(node) {
     if (contextMenuContentEl) contextMenuContentEl.innerHTML = html;
 }
 
-function setupEventListeners(getMqttDeviceFunc) {
+function setupEventListeners(getDeviceByIdFunc) { // Renamed parameter
     if (modeToggleEl) modeToggleEl.addEventListener("change", (e) => setMode(e.target.checked));
 
     if (contextMenuEl) {
@@ -251,27 +245,24 @@ function setupEventListeners(getMqttDeviceFunc) {
             const prop = e.target.dataset.prop;
             let value = e.target.type === "number" ? parseFloat(e.target.value) : e.target.value;
 
-            const oldDeviceId = currentContextMenuNode.attrs.deviceId;
-            const oldAddress = currentContextMenuNode.attrs.address;
+            // const oldDeviceId = currentContextMenuNode.attrs.deviceId; // No longer needed for client-side (un)sub
+            // const oldAddress = currentContextMenuNode.attrs.address; // No longer needed for client-side (un)sub
 
             currentContextMenuNode.setAttr(prop, value);
 
-            const newDeviceId = currentContextMenuNode.attrs.deviceId;
-            const newAddress = currentContextMenuNode.attrs.address;
+            // const newDeviceId = currentContextMenuNode.attrs.deviceId; // No longer needed for client-side (un)sub
+            // const newAddress = currentContextMenuNode.attrs.address; // No longer needed for client-side (un)sub
 
-            if (prop === 'deviceId' || prop === 'address') {
-                const oldDevice = getMqttDevice(oldDeviceId);
-                if (oldDevice && oldAddress) {
-                    unsubscribeFromTopic(oldDevice, oldAddress);
-                }
-
-                const newDevice = getMqttDevice(newDeviceId);
-                if (newDevice && newAddress) {
-                    subscribeToTopic(newDevice, newAddress);
-                }
-            }
+            // Client-side subscription logic removed.
+            // The server will manage subscriptions based on the updated component configuration
+            // when the overall HMI state is saved or if specific update events are implemented.
+            // For example, if getDeviceByIdFunc was used here to check device.connected,
+            // that could still be done if needed for UI feedback, but not for sub/unsub.
 
             currentContextMenuNode.updateState?.();
+            // Consider if saveState() should be called here or after context menu closes.
+            // If changes here should immediately reflect on the server for subscription updates,
+            // an event might need to be emitted to the server.
         });
     }
 
@@ -295,17 +286,15 @@ function setupEventListeners(getMqttDeviceFunc) {
             if (!konvaRefsForUi.tr) return;
             const nodesToDelete = konvaRefsForUi.tr.nodes();
             if (nodesToDelete.length > 0) {
-                saveState();
+                saveState(); // Important to save state before destroying
                 nodesToDelete.forEach((node) => {
-                    const deviceId = node.attrs.deviceId;
-                    const address = node.attrs.address;
-                    if (deviceId && address) {
-                        const device = getMqttDevice(deviceId);
-                        if (device) {
-                            unsubscribeFromTopic(device, address);
-                        }
+                    // const deviceId = node.attrs.deviceId; // No longer needed for client-side unsub
+                    const address = node.attrs.address; // Still needed for deleteFromTagDatabase
+                    // Client-side unsubscription logic removed.
+                    // Server will handle this based on the component being removed from the saved state.
+                    if (address) { // Ensure address exists before trying to delete from tag DB
+                        deleteFromTagDatabase(address);
                     }
-                    deleteFromTagDatabase(address);
                     node.destroy();
                 });
             }

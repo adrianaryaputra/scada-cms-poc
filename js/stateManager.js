@@ -9,15 +9,15 @@ let layerRef;
 let trRef;
 let undoBtnRef;
 let redoBtnRef;
-let mqttFuncsRef; // Untuk subscribe/unsubscribe MQTT saat state berubah
 
-export function initStateManager(factory, layer, tr, undoBtn, redoBtn, mqttFuncs) {
+export function initStateManager(factory, layer, tr, undoBtn, redoBtn, getDeviceByIdFunc) { // getDeviceByIdFunc is passed but currently unused in this module
     componentFactoryRef = factory;
     layerRef = layer;
     trRef = tr;
     undoBtnRef = undoBtn;
     redoBtnRef = redoBtn;
-    mqttFuncsRef = mqttFuncs; // Simpan referensi ke fungsi MQTT
+    // The getDeviceByIdFunc parameter is kept in the function signature for now,
+    // in case future state logic needs it, but it's not stored or used within stateManager currently.
 
     // Panggil saveState awal untuk membuat state dasar
     saveState();
@@ -91,13 +91,15 @@ export function restoreState(stateString) {
 
         // Perbarui langganan MQTT berdasarkan perubahan alamat
         const newAddresses = new Set(state.components.map(c => c.address));
-        const oldAddresses = new Set(Object.keys(oldTagDatabase));
+        // const oldAddresses = new Set(Object.keys(oldTagDatabase)); // Keep for logic if needed, but not for sub/unsub
+        // const newAddresses = new Set(state.components.map(c => c.address)); // Keep for logic if needed
 
-        oldAddresses.forEach(addr => {
-            if (!newAddresses.has(addr) && mqttFuncsRef?.unsubscribeFromComponentAddress) {
-                mqttFuncsRef.unsubscribeFromComponentAddress(addr);
-            }
-        });
+        // Client-side subscription logic removed. Server manages subscriptions.
+        // oldAddresses.forEach(addr => {
+        //     if (!newAddresses.has(addr) && mqttFuncsRef?.unsubscribeFromComponentAddress) { // mqttFuncsRef is no longer for this
+        //         // mqttFuncsRef.unsubscribeFromComponentAddress(addr);
+        //     }
+        // });
 
         state.components.forEach((componentData) => {
             const component = componentFactoryRef.create(
@@ -105,10 +107,10 @@ export function restoreState(stateString) {
                 componentData
             );
             layerRef.add(component);
-            // Subscribe ke alamat baru jika belum ada di database lama
-            if (!oldAddresses.has(componentData.address) && mqttFuncsRef?.subscribeToComponentAddress) {
-                 mqttFuncsRef.subscribeToComponentAddress(componentData.address);
-            }
+            // Client-side subscription logic removed.
+            // if (!oldAddresses.has(componentData.address) && mqttFuncsRef?.subscribeToComponentAddress) { // mqttFuncsRef is no longer for this
+            //      // mqttFuncsRef.subscribeToComponentAddress(componentData.address);
+            // }
         });
     }
     updateUndoRedoButtons();
@@ -202,10 +204,11 @@ export function replaceTagAddress(oldAddress, newAddress) {
     if (oldAddress !== newAddress && tagDatabase.hasOwnProperty(oldAddress)) {
         tagDatabase[newAddress] = tagDatabase[oldAddress];
         delete tagDatabase[oldAddress];
-        if (mqttFuncsRef) {
-            mqttFuncsRef.unsubscribeFromComponentAddress(oldAddress);
-            mqttFuncsRef.subscribeToComponentAddress(newAddress);
-        }
+        // Client-side subscription logic removed. Server manages subscriptions.
+        // if (mqttFuncsRef) { // mqttFuncsRef is no longer for this
+        //     // mqttFuncsRef.unsubscribeFromComponentAddress(oldAddress);
+        //     // mqttFuncsRef.subscribeToComponentAddress(newAddress);
+        // }
         return true; // Berhasil diganti
     }
     return false; // Tidak ada perubahan atau oldAddress tidak ada

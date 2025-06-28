@@ -7,7 +7,9 @@
         <script src="https://cdn.tailwindcss.com"></script>
         <!-- Memuat Konva.js, library untuk canvas 2D -->
         <script src="https://unpkg.com/konva@9.3.6/konva.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+        <!-- Socket.IO Client Library -->
+        <script src="/socket.io/socket.io.js"></script>
+        <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script> Paho MQTT client removed -->
         <link rel="stylesheet" href="style.css" />
     </head>
 
@@ -189,10 +191,15 @@
                         <label for="device-type" class="block text-sm font-medium text-gray-300">Tipe</label>
                         <select id="device-type" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
                             <option value="mqtt">MQTT Broker</option>
-                            <option value="external">External Device</option>
+                            <option value="modbus-tcp">Modbus TCP</option>
+                            <option value="modbus-rtu">Modbus RTU</option>
+                            <option value="external">External Device (Placeholder)</option>
+                            <!-- Add S7, OPC-UA options here later -->
                         </select>
                     </div>
-                    <div id="mqtt-fields">
+
+                    <!-- MQTT Fields -->
+                    <div id="mqtt-fields" style="display: none;">
                         <div class="mb-4">
                             <label for="mqtt-protocol" class="block text-sm font-medium text-gray-300">Protokol</label>
                             <select id="mqtt-protocol" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
@@ -221,6 +228,40 @@
                             <input type="text" id="mqtt-basepath" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
                         </div>
                     </div>
+
+                    <!-- Modbus TCP Fields -->
+                    <div id="modbus-tcp-fields" style="display: none;">
+                        <div class="mb-4">
+                            <label for="modbus-tcp-host" class="block text-sm font-medium text-gray-300">IP Address</label>
+                            <input type="text" id="modbus-tcp-host" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white" placeholder="e.g., 192.168.1.10">
+                        </div>
+                        <div class="mb-4">
+                            <label for="modbus-tcp-port" class="block text-sm font-medium text-gray-300">Port</label>
+                            <input type="number" id="modbus-tcp-port" value="502" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
+                        </div>
+                        <div class="mb-4">
+                            <label for="modbus-tcp-unit-id" class="block text-sm font-medium text-gray-300">Unit ID</label>
+                            <input type="number" id="modbus-tcp-unit-id" value="1" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
+                        </div>
+                    </div>
+
+                    <!-- Modbus RTU Fields -->
+                    <div id="modbus-rtu-fields" style="display: none;">
+                        <div class="mb-4">
+                            <label for="modbus-rtu-serial-port" class="block text-sm font-medium text-gray-300">Serial Port</label>
+                            <input type="text" id="modbus-rtu-serial-port" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white" placeholder="e.g., /dev/ttyUSB0 or COM3">
+                        </div>
+                        <div class="mb-4">
+                            <label for="modbus-rtu-baud-rate" class="block text-sm font-medium text-gray-300">Baud Rate</label>
+                            <input type="number" id="modbus-rtu-baud-rate" value="9600" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
+                        </div>
+                        <div class="mb-4">
+                            <label for="modbus-rtu-unit-id" class="block text-sm font-medium text-gray-300">Unit ID</label>
+                            <input type="number" id="modbus-rtu-unit-id" value="1" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
+                        </div>
+                        <!-- Add other Modbus RTU params like data bits, parity, stop bits if needed -->
+                    </div>
+
                     <div class="flex justify-end space-x-3">
                         <button type="button" id="cancel-device-form" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Batal</button>
                         <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">Simpan</button>
