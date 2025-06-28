@@ -5,7 +5,7 @@ import {
     handleUndo,
     handleRedo,
     replaceTagAddress,
-    deleteFromTagDatabase
+    deleteDeviceVariableState
 } from './stateManager.js';
 import { componentFactory } from './componentFactory.js';
 import { getDevices } from './deviceManager.js';
@@ -320,12 +320,12 @@ function setupEventListeners(getDeviceByIdFunc) { // Renamed parameter
             if (nodesToDelete.length > 0) {
                 saveState(); // Important to save state before destroying
                 nodesToDelete.forEach((node) => {
-                    // const deviceId = node.attrs.deviceId; // No longer needed for client-side unsub
-                    const address = node.attrs.address; // Still needed for deleteFromTagDatabase
+                    const deviceId = node.attrs.deviceId;
+                    const variableName = node.attrs.variableName;
                     // Client-side unsubscription logic removed.
                     // Server will handle this based on the component being removed from the saved state.
-                    if (address) { // Ensure address exists before trying to delete from tag DB
-                        deleteFromTagDatabase(address);
+                    if (deviceId && variableName) {
+                        deleteDeviceVariableState(deviceId, variableName);
                     }
                     node.destroy();
                 });
