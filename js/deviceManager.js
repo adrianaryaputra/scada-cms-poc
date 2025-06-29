@@ -1,6 +1,24 @@
-import { setDeviceVariableValue, deleteDeviceState as deleteDeviceStateFromManager } from './stateManager.js';
+import { setDeviceVariableValue, getDeviceVariableValue, deleteDeviceState as deleteDeviceStateFromManager } from './stateManager.js';
 import { openTopicExplorer } from './topicExplorer.js'; // Import openTopicExplorer
 // import { getLayer } from './konvaManager.js'; // getLayer might not be needed if Konva updates via stateManager
+
+// SVG Icons
+const ICON_EDIT = `
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block align-middle">
+  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+  <path d="M13.5 6.5l4 4" />
+</svg>`;
+
+const ICON_DELETE = `
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block align-middle">
+  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path d="M4 7l16 0" />
+  <path d="M10 11l0 6" />
+  <path d="M14 11l0 6" />
+  <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" />
+  <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
+</svg>`;
 
 let localDeviceCache = [];
 let socket = null;
@@ -723,12 +741,37 @@ function openVariableManager(deviceId) {
             }
             publishCell.innerHTML = publishHtml;
 
-            // Actions Cell
+            // Value Preview Cell
+            const valueCell = row.insertCell();
+            valueCell.className = "px-4 py-3 whitespace-nowrap text-sm text-cyan-300";
+            let currentValue = getDeviceVariableValue(device.id, variable.name);
+            if (typeof currentValue === 'object' && currentValue !== null) {
+                try {
+                    currentValue = JSON.stringify(currentValue);
+                     // Truncate if too long
+                    if (currentValue.length > 30) {
+                        currentValue = currentValue.substring(0, 27) + "...";
+                    }
+                } catch (e) {
+                    currentValue = '[Object]' // Fallback for non-serializable objects, though unlikely for basic JSON
+                }
+            } else if (currentValue === undefined) {
+                currentValue = "-";
+            } else if (typeof currentValue === 'boolean') {
+                currentValue = currentValue ? 'True' : 'False';
+            }
+            valueCell.textContent = currentValue;
+
+            // Actions Cell (with Icons)
             const actionsCell = row.insertCell();
             actionsCell.className = "px-4 py-3 whitespace-nowrap text-sm text-right";
             actionsCell.innerHTML = `
-                <button class="edit-variable-btn text-yellow-400 hover:text-yellow-300 text-xs mr-2" data-device-id="${device.id}" data-var-id="${variable.varId || ''}">Edit</button>
-                <button class="delete-variable-btn text-red-400 hover:text-red-300 text-xs" data-device-id="${device.id}" data-var-id="${variable.varId || ''}">Hapus</button>
+                <button class="edit-variable-btn text-yellow-400 hover:text-yellow-300 p-1" data-device-id="${device.id}" data-var-id="${variable.varId || ''}" title="Edit Variabel">
+                    ${ICON_EDIT}
+                </button>
+                <button class="delete-variable-btn text-red-400 hover:text-red-300 p-1 ml-1" data-device-id="${device.id}" data-var-id="${variable.varId || ''}" title="Hapus Variabel">
+                    ${ICON_DELETE}
+                </button>
             `;
 
         });
@@ -748,9 +791,9 @@ function openVariableManager(deviceId) {
             });
         });
     } else if (device.type !== 'mqtt') { // For non-MQTT devices
-         variableListTbody.innerHTML = `<tr><td colspan="5" class="px-4 py-3 text-sm text-gray-400 text-center">Manajemen variabel untuk tipe device '${device.type}' belum didukung di tampilan ini.</td></tr>`;
-    } else {
-        variableListTbody.innerHTML = `<tr><td colspan="5" class="px-4 py-3 text-sm text-gray-400 text-center">No variables configured for this MQTT device.</td></tr>`;
+         variableListTbody.innerHTML = `<tr><td colspan="6" class="px-4 py-3 text-sm text-gray-400 text-center">Manajemen variabel untuk tipe device '${device.type}' belum didukung di tampilan ini.</td></tr>`;
+    } else { // MQTT device but no variables
+        variableListTbody.innerHTML = `<tr><td colspan="6" class="px-4 py-3 text-sm text-gray-400 text-center">No variables configured for this MQTT device.</td></tr>`;
     }
 
     variableManagerModal.classList.remove('hidden');
