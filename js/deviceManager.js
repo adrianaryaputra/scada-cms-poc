@@ -1022,9 +1022,26 @@ export function getDeviceById(id) {
     return localDeviceCache.find(device => device.id === id) || null;
 }
 
-export function writeDataToServer(deviceId, address, value) {
+export function writeDataToServer(deviceId, nameOrAddress, value) { // Mengubah nama parameter kedua
     if (socket && socket.connected) {
-        socket.emit('write_to_device', { deviceId, address, value });
+        const device = getDeviceById(deviceId); // Dapatkan detail device
+
+        if (!device) {
+            console.error(`Device with ID ${deviceId} not found in client cache. Cannot determine type for write.`);
+            alert(`Device ${deviceId} not found. Cannot write data.`);
+            return;
+        }
+
+        let payload = { deviceId, value };
+
+        if (device.type === 'internal') {
+            payload.variableName = nameOrAddress; // Untuk internal, nameOrAddress adalah variableName
+        } else {
+            // Untuk device non-internal, asumsikan nameOrAddress adalah address
+            payload.address = nameOrAddress;
+        }
+
+        socket.emit('write_to_device', payload);
     } else {
         console.error("Socket not connected. Cannot write data.");
         alert("Cannot write data: Server is not connected.");
