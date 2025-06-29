@@ -684,7 +684,6 @@ function setupEventListeners() {
                 // Ini penting untuk "Save As" yang menimpa project lain.
                 // Untuk "Save" pertama kali, currentProjectName akan null.
                 const currentProjectName = projectManagerRef.getCurrentProjectName();
-                const currentProjectName = projectManagerRef.getCurrentProjectName();
                 const projectExists = availableProjects.some(pName => pName.toLowerCase() === projectNameFromModal.toLowerCase());
                 let proceedToSave = true;
 
