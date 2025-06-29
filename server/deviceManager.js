@@ -45,20 +45,37 @@ function initializeDevice(deviceConfig, socketIoInstance) {
         case 'modbus-tcp':
             deviceInstance = new ModbusTcpDevice(deviceConfig, socketIoInstance);
             break;
+        case 'internal': // Handle Internal Device
+            // For internal devices, we don't create a class instance in the same way.
+            // We can return the config itself, perhaps with a flag or default status.
+            // The main purpose is to have it in activeDevices and managed by socketHandler.
+            console.log(`[DeviceManager] Initializing Internal Device: ${deviceConfig.name || deviceConfig.id}`);
+            // Mark as 'connected' conceptually, as there's no physical connection to manage.
+            // Add a flag to easily identify it as a virtual/internal device if needed by other parts.
+            deviceInstance = { ...deviceConfig, connected: true, isInternal: true };
+            break;
         default:
             console.error(`[DeviceManager] Unsupported device type: '${deviceConfig.type}' for device ${deviceConfig.name || deviceConfig.id}`);
             return null;
     }
 
     if (deviceInstance) {
-        // console.log(`[DeviceManager] Initializing device: ${deviceInstance.name} (Type: ${deviceInstance.type}, ID: ${deviceInstance.id})`);
         activeDevices.set(deviceConfig.id, deviceInstance);
-        try {
-            deviceInstance.connect(); // Attempt to connect the device
-        } catch (error) {
-            console.error(`[DeviceManager - ${deviceInstance.name}] Error during initial connect: ${error.message}`);
-            // Device remains in activeDevices but might be in a disconnected state.
-            // The device's connect method itself should handle emitting its connection status.
+        // Only attempt to connect if it's not an internal device and has a connect method
+        if (deviceConfig.type.toLowerCase() !== 'internal' && typeof deviceInstance.connect === 'function') {
+            // console.log(`[DeviceManager] Connecting device: ${deviceInstance.name} (Type: ${deviceInstance.type}, ID: ${deviceInstance.id})`);
+            try {
+                deviceInstance.connect(); // Attempt to connect the device
+            } catch (error) {
+                console.error(`[DeviceManager - ${deviceInstance.name}] Error during initial connect: ${error.message}`);
+            }
+        } else if (deviceConfig.type.toLowerCase() === 'internal') {
+            // For internal devices, emit its 'status' as connected immediately if socketIoInstance is available
+            // This is usually handled by the device class itself, so we emulate it here.
+            if (socketIoInstance && typeof socketIoInstance.of === 'function') {
+                 const devicesNamespace = socketIoInstance.of('/devices');
+                 devicesNamespace.emit('device_status_update', { deviceId: deviceConfig.id, connected: true, name: deviceConfig.name });
+            }
         }
     }
     return deviceInstance;
@@ -88,19 +105,22 @@ function getAllDeviceInstances() {
 function removeDevice(deviceId) {
     const device = activeDevices.get(deviceId);
     if (device) {
-        // console.log(`[DeviceManager] Removing device: ${device.name} (ID: ${deviceId})`);
+        // console.log(`[DeviceManager] Removing device: ${device.name || device.id} (ID: ${deviceId})`);
         try {
             // The device's disconnect method should handle status updates and resource cleanup.
+            // Internal devices (plain objects) won't have a disconnect method.
             if (typeof device.disconnect === 'function') {
                 device.disconnect();
+            } else if (device.isInternal) {
+                // console.log(`[DeviceManager] Internal device ${device.name || device.id} does not require disconnect.`);
             } else {
-                console.warn(`[DeviceManager - ${device.name}] Device type does not have a disconnect method.`);
+                console.warn(`[DeviceManager - ${device.name || device.id}] Device type does not have a disconnect method or is not marked internal.`);
             }
         } catch (error) {
-            console.error(`[DeviceManager - ${device.name}] Error during disconnect call for removal: ${error.message}`);
+            console.error(`[DeviceManager - ${device.name || device.id}] Error during disconnect call for removal: ${error.message}`);
         } finally {
             activeDevices.delete(deviceId); // Remove from map regardless of disconnect outcome
-            // console.log(`[DeviceManager] Device ${device.name} (ID: ${deviceId}) removed from active list.`);
+            // console.log(`[DeviceManager] Device ${device.name || device.id} (ID: ${deviceId}) removed from active list.`);
         }
     } else {
         // console.warn(`[DeviceManager] Attempted to remove non-existent device with ID: ${deviceId}`);

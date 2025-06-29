@@ -493,6 +493,14 @@ function toggleDeviceFields() {
 
     if (modbusRtuFields) modbusRtuFields.style.display = selectedType === 'modbus-rtu' ? 'block' : 'none';
     else console.warn("Modbus RTU fields element not found");
+
+    // If internal, hide all specific sections explicitly
+    if (selectedType === 'internal') {
+        if (mqttFields) mqttFields.style.display = 'none';
+        if (modbusTcpFields) modbusTcpFields.style.display = 'none';
+        if (modbusRtuFields) modbusRtuFields.style.display = 'none';
+        if (mqttVariablesSection) mqttVariablesSection.style.display = 'none'; // Hide placeholder variable section too
+    }
 }
 
 function handleFormSubmit(e) {
@@ -570,6 +578,16 @@ function handleFormSubmit(e) {
         } else {
             deviceData.variables = [];
         }
+    } else if (deviceData.type === 'internal') {
+        // For internal devices, we primarily care about id, name, type, and variables.
+        // Ensure variables array exists.
+        if (isEditing) {
+            const existingDevice = localDeviceCache.find(d => d.id === deviceData.id);
+            deviceData.variables = existingDevice ? existingDevice.variables : [];
+        } else {
+            deviceData.variables = [];
+        }
+        // No other specific fields like host/port are needed for internal devices.
     }
 
 
@@ -792,10 +810,13 @@ function openVariableManager(deviceId) {
                 deleteVariable(devId, varId);
             });
         });
-    } else if (device.type !== 'mqtt') { // For non-MQTT devices
+    } else if (device.type === 'internal' && (!Array.isArray(device.variables) || device.variables.length === 0)) {
+        variableListTbody.innerHTML = `<tr><td colspan="6" class="px-4 py-3 text-sm text-gray-400 text-center">No variables configured for this Internal device.</td></tr>`;
+    }
+    else if (device.type !== 'mqtt' && device.type !== 'internal') { // For non-MQTT, non-Internal devices
          variableListTbody.innerHTML = `<tr><td colspan="6" class="px-4 py-3 text-sm text-gray-400 text-center">Manajemen variabel untuk tipe device '${device.type}' belum didukung di tampilan ini.</td></tr>`;
-    } else { // MQTT device but no variables
-        variableListTbody.innerHTML = `<tr><td colspan="6" class="px-4 py-3 text-sm text-gray-400 text-center">No variables configured for this MQTT device.</td></tr>`;
+    } else { // MQTT device but no variables (or internal device with no variables, though covered above)
+        variableListTbody.innerHTML = `<tr><td colspan="6" class="px-4 py-3 text-sm text-gray-400 text-center">No variables configured for this ${device.type} device.</td></tr>`;
     }
 
     variableManagerModal.classList.remove('hidden');
@@ -854,6 +875,18 @@ function openVariableForm(deviceId, varIdToEdit = null) {
         if(varFormPublishOptions) varFormPublishOptions.style.display = 'none';
     }
 
+    // Show/Hide Subscribe/Publish sections based on device type
+    const subscribeSection = varFormEnableSubscribe.closest('.border-t'); // Find the parent div of subscribe parts
+    const publishSection = varFormEnablePublish.closest('.border-t'); // Find the parent div of publish parts
+
+    if (device.type === 'internal') {
+        if (subscribeSection) subscribeSection.style.display = 'none';
+        if (publishSection) publishSection.style.display = 'none';
+    } else { // For MQTT or other types that might use it
+        if (subscribeSection) subscribeSection.style.display = 'block';
+        if (publishSection) publishSection.style.display = 'block';
+    }
+
     variableFormModal.classList.remove('hidden');
 }
 
@@ -880,26 +913,34 @@ function handleVariableFormSubmit(event) {
         alert("Device tidak ditemukan. Tidak bisa menyimpan variabel.");
         return;
     }
-    if (device.type !== 'mqtt') {
-        alert(`Manajemen variabel saat ini hanya didukung untuk device MQTT dari UI ini.`);
+    // Allow variable management for 'mqtt' and 'internal' types through this form.
+    // Other types might need different variable structures or management UIs.
+    if (device.type !== 'mqtt' && device.type !== 'internal') {
+        alert(`Manajemen variabel untuk tipe device '${device.type}' tidak didukung melalui form ini.`);
         return;
     }
 
-
-    const variableData = {
-        varId: varId || `var-${crypto.randomUUID()}`, // Assign new ID if varId is empty (new variable)
+    let variableData = {
+        varId: varId || `var-${crypto.randomUUID()}`,
         name: name,
         description: varFormDescription.value.trim(),
         dataType: varFormDataType.value,
-        enableSubscribe: varFormEnableSubscribe.checked,
-        subscribeTopic: varFormSubscribeTopic.value.trim(),
-        jsonPathSubscribe: varFormJsonPathSubscribe.value.trim(),
-        qosSubscribe: parseInt(varFormQosSubscribe.value || '0', 10),
-        enablePublish: varFormEnablePublish.checked,
-        publishTopic: varFormPublishTopic.value.trim(),
-        qosPublish: parseInt(varFormQosPublish.value || '0', 10),
-        retainPublish: varFormRetainPublish.checked
     };
+
+    // Add subscribe/publish fields only if not an internal device
+    if (device.type !== 'internal') {
+        variableData.enableSubscribe = varFormEnableSubscribe.checked;
+        variableData.subscribeTopic = varFormSubscribeTopic.value.trim();
+        variableData.jsonPathSubscribe = varFormJsonPathSubscribe.value.trim();
+        variableData.qosSubscribe = parseInt(varFormQosSubscribe.value || '0', 10);
+        variableData.enablePublish = varFormEnablePublish.checked;
+        variableData.publishTopic = varFormPublishTopic.value.trim();
+        variableData.qosPublish = parseInt(varFormQosPublish.value || '0', 10);
+        variableData.retainPublish = varFormRetainPublish.checked;
+    }
+    // For 'internal' devices, the fields above are simply not added to variableData.
+    // If they were part of an 'mqtt' variable that is being changed to 'internal' (not typical),
+    // they would be effectively stripped.
 
     if (!Array.isArray(device.variables)) {
         device.variables = [];
@@ -944,8 +985,8 @@ function deleteVariable(deviceId, varId) {
         alert("Device tidak ditemukan. Tidak bisa menghapus variabel.");
         return;
     }
-     if (device.type !== 'mqtt') {
-        alert(`Manajemen variabel saat ini hanya didukung untuk device MQTT dari UI ini.`);
+     if (device.type !== 'mqtt' && device.type !== 'internal') {
+        alert(`Manajemen variabel untuk tipe device '${device.type}' tidak didukung melalui UI ini.`);
         return;
     }
 
