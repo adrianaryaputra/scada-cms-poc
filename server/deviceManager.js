@@ -29,8 +29,9 @@ function initializeDevice(deviceConfig, socketIoInstance) {
     }
 
     if (activeDevices.has(deviceConfig.id)) {
-        // console.log(`[DeviceManager] Device ${deviceConfig.name || deviceConfig.id} already initialized.`);
-        return activeDevices.get(deviceConfig.id);
+        console.log(`[DeviceManager] Device ${deviceConfig.name || deviceConfig.id} (ID: ${deviceConfig.id}) already exists. Removing old instance before re-initializing with new config.`);
+        removeDevice(deviceConfig.id); // Disconnects and removes from activeDevices map
+        // Now, activeDevices.has(deviceConfig.id) will be false, so the function will proceed to create a new one.
     }
 
     let deviceInstance;

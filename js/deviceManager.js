@@ -224,8 +224,23 @@ export function initDeviceManager(socketInstance, projectManagerSetDirtyFunc) { 
     });
 
     socket.on('initial_device_list', (serverDevices) => {
-        console.log('Received initial device list:', serverDevices);
-        localDeviceCache = Array.isArray(serverDevices) ? serverDevices : [];
+        console.log('Received initial device list:', serverDevices); // Existing log
+        if (Array.isArray(serverDevices)) {
+            console.log(`Processing ${serverDevices.length} device(s) from initial_device_list.`);
+            serverDevices.forEach((device, index) => {
+                // Log structure of each received device for debugging
+                console.log(`Device[${index}]:`, JSON.stringify(device));
+                if (typeof device !== 'object' || device === null) {
+                    console.warn(`Device[${index}] is not an object:`, device);
+                } else if (!device.id) {
+                    console.warn(`Device[${index}] is missing 'id' property:`, device);
+                }
+            });
+            localDeviceCache = serverDevices; // Assign valid or potentially problematic array
+        } else {
+            console.warn('Received initial_device_list was not an array. Clearing local cache.', serverDevices);
+            localDeviceCache = [];
+        }
         renderDeviceList();
     });
 
@@ -323,8 +338,20 @@ export function initDeviceManager(socketInstance, projectManagerSetDirtyFunc) { 
     });
 
     socket.on('operation_error', (error) => {
-        console.error('Server operation error:', error.message);
-        alert(`Server Error: ${error.message}`);
+        // Check if the error message specifically indicates a "device not found for deletion" scenario
+        if (error && error.message &&
+            (error.message.includes("not found for deletion") || error.message.includes("DEVICE_NOT_FOUND"))) { // Added common error code check
+            console.warn(`Server reported: ${error.message} - This is often benign during a clear operation.`);
+            // No alert for this specific case, as the device is already gone or wasn't there.
+        } else if (error && error.message) {
+            // For other errors, maintain existing behavior
+            console.error('Server operation error:', error.message);
+            alert(`Server Error: ${error.message}`);
+        } else {
+            // Fallback for unexpected error format
+            console.error('Received an undefined server operation error:', error);
+            alert('An unspecified server error occurred.');
+        }
     });
 
     renderDeviceList(); // Initial render
@@ -649,8 +676,11 @@ function renderDeviceList() {
         return;
     }
 
-    localDeviceCache.forEach(device => {
-        if(typeof device !== 'object' || !device.id) return; // Skip malformed device data
+    localDeviceCache.forEach((device, index) => { // Added index for logging
+        if(typeof device !== 'object' || device === null || !device.id) {
+            console.warn(`[renderDeviceList] Skipping device at index ${index} due to malformed data or missing ID. Device data:`, JSON.stringify(device));
+            return; // Skip malformed device data
+        }
 
         const isDeviceConnected = device.connected || false;
 
@@ -1130,6 +1160,22 @@ export function clearAllClientDevices() {
         console.log("Tidak ada device di klien untuk dibersihkan.");
     }
     renderDeviceList(); // Perbarui UI Device Manager
+}
+
+export function clearLocalDeviceCacheAndState() {
+    if (localDeviceCache && localDeviceCache.length > 0) {
+        localDeviceCache.forEach(device => {
+            if (typeof deleteDeviceStateFromManager === 'function') {
+                // This function should exist in stateManager.js to clear any HMI component bindings or values
+                deleteDeviceStateFromManager(device.id);
+            }
+        });
+        localDeviceCache = []; // Kosongkan cache lokal
+        console.log("[DeviceManager] Local device cache and associated client state cleared without notifying server.");
+    } else {
+        console.log("[DeviceManager] No local devices to clear from client state.");
+    }
+    renderDeviceList(); // Perbarui UI Device Manager (akan menampilkan "No devices")
 }
 
 /**

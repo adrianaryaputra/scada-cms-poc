@@ -1,6 +1,6 @@
 // js/layoutManager.js
 import { saveState, /* resetHistory */ } from './stateManager.js'; // Import langsung
-import { getAllDeviceConfigsForExport, clearAllClientDevices, initializeDevicesFromConfigs } from './deviceManager.js'; // Impor initializeDevicesFromConfigs
+import { getAllDeviceConfigsForExport, clearAllClientDevices, initializeDevicesFromConfigs, clearLocalDeviceCacheAndState } from './deviceManager.js'; // Impor initializeDevicesFromConfigs
 
 let konvaManagerRef = null; // Akan diisi saat inisialisasi
 // stateManagerRef tidak lagi diperlukan jika fungsi diimpor langsung
@@ -181,37 +181,55 @@ const ProjectManager = { // Rename objek
                 removeListeners();
             };
 
-            const errorListener = (serverError) => { // serverError bisa berupa objek
-                let detailedMessage = 'Gagal menyimpan project.';
+            const operationDescription = "menyimpan project"; // Context for logging
+
+            const errorListener = (serverError) => {
+                let errorMessageText = '';
+                if (typeof serverError === 'object' && serverError.message) {
+                    errorMessageText = serverError.message;
+                } else if (typeof serverError === 'string') {
+                    errorMessageText = serverError;
+                }
+
+                if (errorMessageText.includes("not found for deletion") || errorMessageText.includes("DEVICE_NOT_FOUND")) {
+                    console.warn(`[ProjectManager ${operationDescription}] Benign server notice: ${errorMessageText}. Operation may still succeed.`);
+                    // Do not reject the promise for this specific error.
+                    // removeListeners() will be called by ackListener or timeout.
+                    return;
+                }
+
+                let detailedMessage = `Gagal ${operationDescription}.`;
                 if (typeof serverError === 'object' && serverError.message) {
                     detailedMessage = serverError.message;
                     if (serverError.code) detailedMessage += ` (Kode: ${serverError.code})`;
                 } else if (typeof serverError === 'string') {
-                    detailedMessage = serverError; // Untuk error non-objek atau timeout
+                    detailedMessage = serverError;
                 }
-                console.error('Error dari server saat menyimpan project:', serverError);
-                reject(detailedMessage); // Reject dengan pesan yang sudah diproses
+
+                console.error(`Error dari server saat ${operationDescription}:`, serverError);
+                reject(detailedMessage);
                 removeListeners();
             };
 
             const removeListeners = () => {
                 socketRef.off('project:saved_ack', ackListener);
-                socketRef.off('operation_error', errorListener); // Tetap listen ke operation_error umum
+                socketRef.off('operation_error', projectSaveOperationErrorListener);
+            };
+
+            // Define a specific listener for operation_error for this save operation
+            const projectSaveOperationErrorListener = (err) => {
+                // Only call the main errorListener if the error is general or specifically for 'project:save'
+                // This prevents other module's operation_errors (like deviceManager's) from incorrectly failing the save.
+                if (err && (!err.operation || err.operation === 'project:save')) {
+                    errorListener(err);
+                } else if (err && err.operation) {
+                    // Log other operation errors but don't let them fail the save operation itself
+                    console.warn(`[ProjectManager Save] Ignoring unrelated operation_error during save: ${err.message} (Operation: ${err.operation})`);
+                }
             };
 
             socketRef.on('project:saved_ack', ackListener);
-            // Handler operation_error umum akan menangkap error yang dikirim server
-            socketRef.on('operation_error', (err) => {
-                // Kita hanya tertarik pada error yang relevan dengan operasi ini.
-                // Idealnya, server mengirim error dengan ID request atau menggunakan callback emit.
-                // Untuk sekarang, kita asumsikan error ini relevan jika tidak ada ack.
-                // Atau, kita bisa filter berdasarkan err.operation jika ada.
-                if (err && err.operation === 'project:save') {
-                    errorListener(err);
-                } else if (err && !err.operation) { // Error umum tanpa konteks operasi
-                    errorListener(err.message || 'Unknown server error');
-                }
-            });
+            socketRef.on('operation_error', projectSaveOperationErrorListener);
 
             const timeoutId = setTimeout(() => {
                 console.error("Timeout saat menyimpan project. Tidak ada respons dari server.");
@@ -257,7 +275,29 @@ const ProjectManager = { // Rename objek
                     const projectData = response.data;
                     console.log(`Project '${projectData.projectName}' berhasil dimuat dari server:`, projectData);
 
-                    this.newProject(); // Membersihkan HMI & device klien, reset state ProjectManager
+                    // Manually clear client-side state without telling server to delete devices
+                    if (konvaManagerRef && typeof konvaManagerRef.clearCanvas === 'function') {
+                        konvaManagerRef.clearCanvas();
+                        console.log("[ProjectManager Load] Canvas HMI telah dibersihkan.");
+                    } else {
+                        console.warn("[ProjectManager Load] konvaManagerRef atau clearCanvas tidak tersedia saat membersihkan HMI.");
+                    }
+
+                    if (typeof clearLocalDeviceCacheAndState === 'function') {
+                        clearLocalDeviceCacheAndState(); // Clears local device cache and associated stateManager entries
+                        console.log("[ProjectManager Load] Cache device lokal dan state terkait telah dibersihkan.");
+                    } else {
+                        console.warn("[ProjectManager Load] clearLocalDeviceCacheAndState tidak tersedia dari deviceManager.");
+                    }
+
+                    // Reset project-specific properties. Note: setCurrentProjectName and setDirty are handled after processing.
+                    // this.setCurrentProjectName(null); // Will be set by projectData.projectName
+                    // this.setDirty(false); // Will be set after successful load
+                    // if (typeof saveState === 'function') { // saveState will be called after setting new project name
+                    //      saveState();
+                    // }
+                    console.log("[ProjectManager Load] State klien lokal telah direset (kecuali nama project dan status dirty).");
+
 
                     if (projectData.hmiLayout && componentFactoryRef && typeof componentFactoryRef.create === 'function') {
                         projectData.hmiLayout.forEach(componentData => {
@@ -276,32 +316,56 @@ const ProjectManager = { // Rename objek
                 cleanup();
             };
 
+            const operationDescription = `memuat project '${projectName}'`; // Context for logging
+
             const errorListener = (serverError) => {
-                let detailedMessage = `Gagal memuat project '${projectName}'.`;
+                let errorMessageText = '';
                 if (typeof serverError === 'object' && serverError.message) {
+                    errorMessageText = serverError.message;
+                } else if (typeof serverError === 'string') {
+                    errorMessageText = serverError;
+                }
+
+                if (errorMessageText.includes("not found for deletion") || errorMessageText.includes("DEVICE_NOT_FOUND")) {
+                    console.warn(`[ProjectManager ${operationDescription}] Benign server notice: ${errorMessageText}. Operation may still succeed.`);
+                    // Do not reject the promise for this specific error.
+                    // cleanup() will be called by dataListener or timeout.
+                    // We should ensure this specific operation_error listener is removed or ignored for future events for this load.
+                    // However, the main 'removeListeners' in cleanup() handles all listeners for this operation.
+                    return;
+                }
+
+                let detailedMessage = `Gagal ${operationDescription}.`;
+                 if (typeof serverError === 'object' && serverError.message) {
+                    // Use server's message directly if it's more specific, otherwise keep the generic one.
                     detailedMessage = serverError.message;
-                    if (serverError.code === 'PROJECT_NOT_FOUND') { // Contoh penanganan kode spesifik
-                        // Pesan sudah cukup jelas dari server.
+                    if (serverError.code === 'PROJECT_NOT_FOUND') {
+                        // Message is already specific enough.
                     } else if (serverError.code) {
                         detailedMessage += ` (Kode: ${serverError.code})`;
                     }
                 } else if (typeof serverError === 'string') {
                     detailedMessage = serverError;
                 }
-                console.error(`Error dari server saat memuat project '${projectName}':`, serverError);
+
+                console.error(`Error dari server saat ${operationDescription}:`, serverError);
                 reject(detailedMessage);
-                cleanup();
+                cleanup(); // This already calls removeListeners
+            };
+
+            // Define a specific listener for operation_error for this load operation
+            const projectLoadOperationErrorListener = (err) => {
+                // Only call the main errorListener if the error is general or specifically for 'project:load'
+                if (err && (!err.operation || err.operation === 'project:load')) {
+                    errorListener(err);
+                } else if (err && err.operation) {
+                    // Log other operation errors but don't let them fail the load operation itself
+                     console.warn(`[ProjectManager Load] Ignoring unrelated operation_error during load: ${err.message} (Operation: ${err.operation})`);
+                }
             };
 
             socketRef.on('project:loaded_data', dataListener);
-            // Menyesuaikan listener 'operation_error' untuk lebih spesifik
-            socketRef.on('operation_error', (err) => {
-                if (err && err.operation === 'project:load') {
-                    errorListener(err);
-                } else if (err && !err.operation) {
-                    errorListener(err.message || 'Unknown server error on load');
-                }
-            });
+            socketRef.on('operation_error', projectLoadOperationErrorListener); // Use the new specific listener
 
             try {
                 socketRef.emit('project:load', { name: projectName });
@@ -375,8 +439,9 @@ const ProjectManager = { // Rename objek
             }
         }
 
-        return new Promise(async (resolve, reject) => {
-            this.setIsLoadingProject(true);
+        this.setIsLoadingProject(true); // Set loading status before returning the promise
+
+        return new Promise((resolve, reject) => {
             try {
                 const reader = new FileReader();
 
@@ -392,216 +457,65 @@ const ProjectManager = { // Rename objek
 
                         this.newProject();
 
-                        // 1. Render HMI Layout
-                    if (projectData.hmiLayout && componentFactoryRef && typeof componentFactoryRef.create === 'function') {
-                        console.log("[ProjectManager] Membuat ulang komponen HMI dari data project:", projectData.hmiLayout);
-                        projectData.hmiLayout.forEach(componentData => {
-                            try {
-                                componentFactoryRef.create(componentData.componentType, componentData);
-                            } catch (e) {
-                                console.error(`[ProjectManager] Gagal membuat komponen HMI: ${componentData.componentType}`, e);
+                        if (projectData.hmiLayout.length > 0 && componentFactoryRef && typeof componentFactoryRef.create === 'function') {
+                            console.log("[ProjectManager] Mengimpor komponen HMI:", projectData.hmiLayout);
+                            projectData.hmiLayout.forEach(componentData => {
+                                try {
+                                    componentFactoryRef.create(componentData.componentType, componentData);
+                                } catch (e) {
+                                    console.error(`[ProjectManager] Gagal membuat komponen HMI saat impor: ${componentData.componentType}`, e);
+                                }
+                            });
+                            if (konvaManagerRef && konvaManagerRef.layer) {
+                                konvaManagerRef.layer.batchDraw();
                             }
-                        });
-                        if (konvaManagerRef && konvaManagerRef.layer) {
-                            konvaManagerRef.layer.batchDraw();
+                        } else {
+                            console.log("[ProjectManager] Tidak ada komponen HMI untuk diimpor atau componentFactory tidak tersedia.");
                         }
-                    } else {
-                        console.warn("[ProjectManager] Tidak ada data HMI atau componentFactory tidak tersedia.");
+
+                        if (projectData.deviceConfigs.length > 0 && typeof initializeDevicesFromConfigs === 'function') {
+                            console.log("[ProjectManager] Mengimpor konfigurasi device:", projectData.deviceConfigs);
+                            await initializeDevicesFromConfigs(projectData.deviceConfigs);
+                        } else {
+                            console.log("[ProjectManager] Tidak ada konfigurasi device untuk diimpor atau initializeDevicesFromConfigs tidak tersedia.");
+                        }
+
+                        const importedProjectName = projectData.projectName || file.name.replace(/\.json$/i, '');
+                        this.setCurrentProjectName(importedProjectName);
+                        this.setDirty(true);
+
+                        if (typeof saveState === 'function') {
+                            saveState();
+                        }
+
+                        console.log(`Project dari file '${file.name}' berhasil diimpor.`);
+                        alert(`Project '${importedProjectName}' berhasil diimpor. Anda mungkin ingin menyimpannya ke server.`);
+                        resolve(projectData);
+
+                    } catch (error) { // Catch for reader.onload processing
+                        console.error("Gagal mem-parse atau memproses file project:", error);
+                        alert(`Gagal mengimpor project: ${error.message}`);
+                        reject(error.message);
                     }
+                };
 
-                    // 2. Inisialisasi Device dari Konfigurasi Project
-                    // Klien TIDAK mengirim add_device satu per satu lagi.
-                    // Server akan mengirim 'initial_device_list' yang baru setelah server memproses project:load.
-                    // Jadi, deviceManager klien akan otomatis terupdate melalui handler 'initial_device_list'.
-                    // Kita hanya perlu memastikan server melakukan ini.
-                    console.log("[ProjectManager] Menunggu 'initial_device_list' dari server setelah project load.");
+                reader.onerror = (event) => {
+                    console.error("Error saat membaca file project:", event.target.error);
+                    alert("Gagal membaca file project.");
+                    reject(event.target.error);
+                };
 
-                    this.setCurrentProjectName(projectData.projectName);
-                    // isDirty harusnya false setelah load bersih, kecuali jika proses load sendiri dianggap perubahan.
-                    // saveState() akan dipanggil oleh handler 'initial_device_list' (jika ada perubahan device)
-                    // dan juga setelah komponen HMI dibuat.
-                    // Panggilan saveState di akhir loadProjectFromServer akan mereset undo stack dengan state baru.
-                    if (typeof saveState === 'function') {
-                        saveState();
-                    }
-                    this.setDirty(false); // Pastikan bersih setelah load sukses & saveState awal.
-                    resolve(projectData);
-                } else if (response.name === projectName && !response.data) {
-                    // Ini bisa terjadi jika server mengirim error melalui 'operation_error' yang ditangani listener lain
-                    // atau jika server mengirim respons tanpa data karena file tidak ada.
-                    // 'operation_error' sudah ditangani di errorListener.
-                }
-                removeListeners();
-            };
+                reader.readAsText(file);
 
-            const errorListener = (error) => {
-                console.error(`Error dari server saat memuat project '${projectName}':`, error);
-                reject(error.message || `Gagal memuat project '${projectName}'.`);
-                removeListeners();
-            };
-
-            const removeListeners = () => {
-                socketRef.off('project:loaded_data', dataListener); // Listen ke event 'project:loaded_data'
-                socketRef.off('operation_error', errorListener);
-            };
-
-            socketRef.on('project:loaded_data', dataListener); // Listen ke event 'project:loaded_data'
-            socketRef.on('operation_error', errorListener);
-
-            const timeoutId = setTimeout(() => {
-                console.error(`Timeout saat memuat project '${projectName}'.`);
-                reject("Timeout: Server tidak merespons permintaan load project.");
-                removeListeners();
-            }, 10000);
-
-            const originalResolve = resolve;
-            const originalReject = reject;
-            resolve = (val) => { clearTimeout(timeoutId); originalResolve(val); };
-            reject = (err) => { clearTimeout(timeoutId); originalReject(err); };
-        });
-    },
-
-    // Fungsi ini sekarang akan meminta daftar project
-    getAvailableProjectsFromServer() {
-        if (!socketRef) {
-            console.error("Socket.IO client tidak terinisialisasi di ProjectManager.");
-            return Promise.reject("Socket tidak terinisialisasi");
-        }
-        console.log("Meminta daftar project dari server...");
-        return new Promise((resolve, reject) => {
-            socketRef.emit('project:list'); // Emit event 'project:list'
-
-            const listListener = (projectNames) => {
-                console.log("Daftar project diterima:", projectNames);
-                resolve(projectNames);
-                removeListeners();
-            };
-
-            const errorListener = (error) => {
-                console.error('Error dari server saat meminta daftar project:', error);
-                reject(error.message || 'Gagal mendapatkan daftar project.');
-                removeListeners();
-            };
-
-            const removeListeners = () => {
-                socketRef.off('project:list_results', listListener); // Listen ke event 'project:list_results'
-                socketRef.off('operation_error', errorListener);
-            };
-
-            socketRef.on('project:list_results', listListener); // Listen ke event 'project:list_results'
-            socketRef.on('operation_error', errorListener);
-
-            const timeoutId = setTimeout(() => {
-                console.error("Timeout saat meminta daftar project.");
-                reject("Timeout: Server tidak merespons permintaan daftar project.");
-                removeListeners();
-            }, 10000);
-
-            const originalResolve = resolve;
-            const originalReject = reject;
-            resolve = (val) => { clearTimeout(timeoutId); originalResolve(val); };
-            reject = (err) => { clearTimeout(timeoutId); originalReject(err); };
-        });
-    },
-
-    // Fungsi ini untuk sementara masih mengimpor HMI saja
-    // Akan diubah nanti untuk mengimpor seluruh data project
-    importProjectFromFile(file) { // Sebelumnya importLayoutFromFile
-        if (!file) {
-            alert("Tidak ada file yang dipilih untuk diimpor.");
-            return Promise.reject("Tidak ada file yang dipilih.");
-        }
-
-        console.log(`Mengimpor project (HMI data saja) dari file: ${file.name}`); // Update log
-        if (this.isProjectDirty()) { // Menggunakan nama fungsi baru
-            if (!confirm("Ada perubahan yang belum disimpan. Apakah Anda yakin ingin mengimpor project baru? Perubahan saat ini akan hilang.")) {
-                return Promise.reject("Impor dibatalkan oleh pengguna.");
+            } catch (error) { // Catch for the outer try block (e.g., new FileReader() error)
+                console.error("Error dalam proses setup impor file:", error);
+                alert(`Gagal memulai impor project: ${error.message}`);
+                reject(error.message);
+            } finally { // Finally for the outer try block
+                this.setIsLoadingProject(false);
+                console.log("[ProjectManager] importProjectFromFile finished, isLoadingProject set to false.");
             }
-        }
-
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-
-            reader.onload = async (event) => { // Jadikan async untuk await initializeDevicesFromConfigs
-                try {
-                    const projectData = JSON.parse(event.target.result);
-
-                    // Validasi struktur dasar projectData
-                    if (typeof projectData !== 'object' || projectData === null ||
-                        !Array.isArray(projectData.hmiLayout) ||
-                        !Array.isArray(projectData.deviceConfigs)) {
-                        throw new Error("Format file project tidak valid. Harus berisi hmiLayout (array) dan deviceConfigs (array).");
-                    }
-
-                    // Panggil newProject() untuk membersihkan state saat ini (HMI & Devices klien)
-                    // newProject sudah menghandle konfirmasi jika dirty, jadi tidak perlu cek isProjectDirty() lagi di sini.
-                    this.newProject();
-                    // Setelah newProject, isDirty akan false, currentProjectName akan null.
-
-                    // 1. Render HMI Layout
-                    if (projectData.hmiLayout.length > 0 && componentFactoryRef && typeof componentFactoryRef.create === 'function') {
-                        console.log("[ProjectManager] Mengimpor komponen HMI:", projectData.hmiLayout);
-                        projectData.hmiLayout.forEach(componentData => {
-                            try {
-                                componentFactoryRef.create(componentData.componentType, componentData);
-                            } catch (e) {
-                                console.error(`[ProjectManager] Gagal membuat komponen HMI saat impor: ${componentData.componentType}`, e);
-                            }
-                        });
-                        if (konvaManagerRef && konvaManagerRef.layer) {
-                            konvaManagerRef.layer.batchDraw();
-                        }
-                    } else {
-                        console.log("[ProjectManager] Tidak ada komponen HMI untuk diimpor atau componentFactory tidak tersedia.");
-                    }
-
-                    // 2. Inisialisasi Device dari Konfigurasi Project
-                    if (projectData.deviceConfigs.length > 0 && typeof initializeDevicesFromConfigs === 'function') {
-                        console.log("[ProjectManager] Mengimpor konfigurasi device:", projectData.deviceConfigs);
-                        // initializeDevicesFromConfigs akan membersihkan device klien lama dan mengirim 'add_device' ke server
-                        await initializeDevicesFromConfigs(projectData.deviceConfigs);
-                    } else {
-                        console.log("[ProjectManager] Tidak ada konfigurasi device untuk diimpor atau initializeDevicesFromConfigs tidak tersedia.");
-                        // Jika tidak ada device configs, pastikan UI device manager bersih (sudah dihandle oleh newProject -> clearAllClientDevices)
-                    }
-
-                    // Atur nama project dari file atau dari data project jika ada
-                    const importedProjectName = projectData.projectName || file.name.replace(/\.json$/i, '');
-                    this.setCurrentProjectName(importedProjectName);
-                    this.setDirty(true); // Project yang diimpor dianggap 'dirty' sampai disimpan ke server
-
-                    if (typeof saveState === 'function') {
-                        saveState(); // Reset history undo/redo dengan state baru yang diimpor
-                    }
-
-                    console.log(`Project dari file '${file.name}' berhasil diimpor.`);
-                    alert(`Project '${importedProjectName}' berhasil diimpor. Anda mungkin ingin menyimpannya ke server.`);
-                    resolve(projectData);
-
-                } catch (error) {
-                    console.error("Gagal mem-parse atau memproses file project:", error);
-                    alert(`Gagal mengimpor project: ${error.message}`); // Alert di sini akan diubah jadi toast nanti
-                    this.setIsLoadingProject(false); // Reset flag
-                    reject(error.message);
-                } finally { // Pastikan flag direset bahkan jika ada error tak terduga di try
-                    if (isLoadingProject) this.setIsLoadingProject(false);
-                }
-            };
-
-            reader.onerror = (event) => {
-                console.error("Error saat membaca file project:", event.target.error);
-                alert("Gagal membaca file project."); // Alert di sini akan diubah jadi toast nanti
-                this.setIsLoadingProject(false); // Reset flag
-                reject(event.target.error);
-            };
-
-            reader.readAsText(file);
         });
-        // Tidak ada finally di sini karena Promise constructor tidak mendukungnya secara langsung.
-        // setIsLoadingProject(false) harus dihandle di dalam resolve/reject promise.
-        // Namun, karena reader.onload dan reader.onerror adalah async,
-        // kita perlu memastikan setIsLoadingProject(false) dipanggil setelah mereka selesai.
-        // Cara di atas (dalam onload dan onerror) lebih aman.
     }
 };
 

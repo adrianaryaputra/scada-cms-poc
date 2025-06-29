@@ -138,6 +138,13 @@ export function initUiManager(
     cancelSaveProjectBtnEl = document.getElementById('cancel-save-project-btn');
     confirmSaveProjectBtnEl = document.getElementById('confirm-save-project-btn');
 
+    // Cache elemen Modal Konfirmasi Umum
+    confirmationModalEl = document.getElementById('confirmation-modal');
+    confirmationModalTitleEl = document.getElementById('confirmation-modal-title');
+    confirmationMessageEl = document.getElementById('confirmation-message');
+    confirmOkBtnEl = document.getElementById('confirm-ok-btn');
+    confirmCancelBtnEl = document.getElementById('confirm-cancel-btn');
+
     // Cache tombol Save Project As
     // (Akan ditambahkan di setupEventListeners jika belum ada variabelnya)
     // let saveProjectAsBtnEl = document.getElementById('save-project-as-btn');
@@ -684,7 +691,6 @@ function setupEventListeners() {
                 // Ini penting untuk "Save As" yang menimpa project lain.
                 // Untuk "Save" pertama kali, currentProjectName akan null.
                 const currentProjectName = projectManagerRef.getCurrentProjectName();
-                const currentProjectName = projectManagerRef.getCurrentProjectName();
                 const projectExists = availableProjects.some(pName => pName.toLowerCase() === projectNameFromModal.toLowerCase());
                 let proceedToSave = true;
 
@@ -884,7 +890,7 @@ function hideSaveProjectModal() {
     }
 }
 
-function openSaveProjectModal(currentName = '') {
+function openSaveProjectModal(currentName = '', isSaveAs = false) {
     if (!saveProjectModalEl || !saveProjectNameInputEl || !projectManagerRef) {
         console.error("Elemen modal save project atau ProjectManager tidak tersedia.");
         showToast("Tidak bisa membuka dialog Save Project saat ini.", 'error');
