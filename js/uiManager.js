@@ -134,6 +134,10 @@ export function initUiManager(
     cancelSaveProjectBtnEl = document.getElementById('cancel-save-project-btn');
     confirmSaveProjectBtnEl = document.getElementById('confirm-save-project-btn');
 
+    // Cache tombol Save Project As
+    // (Akan ditambahkan di setupEventListeners jika belum ada variabelnya)
+    // let saveProjectAsBtnEl = document.getElementById('save-project-as-btn');
+
     isSimulationModeState = getIsSimulationModeFunc(); // Get initial simulation mode
 
     setupEventListeners(); // Setup all event listeners for UI elements
@@ -601,6 +605,7 @@ function setupEventListeners() {
     // --- Project Manager UI Event Listeners ---
     const newProjectBtn = document.getElementById('new-project-btn');
     const saveProjectBtn = document.getElementById('save-project-btn');
+    const saveProjectAsBtnEl = document.getElementById('save-project-as-btn'); // Tombol baru
     const loadProjectBtn = document.getElementById('load-project-btn');
     const importProjectInput = document.getElementById('import-project-input');
     const importProjectBtn = document.getElementById('import-project-btn');
@@ -613,11 +618,31 @@ function setupEventListeners() {
     }
 
     if (saveProjectBtn && projectManagerRef) {
-        saveProjectBtn.addEventListener('click', () => {
-            // Jika project sudah punya nama, kita bisa anggap ini "Save As" atau "Save" biasa.
-            // Untuk "Save" biasa tanpa prompt jika sudah ada nama, perlu logika tambahan.
-            // Untuk sekarang, selalu buka modal untuk input/konfirmasi nama.
-            openSaveProjectModal(projectManagerRef.getCurrentProjectName());
+        saveProjectBtn.addEventListener('click', async () => {
+            const currentProjectName = projectManagerRef.getCurrentProjectName();
+            if (currentProjectName) { // Jika project sudah punya nama, simpan langsung
+                // Tambahkan loading state di sini juga untuk konsistensi
+                saveProjectBtn.disabled = true;
+                const originalText = saveProjectBtn.textContent;
+                saveProjectBtn.textContent = "Menyimpan...";
+                try {
+                    await projectManagerRef.saveProjectToServer(currentProjectName);
+                    showToast(`Project '${currentProjectName}' berhasil disimpan.`, 'success');
+                } catch (error) {
+                    showToast(`Gagal menyimpan project '${currentProjectName}': ${error}`, 'error');
+                } finally {
+                    saveProjectBtn.disabled = false;
+                    saveProjectBtn.textContent = originalText;
+                }
+            } else { // Jika project baru, buka modal
+                openSaveProjectModal('', false); // false untuk isSaveAs
+            }
+        });
+    }
+
+    if (saveProjectAsBtnEl && projectManagerRef) {
+        saveProjectAsBtnEl.addEventListener('click', () => {
+            openSaveProjectModal(projectManagerRef.getCurrentProjectName(), true); // true untuk isSaveAs
         });
     }
 
@@ -629,11 +654,11 @@ function setupEventListeners() {
         cancelSaveProjectBtnEl.addEventListener('click', hideSaveProjectModal);
     }
     if (confirmSaveProjectBtnEl && projectManagerRef && saveProjectNameInputEl) {
-        const originalSaveBtnText = confirmSaveProjectBtnEl.textContent;
+        const originalConfirmSaveBtnText = confirmSaveProjectBtnEl.textContent; // Teks asli tombol modal
         confirmSaveProjectBtnEl.addEventListener('click', async () => {
-            const projectName = saveProjectNameInputEl.value.trim();
+            const projectNameFromModal = saveProjectNameInputEl.value.trim();
 
-            if (projectName === '') {
+            if (projectNameFromModal === '') {
                 showToast("Nama project tidak boleh kosong.", 'warning');
                 saveProjectNameInputEl.focus();
                 return;
@@ -643,28 +668,33 @@ function setupEventListeners() {
             confirmSaveProjectBtnEl.textContent = "Menyimpan...";
 
             try {
-                // Panggil getAvailableProjectsFromServer di sini, bukan di dalam openSaveProjectModal
-                // agar loading state bisa mencakup pengecekan ini juga.
                 const availableProjects = await projectManagerRef.getAvailableProjectsFromServer();
-                const projectExists = availableProjects.some(pName => pName.toLowerCase() === projectName.toLowerCase());
+                // Cek apakah nama dari modal ada, dan apakah itu BEDA dari nama project saat ini (jika ada)
+                // Ini penting untuk "Save As" yang menimpa project lain.
+                // Untuk "Save" pertama kali, currentProjectName akan null.
+                const currentProjectName = projectManagerRef.getCurrentProjectName();
+                const isOverwritingDifferentProject = availableProjects.some(pName => pName.toLowerCase() === projectNameFromModal.toLowerCase()) &&
+                                                     (!currentProjectName || currentProjectName.toLowerCase() !== projectNameFromModal.toLowerCase());
 
-                if (projectExists) {
-                    if (!confirm(`Project dengan nama '${projectName}' sudah ada. Apakah Anda ingin menimpanya?`)) {
+                if (isOverwritingDifferentProject) {
+                    if (!confirm(`Project dengan nama '${projectNameFromModal}' sudah ada. Apakah Anda ingin menimpanya?`)) {
                         showToast("Penyimpanan dibatalkan.", 'info');
                         confirmSaveProjectBtnEl.disabled = false;
-                        confirmSaveProjectBtnEl.textContent = originalSaveBtnText;
+                        confirmSaveProjectBtnEl.textContent = originalConfirmSaveBtnText;
                         return;
                     }
                 }
+                // Jika nama sama dengan currentProjectName (dan projectExists benar), itu adalah save biasa yg menimpa dirinya sendiri, tidak perlu confirm lagi di sini.
+                // Konfirmasi di atas sudah cukup.
 
-                await projectManagerRef.saveProjectToServer(projectName);
-                showToast(`Project '${projectName}' berhasil disimpan ke server.`, 'success');
+                await projectManagerRef.saveProjectToServer(projectNameFromModal);
+                showToast(`Project '${projectNameFromModal}' berhasil disimpan ke server.`, 'success');
                 hideSaveProjectModal();
             } catch (error) {
                 showToast(`Gagal menyimpan project: ${error}`, 'error');
             } finally {
                 confirmSaveProjectBtnEl.disabled = false;
-                confirmSaveProjectBtnEl.textContent = originalSaveBtnText;
+                confirmSaveProjectBtnEl.textContent = originalConfirmSaveBtnText;
             }
         });
     }
@@ -822,9 +852,15 @@ function openSaveProjectModal(currentName = '') {
         showToast("Tidak bisa membuka dialog Save Project saat ini.", 'error');
         return;
     }
-    saveProjectNameInputEl.value = currentName || projectManagerRef.getCurrentProjectName() || '';
-    if (saveProjectModalTitleEl) { // Judul bisa dinamis jika perlu (Save vs Save As)
-        saveProjectModalTitleEl.textContent = currentName ? `Save Project As (Current: ${currentName})` : "Save New Project";
+    saveProjectNameInputEl.value = currentName || ''; // currentName dari argumen, atau kosong jika save new
+    if (saveProjectModalTitleEl) {
+        if (isSaveAs && currentName) {
+            saveProjectModalTitleEl.textContent = `Save Project As (Current: ${currentName})`;
+        } else if (isSaveAs) { // Save As tapi belum ada nama sebelumnya
+            saveProjectModalTitleEl.textContent = "Save Project As...";
+        } else { // Bukan Save As (berarti Save untuk project baru)
+            saveProjectModalTitleEl.textContent = "Save New Project";
+        }
     }
     saveProjectModalEl.classList.remove('hidden');
     saveProjectNameInputEl.focus();

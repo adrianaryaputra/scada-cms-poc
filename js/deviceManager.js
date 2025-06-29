@@ -1,5 +1,6 @@
 import { setDeviceVariableValue, getDeviceVariableValue, deleteDeviceState as deleteDeviceStateFromManager } from './stateManager.js';
 import { openTopicExplorer } from './topicExplorer.js'; // Import openTopicExplorer
+import ProjectManager from './projectManager.js'; // Impor ProjectManager
 // import { getLayer } from './konvaManager.js'; // getLayer might not be needed if Konva updates via stateManager
 
 // SVG Icons
@@ -22,6 +23,7 @@ const ICON_DELETE = `
 
 let localDeviceCache = [];
 let socket = null;
+let pmSetDirtyFuncRef = null; // Variabel untuk menyimpan referensi fungsi setDirty dari ProjectManager
 
 // DOM Elements
 let deviceManagerModal, closeDeviceManagerModal, addDeviceBtn, deviceList;
@@ -36,7 +38,7 @@ let variableFormModal, variableFormTitle, variableForm, cancelVariableFormBtn, s
     varFormExploreTopicBtn; // Tombol Explore baru
 
 
-export function initDeviceManager(socketInstance) { // Parameter is already a socket instance
+export function initDeviceManager(socketInstance, projectManagerSetDirtyFunc) { // Tambah parameter projectManagerSetDirtyFunc
     if (!socketInstance || typeof socketInstance.on !== 'function' || typeof socketInstance.emit !== 'function') {
         console.error("Valid Socket.IO client instance not provided to initDeviceManager.");
         // Fallback or error display for the user that real-time features are unavailable.
@@ -57,6 +59,7 @@ export function initDeviceManager(socketInstance) { // Parameter is already a so
         return;
     }
     socket = socketInstance; // Use the provided instance directly
+    pmSetDirtyFuncRef = projectManagerSetDirtyFunc; // Simpan referensi fungsi
 
     // Cache DOM elements
     deviceManagerModal = document.getElementById('device-manager-modal');
@@ -234,12 +237,20 @@ export function initDeviceManager(socketInstance) { // Parameter is already a so
             localDeviceCache = localDeviceCache.map(d => d.id === device.id ? device : d);
         }
         renderDeviceList();
+        if (pmSetDirtyFuncRef && ProjectManager && !ProjectManager.getIsLoadingProject()) {
+            console.log("[DeviceManager] device_added: Calling pmSetDirtyFuncRef(true)");
+            pmSetDirtyFuncRef(true);
+        }
     });
 
     socket.on('device_updated', (updatedDevice) => {
         console.log('Device updated by server:', updatedDevice);
         localDeviceCache = localDeviceCache.map(d => d.id === updatedDevice.id ? updatedDevice : d);
         renderDeviceList(); // Re-renders the main device list
+        if (pmSetDirtyFuncRef && ProjectManager && !ProjectManager.getIsLoadingProject()) {
+            console.log("[DeviceManager] device_updated: Calling pmSetDirtyFuncRef(true)");
+            pmSetDirtyFuncRef(true);
+        }
 
         // Check if the Variable Manager is open and showing the updated device
         if (variableManagerModal && !variableManagerModal.classList.contains('hidden') && variableManagerModal.dataset.deviceId === updatedDevice.id) {
@@ -253,6 +264,10 @@ export function initDeviceManager(socketInstance) { // Parameter is already a so
         localDeviceCache = localDeviceCache.filter(d => d.id !== deletedDeviceId);
         deleteDeviceStateFromManager(deletedDeviceId); // Also clear its state from stateManager
         renderDeviceList(); // Re-renders the main device list
+        if (pmSetDirtyFuncRef && ProjectManager && !ProjectManager.getIsLoadingProject()) {
+            console.log("[DeviceManager] device_deleted: Calling pmSetDirtyFuncRef(true)");
+            pmSetDirtyFuncRef(true);
+        }
 
         // Check if the Variable Manager is open and showing the deleted device
         if (variableManagerModal && !variableManagerModal.classList.contains('hidden') && variableManagerModal.dataset.deviceId === deletedDeviceId) {

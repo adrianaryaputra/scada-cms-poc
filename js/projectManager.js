@@ -10,6 +10,7 @@ let socketRef = null; // Akan diisi saat inisialisasi
 // Ganti nama variabel dan komentar agar lebih sesuai dengan "Project"
 let currentProjectName = null; // Sebelumnya currentLayoutName
 let isDirty = false;
+let isLoadingProject = false; // Flag untuk menandakan proses load/import
 
 const ProjectManager = { // Rename objek
     // Hapus stateManager dari parameter init
@@ -76,6 +77,14 @@ const ProjectManager = { // Rename objek
 
     setCurrentProjectName(name) { // Sebelumnya setCurrentLayoutName
         currentProjectName = name;
+    },
+
+    setIsLoadingProject(status) {
+        isLoadingProject = status;
+    },
+
+    getIsLoadingProject() {
+        return isLoadingProject;
     },
 
     // Fungsi ini untuk sementara masih bekerja seperti newLayout
@@ -219,29 +228,169 @@ const ProjectManager = { // Rename objek
             }
         }
 
+        return new Promise(async (resolve, reject) => { // Jadikan callback async untuk await
+            this.setIsLoadingProject(true); // Set flag sebelum memulai
+            try {
+                socketRef.emit('project:load', { name: projectName }); // Emit event 'project:load'
+
+                const dataListener = (response) => { // response akan berisi { name, data: projectData }
+                    if (response.name === projectName && response.data) {
+                        const projectData = response.data;
+                        console.log(`Project '${projectData.projectName}' berhasil dimuat dari server:`, projectData);
+
+                        // newProject() sudah dipanggil di dalam loadProjectFromServer (sebelumnya)
+                        // atau akan dipanggil sebelum render HMI.
+                        // Pembersihan device klien sudah di-handle oleh newProject().
+                        // Server akan mengirim initial_device_list yang baru.
+
+                        // 1. Render HMI Layout
+                        if (projectData.hmiLayout && componentFactoryRef && typeof componentFactoryRef.create === 'function') {
+                            console.log("[ProjectManager] Membuat ulang komponen HMI dari data project:", projectData.hmiLayout);
+                            projectData.hmiLayout.forEach(componentData => {
+                                try {
+                                    componentFactoryRef.create(componentData.componentType, componentData);
+                                } catch (e) {
+                                    console.error(`[ProjectManager] Gagal membuat komponen HMI: ${componentData.componentType}`, e);
+                                }
+                            });
+                            if (konvaManagerRef && konvaManagerRef.layer) {
+                                konvaManagerRef.layer.batchDraw();
+                            }
+                        } else {
+                            console.warn("[ProjectManager] Tidak ada data HMI atau componentFactory tidak tersedia.");
+                        }
+
+                        // Device akan di-handle oleh 'initial_device_list' dari server.
+                        console.log("[ProjectManager] Menunggu 'initial_device_list' dari server setelah project load.");
+
+                        this.setCurrentProjectName(projectData.projectName);
+                        if (typeof saveState === 'function') {
+                            saveState();
+                        }
+                        this.setDirty(false);
+                        resolve(projectData);
+                    }
+                    removeListeners();
+                };
+
+                const errorListener = (error) => {
+                    console.error(`Error dari server saat memuat project '${projectName}':`, error);
+                    reject(error.message || `Gagal memuat project '${projectName}'.`);
+                    removeListeners();
+                };
+
+                const removeListeners = () => {
+                    socketRef.off('project:loaded_data', dataListener);
+                    socketRef.off('operation_error', errorListener);
+                    this.setIsLoadingProject(false); // Reset flag di sini juga
+                };
+
+                socketRef.on('project:loaded_data', dataListener);
+                socketRef.on('operation_error', errorListener);
+
+                const timeoutId = setTimeout(() => {
+                    console.error(`Timeout saat memuat project '${projectName}'.`);
+                    reject("Timeout: Server tidak merespons permintaan load project.");
+                    removeListeners(); // Ini juga akan memanggil setIsLoadingProject(false)
+                }, 10000);
+
+                // Modifikasi resolve dan reject untuk membersihkan timeout dan flag
+                const originalResolve = resolve;
+                const originalReject = reject;
+                resolve = (val) => {
+                    clearTimeout(timeoutId);
+                    this.setIsLoadingProject(false); // Reset flag
+                    originalResolve(val);
+                };
+                reject = (err) => {
+                    clearTimeout(timeoutId);
+                    this.setIsLoadingProject(false); // Reset flag
+                    originalReject(err);
+                };
+
+            } catch (error) { // Catch untuk error emit atau setup promise awal
+                this.setIsLoadingProject(false);
+                reject(error);
+            }
+        });
+    },
+
+    // Fungsi ini untuk sementara masih meminta daftar layout (akan diubah ke project)
+    getAvailableProjectsFromServer() {
+        if (!socketRef) {
+            console.error("Socket.IO client tidak terinisialisasi di ProjectManager.");
+            return Promise.reject("Socket tidak terinisialisasi");
+        }
+        console.log("Meminta daftar project dari server...");
         return new Promise((resolve, reject) => {
-            socketRef.emit('project:load', { name: projectName }); // Emit event 'project:load'
+            socketRef.emit('project:list'); // Emit event 'project:list'
 
-            const dataListener = (response) => { // response akan berisi { name, data: projectData }
-                if (response.name === projectName && response.data) {
-                    const projectData = response.data;
-                    console.log(`Project '${projectData.projectName}' berhasil dimuat dari server:`, projectData);
+            const listListener = (projectNames) => {
+                console.log("Daftar project diterima:", projectNames);
+                resolve(projectNames);
+                removeListeners();
+            };
 
-                    // Panggil newProject() untuk membersihkan state klien (HMI & Devices)
-                    // newProject() sudah menangani konfirmasi jika dirty, tapi kita sudah lakukan di atas.
-                    // Kita bisa memanggil bagian pembersihan dari newProject secara langsung jika perlu,
-                    // atau pastikan newProject bisa dipanggil tanpa konfirmasi kedua.
-                    // Untuk sekarang, asumsikan this.newProject() akan membersihkan semuanya.
-                    // Namun, newProject() akan meminta konfirmasi lagi jika dirty.
-                    // Solusi: setDirty(false) sementara sebelum panggil newProject, lalu kembalikan status dirty jika load gagal.
-                    const wasDirty = this.isProjectDirty();
-                    this.setDirty(false); // Sementara agar newProject tidak confirm lagi
+            const errorListener = (error) => {
+                console.error('Error dari server saat meminta daftar project:', error);
+                reject(error.message || 'Gagal mendapatkan daftar project.');
+                removeListeners();
+            };
 
-                    this.newProject(); // Membersihkan HMI, device klien, dan reset state projectManager
+            const removeListeners = () => {
+                socketRef.off('project:list_results', listListener); // Listen ke event 'project:list_results'
+                socketRef.off('operation_error', errorListener);
+            };
 
-                    // Setelah newProject(), isDirty akan false.
+            socketRef.on('project:list_results', listListener); // Listen ke event 'project:list_results'
+            socketRef.on('operation_error', errorListener);
 
-                    // 1. Render HMI Layout
+            const timeoutId = setTimeout(() => {
+                console.error("Timeout saat meminta daftar project.");
+                reject("Timeout: Server tidak merespons permintaan daftar project.");
+                removeListeners();
+            }, 10000);
+
+            const originalResolvePromise = resolve; // Simpan resolve asli dari Promise utama
+            const originalRejectPromise = reject; // Simpan reject asli dari Promise utama
+            resolve = (val) => { clearTimeout(timeoutId); originalResolvePromise(val); }; // Bungkus resolve
+            reject = (err) => { clearTimeout(timeoutId); originalRejectPromise(err); }; // Bungkus reject
+        });
+    },
+
+    // Fungsi ini untuk sementara masih mengimpor HMI saja
+    // Akan diubah nanti untuk mengimpor seluruh data project
+    importProjectFromFile(file) { // Sebelumnya importLayoutFromFile
+        if (!file) {
+            alert("Tidak ada file yang dipilih untuk diimpor.");
+            return Promise.reject("Tidak ada file yang dipilih.");
+        }
+
+        console.log(`Mengimpor project (HMI data saja) dari file: ${file.name}`); // Update log
+        if (this.isProjectDirty()) { // Menggunakan nama fungsi baru
+            if (!confirm("Ada perubahan yang belum disimpan. Apakah Anda yakin ingin mengimpor project baru? Perubahan saat ini akan hilang.")) {
+                return Promise.reject("Impor dibatalkan oleh pengguna.");
+            }
+        }
+
+        return new Promise(async (resolve, reject) => {
+            this.setIsLoadingProject(true);
+            try {
+                const reader = new FileReader();
+
+                reader.onload = async (event) => {
+                    try {
+                        const projectData = JSON.parse(event.target.result);
+
+                        if (typeof projectData !== 'object' || projectData === null ||
+                            !Array.isArray(projectData.hmiLayout) ||
+                            !Array.isArray(projectData.deviceConfigs)) {
+                            throw new Error("Format file project tidak valid. Harus berisi hmiLayout (array) dan deviceConfigs (array).");
+                        }
+
+                        this.newProject();
+
+                        // 1. Render HMI Layout
                     if (projectData.hmiLayout && componentFactoryRef && typeof componentFactoryRef.create === 'function') {
                         console.log("[ProjectManager] Membuat ulang komponen HMI dari data project:", projectData.hmiLayout);
                         projectData.hmiLayout.forEach(componentData => {
@@ -429,19 +578,28 @@ const ProjectManager = { // Rename objek
 
                 } catch (error) {
                     console.error("Gagal mem-parse atau memproses file project:", error);
-                    alert(`Gagal mengimpor project: ${error.message}`);
+                    alert(`Gagal mengimpor project: ${error.message}`); // Alert di sini akan diubah jadi toast nanti
+                    this.setIsLoadingProject(false); // Reset flag
                     reject(error.message);
+                } finally { // Pastikan flag direset bahkan jika ada error tak terduga di try
+                    if (isLoadingProject) this.setIsLoadingProject(false);
                 }
             };
 
             reader.onerror = (event) => {
-                console.error("Error saat membaca file project:", event.target.error); // Update log
-                alert("Gagal membaca file project."); // Update pesan
+                console.error("Error saat membaca file project:", event.target.error);
+                alert("Gagal membaca file project."); // Alert di sini akan diubah jadi toast nanti
+                this.setIsLoadingProject(false); // Reset flag
                 reject(event.target.error);
             };
 
             reader.readAsText(file);
         });
+        // Tidak ada finally di sini karena Promise constructor tidak mendukungnya secara langsung.
+        // setIsLoadingProject(false) harus dihandle di dalam resolve/reject promise.
+        // Namun, karena reader.onload dan reader.onerror adalah async,
+        // kita perlu memastikan setIsLoadingProject(false) dipanggil setelah mereka selesai.
+        // Cara di atas (dalam onload dan onerror) lebih aman.
     }
 };
 

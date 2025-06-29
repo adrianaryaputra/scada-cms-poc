@@ -120,21 +120,19 @@ window.addEventListener("load", () => {
 
     // --- Initialize Networking and Feature Modules ---
 
-    // 5. Device Manager & Topic Explorer: Handle communication with the server for device data and MQTT topics.
-    //    A single Socket.IO connection is created and shared.
-    const deviceSocket = io('/devices'); // Create client-side socket for the '/devices' namespace
-    initDeviceManager(deviceSocket);    // Pass socket to DeviceManager
-    initTopicExplorer(deviceSocket);    // Pass socket to TopicExplorer
-
-    // 6. Layout Manager: Handles saving, loading, etc., of HMI layouts.
-    //    Dependencies: konvaRefs (melalui uiManagerRefs atau langsung), stateManager (akan ditambahkan), componentFactory, deviceSocket.
-    //    Untuk saat ini, kita pass konvaRefs.getHmiLayoutAsJson yang ada di dalam konvaRefs.
-    //    stateManager tidak lagi di-pass karena fungsinya diimpor langsung oleh ProjectManager.
-    ProjectManager.init( // Menggunakan ProjectManager
-        konvaRefs,      // Berisi getHmiLayoutAsJson dan clearCanvas
-        componentFactory, // componentFactory langsung
-        deviceSocket    // Socket untuk komunikasi server
+    // 5. ProjectManager (sebelumnya Layout Manager)
+    //    Diinisialisasi sebelum DeviceManager agar referensi setDirty bisa di-pass.
+    const deviceSocket = io('/devices'); // Buat socket di sini agar bisa di-pass ke keduanya
+    ProjectManager.init(
+        konvaRefs,
+        componentFactory,
+        deviceSocket
     );
+
+    // 6. Device Manager & Topic Explorer
+    //    Sekarang initDeviceManager menerima ProjectManager.setDirty
+    initDeviceManager(deviceSocket, ProjectManager.setDirty.bind(ProjectManager)); // Pass setDirty, bind context
+    initTopicExplorer(deviceSocket);
 
     // 7. AI Assistant: Initializes the AI chat functionality.
     //    Dependencies: DOM elements, chatHistory, konvaRefs, getDeviceById.
