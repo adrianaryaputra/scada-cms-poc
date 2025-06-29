@@ -89,12 +89,9 @@ const ProjectManager = { // Rename objek
 
     // Fungsi ini untuk sementara masih bekerja seperti newLayout
     // Akan diubah nanti untuk menghapus device juga
-    newProject() { // Sebelumnya newLayout
-        if (this.isProjectDirty()) { // Menggunakan fungsi yang sudah di-refactor
-            if (!confirm("Ada perubahan yang belum disimpan. Apakah Anda yakin ingin membuat project baru? Perubahan akan hilang.")) {
-                return;
-            }
-        }
+    newProject() {
+        // Konfirmasi isDirty sekarang ditangani oleh uiManager sebelum memanggil ini
+        console.log("[ProjectManager] newProject dipanggil.");
 
         // Bersihkan device klien terlebih dahulu
         if (typeof clearAllClientDevices === 'function') {
@@ -242,11 +239,7 @@ const ProjectManager = { // Rename objek
         }
 
         console.log(`Memuat project '${projectName}' dari server...`);
-        if (this.isProjectDirty()) {
-            if (!confirm("Ada perubahan yang belum disimpan. Apakah Anda yakin ingin memuat project baru? Perubahan saat ini akan hilang.")) {
-                return Promise.reject("Load dibatalkan oleh pengguna.");
-            }
-        }
+        // Konfirmasi isDirty sekarang ditangani oleh uiManager sebelum memanggil ini
 
         return new Promise((resolve, reject) => {
             this.setIsLoadingProject(true);

@@ -45,6 +45,10 @@ let toastContainerEl = null;
 let saveProjectModalEl, saveProjectModalTitleEl, saveProjectNameInputEl,
     closeSaveProjectModalBtnEl, cancelSaveProjectBtnEl, confirmSaveProjectBtnEl;
 
+// Variabel untuk Modal Konfirmasi Umum
+let confirmationModalEl, confirmationModalTitleEl, confirmationMessageEl,
+    confirmOkBtnEl, confirmCancelBtnEl;
+
 /**
  * Sets the Konva node currently targeted by the context menu.
  * Exported for use by konvaManager.
@@ -612,7 +616,14 @@ function setupEventListeners() {
     const exportProjectBtn = document.getElementById('export-project-btn');
 
     if (newProjectBtn && projectManagerRef) {
-        newProjectBtn.addEventListener('click', () => {
+        newProjectBtn.addEventListener('click', async () => { // Jadikan async
+            if (projectManagerRef.isProjectDirty()) {
+                const confirmed = await showConfirmationModal("Ada perubahan yang belum disimpan. Apakah Anda yakin ingin membuat project baru? Perubahan akan hilang.");
+                if (!confirmed) {
+                    showToast("Pembuatan project baru dibatalkan.", "info");
+                    return;
+                }
+            }
             projectManagerRef.newProject();
         });
     }
@@ -673,22 +684,35 @@ function setupEventListeners() {
                 // Ini penting untuk "Save As" yang menimpa project lain.
                 // Untuk "Save" pertama kali, currentProjectName akan null.
                 const currentProjectName = projectManagerRef.getCurrentProjectName();
-                const isOverwritingDifferentProject = availableProjects.some(pName => pName.toLowerCase() === projectNameFromModal.toLowerCase()) &&
-                                                     (!currentProjectName || currentProjectName.toLowerCase() !== projectNameFromModal.toLowerCase());
+                const currentProjectName = projectManagerRef.getCurrentProjectName();
+                const projectExists = availableProjects.some(pName => pName.toLowerCase() === projectNameFromModal.toLowerCase());
+                let proceedToSave = true;
 
-                if (isOverwritingDifferentProject) {
-                    if (!confirm(`Project dengan nama '${projectNameFromModal}' sudah ada. Apakah Anda ingin menimpanya?`)) {
+                // Hanya tampilkan konfirmasi timpa jika:
+                // 1. Nama project yang diinput sudah ada DAN
+                // 2. Ini adalah 'Save As' ke nama yang sudah ada (projectNameFromModal !== currentProjectName), ATAU
+                // 3. Ini adalah save pertama kali (currentProjectName == null) ke nama yang sudah ada.
+                if (projectExists &&
+                    ( (currentProjectName && currentProjectName.toLowerCase() !== projectNameFromModal.toLowerCase()) || !currentProjectName )
+                ) {
+                    const confirmedOverwrite = await showConfirmationModal(`Project dengan nama '${projectNameFromModal}' sudah ada. Apakah Anda ingin menimpanya?`, "Konfirmasi Timpa");
+                    if (!confirmedOverwrite) {
                         showToast("Penyimpanan dibatalkan.", 'info');
-                        confirmSaveProjectBtnEl.disabled = false;
-                        confirmSaveProjectBtnEl.textContent = originalConfirmSaveBtnText;
-                        return;
+                        proceedToSave = false;
                     }
                 }
-                // Jika nama sama dengan currentProjectName (dan projectExists benar), itu adalah save biasa yg menimpa dirinya sendiri, tidak perlu confirm lagi di sini.
-                // Konfirmasi di atas sudah cukup.
 
-                await projectManagerRef.saveProjectToServer(projectNameFromModal);
-                showToast(`Project '${projectNameFromModal}' berhasil disimpan ke server.`, 'success');
+                if (proceedToSave) {
+                    await projectManagerRef.saveProjectToServer(projectNameFromModal);
+                    showToast(`Project '${projectNameFromModal}' berhasil disimpan ke server.`, 'success');
+                    hideSaveProjectModal(); // Pindahkan hide ke sini agar hanya saat sukses
+                } else {
+                    // Jika tidak jadi save (karena batal timpa), biarkan modal terbuka atau reset tombolnya
+                    confirmSaveProjectBtnEl.disabled = false;
+                    confirmSaveProjectBtnEl.textContent = originalConfirmSaveBtnText;
+                    return; // Jangan hide modal
+                }
+                // hideSaveProjectModal(); // Dihapus dari sini, dipindah ke atas
                 hideSaveProjectModal();
             } catch (error) {
                 showToast(`Gagal menyimpan project: ${error}`, 'error');
@@ -710,18 +734,27 @@ function setupEventListeners() {
         importProjectBtn.addEventListener('click', () => {
             importProjectInput.click();
         });
-        importProjectInput.addEventListener('change', (event) => {
+        importProjectInput.addEventListener('change', async (event) => { // Jadikan async
             const file = event.target.files[0];
             if (file) {
-                projectManagerRef.importProjectFromFile(file)
-                    .then(() => {
-                        // Pesan sukses (showToast) sudah ada di dalam importProjectFromFile (jika diubah nanti)
-                        // Untuk sekarang, importProjectFromFile masih pakai alert. Bisa diubah agar return message.
-                        // showToast(`Project dari file '${file.name}' berhasil diimpor.`, 'success');
-                    })
-                    .catch(error => {
-                        showToast(`Gagal mengimpor project: ${error}`, 'error');
-                    });
+                if (projectManagerRef.isProjectDirty()) {
+                    const confirmed = await showConfirmationModal("Ada perubahan yang belum disimpan pada project saat ini. Apakah Anda yakin ingin mengimpor project baru? Perubahan akan hilang.");
+                    if (!confirmed) {
+                        showToast("Impor project dibatalkan.", "info");
+                        event.target.value = null; // Reset input file
+                        return;
+                    }
+                }
+
+                try {
+                    // importProjectFromFile di ProjectManager masih pakai alert untuk sukses/errornya sendiri.
+                    // Idealnya, itu me-resolve/reject dengan pesan, lalu uiManager tampilkan toast.
+                    await projectManagerRef.importProjectFromFile(file);
+                    // Jika importProjectFromFile diubah untuk tidak alert dan hanya resolve/reject:
+                    // showToast(`Project dari file '${file.name}' berhasil diimpor. Anda mungkin ingin menyimpannya ke server.`, 'success');
+                } catch (error) {
+                    showToast(`Gagal mengimpor project: ${error}`, 'error');
+                }
             }
             event.target.value = null;
         });
@@ -748,22 +781,27 @@ function setupEventListeners() {
         cancelLoadProjectBtnEl.addEventListener('click', hideLoadProjectModal);
     }
     if (confirmLoadProjectBtnEl && projectManagerRef) {
-        const originalLoadBtnText = confirmLoadProjectBtnEl.textContent; // Simpan teks asli
+        const originalLoadBtnText = confirmLoadProjectBtnEl.textContent;
         confirmLoadProjectBtnEl.addEventListener('click', async () => {
             if (selectedProjectToLoad) {
+                if (projectManagerRef.isProjectDirty()) {
+                    const confirmed = await showConfirmationModal("Ada perubahan yang belum disimpan pada project saat ini. Apakah Anda yakin ingin memuat project lain? Perubahan akan hilang.");
+                    if (!confirmed) {
+                        showToast("Pemuatan project dibatalkan.", "info");
+                        return;
+                    }
+                }
+
                 confirmLoadProjectBtnEl.disabled = true;
-                confirmLoadProjectBtnEl.textContent = "Memuat..."; // Ubah teks tombol
+                confirmLoadProjectBtnEl.textContent = "Memuat...";
 
                 try {
                     await projectManagerRef.loadProjectFromServer(selectedProjectToLoad);
                     showToast(`Project '${selectedProjectToLoad}' berhasil dimuat.`, 'success');
-                    hideLoadProjectModal(); // Sembunyikan modal setelah sukses
+                    hideLoadProjectModal();
                 } catch (error) {
                     showToast(`Gagal memuat project '${selectedProjectToLoad}': ${error}`, 'error');
-                    // Biarkan modal terbuka jika gagal, agar pengguna bisa mencoba lagi atau membatalkan
                 } finally {
-                    // Hanya kembalikan state tombol jika modal tidak jadi disembunyikan (karena error)
-                    // dan tombolnya masih ada.
                     if (confirmLoadProjectBtnEl && loadProjectModalEl && !loadProjectModalEl.classList.contains('hidden')) {
                         confirmLoadProjectBtnEl.disabled = false;
                         confirmLoadProjectBtnEl.textContent = originalLoadBtnText;
@@ -865,6 +903,72 @@ function openSaveProjectModal(currentName = '') {
     saveProjectModalEl.classList.remove('hidden');
     saveProjectNameInputEl.focus();
     saveProjectNameInputEl.select();
+}
+
+// --- Confirmation Modal Functions ---
+let currentConfirmationResolve = null;
+let currentConfirmationReject = null; // Jarang dipakai untuk konfirmasi sederhana (biasanya resolve false)
+
+function hideConfirmationModal() {
+    if (confirmationModalEl) {
+        confirmationModalEl.classList.add('hidden');
+    }
+    // Hapus listener spesifik untuk promise ini agar tidak tumpang tindih
+    if (confirmOkBtnEl && confirmOkBtnEl.currentClickListener) {
+        confirmOkBtnEl.removeEventListener('click', confirmOkBtnEl.currentClickListener);
+        delete confirmOkBtnEl.currentClickListener;
+    }
+    if (confirmCancelBtnEl && confirmCancelBtnEl.currentClickListener) {
+        confirmCancelBtnEl.removeEventListener('click', confirmCancelBtnEl.currentClickListener);
+        delete confirmCancelBtnEl.currentClickListener;
+    }
+}
+
+/**
+ * Menampilkan modal konfirmasi umum.
+ * @param {string} message - Pesan pertanyaan yang akan ditampilkan.
+ * @param {string} [title='Konfirmasi'] - Judul modal.
+ * @param {string} [okText='OK'] - Teks untuk tombol konfirmasi.
+ * @param {string} [cancelText='Batal'] - Teks untuk tombol batal.
+ * @returns {Promise<boolean>} Promise yang resolve true jika dikonfirmasi, false jika dibatalkan.
+ */
+export function showConfirmationModal(message, title = 'Konfirmasi', okText = 'OK', cancelText = 'Batal') {
+    if (!confirmationModalEl || !confirmationMessageEl || !confirmOkBtnEl || !confirmCancelBtnEl) {
+        console.error("Elemen modal konfirmasi tidak lengkap.");
+        return Promise.resolve(window.confirm(message)); // Fallback ke window.confirm
+    }
+
+    if (confirmationModalTitleEl) confirmationModalTitleEl.textContent = title;
+    confirmationMessageEl.textContent = message;
+    confirmOkBtnEl.textContent = okText;
+    confirmCancelBtnEl.textContent = cancelText;
+
+    confirmationModalEl.classList.remove('hidden');
+
+    return new Promise((resolve) => {
+        // Hapus listener lama jika ada untuk menghindari duplikasi
+        if (confirmOkBtnEl.currentClickListener) {
+            confirmOkBtnEl.removeEventListener('click', confirmOkBtnEl.currentClickListener);
+        }
+        if (confirmCancelBtnEl.currentClickListener) {
+            confirmCancelBtnEl.removeEventListener('click', confirmCancelBtnEl.currentClickListener);
+        }
+
+        // Simpan listener baru agar bisa dihapus
+        confirmOkBtnEl.currentClickListener = () => {
+            hideConfirmationModal();
+            resolve(true);
+        };
+        confirmCancelBtnEl.currentClickListener = () => {
+            hideConfirmationModal();
+            resolve(false);
+        };
+
+        confirmOkBtnEl.addEventListener('click', confirmOkBtnEl.currentClickListener, { once: true });
+        confirmCancelBtnEl.addEventListener('click', confirmCancelBtnEl.currentClickListener, { once: true });
+        // Jika ada tombol close 'x' di modal konfirmasi, tambahkan listener juga:
+        // closeConfirmationModalBtn.addEventListener('click', () => { hideConfirmationModal(); resolve(false); }, { once: true });
+    });
 }
 
 
