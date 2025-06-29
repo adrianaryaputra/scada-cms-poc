@@ -171,13 +171,14 @@ class MqttDevice extends Device {
         if (variableConfig) {
             console.log(`[${this.name}] MQTT message received for variable '${variableConfig.name}' on topic '${topic}'`); // DEBUG LOG
             let value = messageString;
-            if (variableConfig.jsonPath) {
+            // Use variableConfig.jsonPathSubscribe as this is what's saved from the client
+            if (variableConfig.jsonPathSubscribe && variableConfig.jsonPathSubscribe.trim() !== '') {
                 try {
                     const messageObject = JSON.parse(messageString);
-                    value = _getValueFromPath(messageObject, variableConfig.jsonPath); // Use the local helper
-                    console.log(`[${this.name}] Extracted value using JSONPath '${variableConfig.jsonPath}':`, value); // DEBUG LOG
+                    value = _getValueFromPath(messageObject, variableConfig.jsonPathSubscribe); // Use the local helper
+                    console.log(`[${this.name}] Extracted value using JSONPath '${variableConfig.jsonPathSubscribe}':`, value); // DEBUG LOG
                 } catch (e) {
-                    console.warn(`[${this.name}] Failed to parse JSON or extract path for var '${variableConfig.name}': ${e.message}. Payload: ${messageString}`);
+                    console.warn(`[${this.name}] Failed to parse JSON or extract path for var '${variableConfig.name}' using path '${variableConfig.jsonPathSubscribe}': ${e.message}. Payload: ${messageString}`);
                     return;
                 }
             }
