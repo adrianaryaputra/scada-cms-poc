@@ -588,6 +588,15 @@ function handleFormSubmit(e) {
             deviceData.variables = [];
         }
         // No other specific fields like host/port are needed for internal devices.
+    } else { // For truly other/unknown device types
+        // Ensure variables array exists, primarily for future compatibility or unhandled types.
+        if (isEditing) {
+            const existingDevice = localDeviceCache.find(d => d.id === deviceData.id);
+            deviceData.variables = existingDevice ? existingDevice.variables : [];
+        } else {
+            deviceData.variables = [];
+        }
+        console.warn(`Handling unspecific device type "${deviceData.type}" in handleFormSubmit. Ensuring variables array exists.`);
     }
 
 
