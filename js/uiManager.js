@@ -138,6 +138,13 @@ export function initUiManager(
     cancelSaveProjectBtnEl = document.getElementById('cancel-save-project-btn');
     confirmSaveProjectBtnEl = document.getElementById('confirm-save-project-btn');
 
+    // Cache elemen Modal Konfirmasi Umum
+    confirmationModalEl = document.getElementById('confirmation-modal');
+    confirmationModalTitleEl = document.getElementById('confirmation-modal-title');
+    confirmationMessageEl = document.getElementById('confirmation-message');
+    confirmOkBtnEl = document.getElementById('confirm-ok-btn');
+    confirmCancelBtnEl = document.getElementById('confirm-cancel-btn');
+
     // Cache tombol Save Project As
     // (Akan ditambahkan di setupEventListeners jika belum ada variabelnya)
     // let saveProjectAsBtnEl = document.getElementById('save-project-as-btn');
