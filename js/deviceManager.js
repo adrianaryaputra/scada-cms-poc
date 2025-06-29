@@ -743,7 +743,9 @@ function openVariableManager(deviceId) {
 
             // Value Preview Cell
             const valueCell = row.insertCell();
-            valueCell.className = "px-4 py-3 whitespace-nowrap text-sm text-cyan-300";
+            valueCell.className = "px-4 py-3 whitespace-nowrap text-sm text-cyan-300 variable-value-preview"; // Added a class for easier selection if needed
+            valueCell.dataset.deviceId = device.id;
+            valueCell.dataset.variableName = variable.name;
             let currentValue = getDeviceVariableValue(device.id, variable.name);
             if (typeof currentValue === 'object' && currentValue !== null) {
                 try {
@@ -983,5 +985,29 @@ export function writeDataToServer(deviceId, address, value) {
     } else {
         console.error("Socket not connected. Cannot write data.");
         alert("Cannot write data: Server is not connected.");
+    }
+}
+
+export function updateLiveVariableValueInManagerUI(deviceId, variableName, newValue) {
+    if (variableManagerModal && !variableManagerModal.classList.contains('hidden') && variableManagerModal.dataset.deviceId === deviceId) {
+        const valueCell = variableListTbody.querySelector(`td[data-device-id="${deviceId}"][data-variable-name="${variableName}"]`);
+        if (valueCell) {
+            let displayValue = newValue;
+            if (typeof displayValue === 'object' && displayValue !== null) {
+                try {
+                    displayValue = JSON.stringify(displayValue);
+                    if (displayValue.length > 30) { // Truncate if too long
+                        displayValue = displayValue.substring(0, 27) + "...";
+                    }
+                } catch (e) {
+                    displayValue = '[Object]';
+                }
+            } else if (displayValue === undefined) {
+                displayValue = "-";
+            } else if (typeof displayValue === 'boolean') {
+                displayValue = displayValue ? 'True' : 'False';
+            }
+            valueCell.textContent = displayValue;
+        }
     }
 }
