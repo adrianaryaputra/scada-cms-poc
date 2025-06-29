@@ -2,7 +2,7 @@ import { GRID_SIZE } from './config.js';
 import { saveState, getCurrentState } from './stateManager.js'; // Untuk context menu save
 
 // Variabel-variabel ini akan dikelola dalam modul ini
-let stage, layer, tr, guideLayer;
+let stage, layer, tr, guideLayer, gridLayer;
 let selectionRectangle;
 let x1, y1;
 let dragStartPositions = null; // Dikelola di sini
@@ -56,9 +56,11 @@ export function initKonvaManager(
         height: containerEl.clientHeight,
     });
 
+    gridLayer = new Konva.Layer();
     layer = new Konva.Layer();
     guideLayer = new Konva.Layer();
-    stage.add(layer, guideLayer);
+    stage.add(gridLayer, layer, guideLayer);
+    drawGrid();
 
     tr = new Konva.Transformer({
         keepRatio: true, // Default, akan diubah oleh selectNodes jika perlu
@@ -70,6 +72,7 @@ export function initKonvaManager(
         if (stage && containerEl) {
             stage.width(containerEl.clientWidth);
             stage.height(containerEl.clientHeight);
+            drawGrid();
         }
     }).observe(containerEl);
 
@@ -88,6 +91,30 @@ export function initKonvaManager(
         getHmiLayoutAsJson, // Ditambahkan dari langkah sebelumnya
         clearCanvas         // Ditambahkan sekarang
     };
+}
+
+function drawGrid(dotted = false) {
+    gridLayer.destroyChildren();
+    const width = stage.width();
+    const height = stage.height();
+
+    for (let i = 0; i < width / GRID_SIZE; i++) {
+        gridLayer.add(new Konva.Line({
+            points: [Math.round(i * GRID_SIZE) + 0.5, 0, Math.round(i * GRID_SIZE) + 0.5, height],
+            stroke: "rgba(255, 255, 255, 0.1)",
+            strokeWidth: 1,
+            dash: dotted ? [1, 19] : [],
+        }));
+    }
+
+    for (let i = 0; i < height / GRID_SIZE; i++) {
+        gridLayer.add(new Konva.Line({
+            points: [0, Math.round(i * GRID_SIZE) + 0.5, width, Math.round(i * GRID_SIZE) + 0.5],
+            stroke: "rgba(255, 255, 255, 0.1)",
+            strokeWidth: 1,
+            dash: dotted ? [1, 19] : [],
+        }));
+    }
 }
 
 function getDragStartPositions() {
@@ -234,12 +261,12 @@ function setupEventListeners() {
         if (e.key !== "Shift" || isSimulationModeFunc()) return;
         const activeEl = document.activeElement;
         if (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA") return;
-        if (containerEl) containerEl.classList.add("dotted-grid");
+        drawGrid(true); // Draw dotted grid
     });
 
     window.addEventListener("keyup", (e) => {
         if (e.key === "Shift") {
-            if (containerEl) containerEl.classList.remove("dotted-grid");
+            drawGrid(false); // Draw solid grid
         }
     });
 

@@ -58,11 +58,7 @@ input:checked + .slider:before {
     cursor: not-allowed;
 }
 
-/* Grid dotted background for canvas wrapper */
-#canvas-wrapper.dotted-grid {
-    background-image: radial-gradient(circle, #4a5568 1px, transparent 1px);
-    background-size: 10px 10px; /* Sesuaikan dengan GRID_SIZE jika perlu */
-}
+
 
 
 /* Toast Notification Styles */

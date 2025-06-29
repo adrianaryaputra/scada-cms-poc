@@ -283,12 +283,11 @@ const ProjectManager = { // Rename objek
                         console.warn("[ProjectManager Load] konvaManagerRef atau clearCanvas tidak tersedia saat membersihkan HMI.");
                     }
 
-                    if (typeof clearLocalDeviceCacheAndState === 'function') {
-                        clearLocalDeviceCacheAndState(); // Clears local device cache and associated stateManager entries
-                        console.log("[ProjectManager Load] Cache device lokal dan state terkait telah dibersihkan.");
-                    } else {
-                        console.warn("[ProjectManager Load] clearLocalDeviceCacheAndState tidak tersedia dari deviceManager.");
-                    }
+                    // [GEMINI-FIX] The call to clearLocalDeviceCacheAndState() was removed from here.
+                    // The server's 'initial_device_list' event is now solely responsible for populating
+                    // the device list. Clearing the cache here created a race condition where the
+                    // device list was cleared immediately after being received.
+                    console.log("[ProjectManager Load] Device cache clearing is now handled by deviceManager upon receiving new list from server.");
 
                     // Reset project-specific properties. Note: setCurrentProjectName and setDirty are handled after processing.
                     // this.setCurrentProjectName(null); // Will be set by projectData.projectName
@@ -520,3 +519,4 @@ const ProjectManager = { // Rename objek
 };
 
 export default ProjectManager; // Rename export
+
