@@ -140,6 +140,27 @@
                     >
                         Device Manager
                     </button>
+
+                    <h3 class="text-md font-semibold text-cyan-400 mt-4 pt-2 border-t border-gray-700">Manajemen Project</h3>
+                    <button id="new-project-btn" class="w-full mt-1 bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                        New Project
+                    </button>
+                    <button id="save-project-btn" class="w-full mt-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                        Save Project
+                    </button>
+                    <button id="save-project-as-btn" class="w-full mt-1 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                        Save Project As...
+                    </button>
+                    <button id="load-project-btn" class="w-full mt-1 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                        Load Project
+                    </button>
+                    <input type="file" id="import-project-input" accept=".json" style="display: none;" />
+                    <button id="import-project-btn" class="w-full mt-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                        Import Project (.json)
+                    </button>
+                    <button id="export-project-btn" class="w-full mt-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                        Export Project (.json)
+                    </button>
                 </div>
 
                 <div
@@ -676,6 +697,59 @@
                 <div class="flex justify-end space-x-3 pt-3 border-t border-gray-700">
                     <button type="button" id="explorer-use-topic-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Use Topic</button>
                     <button type="button" id="explorer-use-topic-path-btn" class="bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Use Topic & Path</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast Notification Container -->
+        <div id="toast-container" class="fixed bottom-5 right-5 space-y-2 z-[200]">
+            <!-- Toast messages will be appended here -->
+        </div>
+
+        <!-- Modal untuk Load Project -->
+        <div id="load-project-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-[150] flex items-center justify-center p-4">
+            <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-cyan-300">Load Project</h2>
+                    <button id="close-load-project-modal-btn" class="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+                </div>
+                <div id="load-project-list-container" class="mb-4 max-h-60 overflow-y-auto">
+                    <!-- Daftar project akan diisi di sini oleh JavaScript -->
+                    <p class="text-gray-400 text-sm">Memuat daftar project...</p>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button id="cancel-load-project-btn" type="button" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Batal</button>
+                    <button id="confirm-load-project-btn" type="button" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Load</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal untuk Save Project As -->
+        <div id="save-project-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-[150] flex items-center justify-center p-4">
+            <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 id="save-project-modal-title" class="text-xl font-bold text-cyan-300">Save Project</h2>
+                    <button id="close-save-project-modal-btn" class="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+                </div>
+                <div class="mb-4">
+                    <label for="save-project-name-input" class="block text-sm font-medium text-gray-300 mb-1">Nama Project:</label>
+                    <input type="text" id="save-project-name-input" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white" placeholder="Masukkan nama project...">
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button id="cancel-save-project-btn" type="button" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Batal</button>
+                    <button id="confirm-save-project-btn" type="button" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Simpan</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Konfirmasi Umum -->
+        <div id="confirmation-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-[160] flex items-center justify-center p-4">
+            <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm">
+                <h2 id="confirmation-modal-title" class="text-lg font-bold text-yellow-400 mb-4">Konfirmasi</h2>
+                <p id="confirmation-message" class="text-gray-300 mb-6">Apakah Anda yakin?</p>
+                <div class="flex justify-end space-x-3">
+                    <button id="confirm-cancel-btn" type="button" class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg text-sm">Batal</button>
+                    <button id="confirm-ok-btn" type="button" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg text-sm">OK</button>
                 </div>
             </div>
         </div>

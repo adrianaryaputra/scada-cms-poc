@@ -5,6 +5,7 @@ const {
     getAllDeviceInstances,
     removeDevice
 } = require('./deviceManager'); // Updated import path
+const projectHandler = require('./projectHandler'); // Impor projectHandler (nama baru)
 
 // In-memory store for device configurations.
 // TODO: Replace with a persistent storage solution (e.g., JSON file, database).
@@ -89,6 +90,84 @@ function setupSocketHandlers(io) {
                 socket.emit('operation_error', {
                     message: `Device with ID ${deviceId} not found for deletion.`,
                     deviceId: deviceId
+                });
+            }
+        });
+
+        // --- Project Management --- (Sebelumnya Layout Management)
+        socket.on('project:save', async ({ name, data }) => { // Event diubah ke 'project:save'
+            // console.log(`[Socket ${socket.id}] Received 'project:save' for name: ${name}`);
+            try {
+                await projectHandler.saveProjectToFile(name, data);
+                socket.emit('project:saved_ack', { success: true, name: name, message: `Project '${name}' berhasil disimpan.` });
+            } catch (error) {
+                console.error(`Error saving project '${name}':`, error);
+                socket.emit('operation_error', {
+                    operation: 'project:save', // Konteks operasi
+                    code: error.code || 'SERVER_ERROR', // Kode error dari projectHandler atau default
+                    message: error.message || `Gagal menyimpan project '${name}'.`, // Pesan dari projectHandler atau default
+                    details: { projectName: name, originalError: error.originalError ? error.originalError.message : error.message }
+                });
+            }
+        });
+
+        socket.on('project:load', async ({ name }) => {
+            // console.log(`[Socket ${socket.id}] Received 'project:load' for name: ${name}`);
+            try {
+                const projectData = await projectHandler.loadProjectFromFile(name);
+                // Jika projectData tidak ditemukan, loadProjectFromFile akan melempar error dengan code PROJECT_NOT_FOUND
+
+                console.log(`[SocketHandler] Project '${name}' loaded. Re-initializing server-side devices.`);
+                const currentActiveDeviceIds = getAllDeviceInstances().map(d => d.id);
+                const newDeviceConfigIds = projectData.deviceConfigs ? projectData.deviceConfigs.map(dc => dc.id) : [];
+
+                currentActiveDeviceIds.forEach(existingId => {
+                    if (!newDeviceConfigIds.includes(existingId)) {
+                        removeDevice(existingId);
+                    }
+                });
+
+                if (projectData.deviceConfigs && Array.isArray(projectData.deviceConfigs)) {
+                    projectData.deviceConfigs.forEach(deviceConfig => {
+                        initializeDevice(deviceConfig, io);
+                    });
+                }
+
+                const updatedActiveDevices = getAllDeviceInstances().map(devInstance => {
+                    const config = devInstance.isInternal ? devInstance : serverSideDeviceConfigs.find(c => c.id === devInstance.id) || devInstance.config;
+                    return {
+                        ...(config || {}),
+                        id: devInstance.id, name: devInstance.name, type: devInstance.type,
+                        connected: devInstance.connected || false,
+                        variables: devInstance.variables || (config ? config.variables : [])
+                    };
+                });
+                socket.emit('initial_device_list', updatedActiveDevices);
+                socket.emit('project:loaded_data', { name: name, data: projectData });
+
+            } catch (error) { // Menangkap error dari projectHandler.loadProjectFromFile
+                console.error(`Error loading project '${name}':`, error);
+                socket.emit('operation_error', {
+                    operation: 'project:load',
+                    code: error.code || 'SERVER_ERROR',
+                    message: error.message || `Gagal memuat project '${name}'.`,
+                    details: { projectName: name, originalError: error.originalError ? error.originalError.message : error.message }
+                });
+            }
+        });
+
+        socket.on('project:list', async () => {
+            // console.log(`[Socket ${socket.id}] Received 'project:list' request`);
+            try {
+                const projectNames = await projectHandler.listProjectFiles();
+                socket.emit('project:list_results', projectNames);
+            } catch (error) {
+                console.error('Error listing projects:', error);
+                socket.emit('operation_error', {
+                    operation: 'project:list',
+                    code: error.code || 'SERVER_ERROR',
+                    message: error.message || 'Gagal mendapatkan daftar project.',
+                    details: { originalError: error.originalError ? error.originalError.message : error.message }
                 });
             }
         });

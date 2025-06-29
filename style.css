@@ -1,54 +1,13 @@
-#container {
-    background-color: #374151;
-    /* Darker grid */
-    background-image: linear-gradient(
-            to right,
-            #4b5563 1px,
-            transparent 1px
-        ),
-        linear-gradient(to bottom, #4b5563 1px, transparent 1px);
-    background-size: 20px 20px;
+/* HMI Drag & Drop Styles */
+body {
+    overscroll-behavior: none; /* Prevent pull-to-refresh on mobile */
 }
 
-#container.dotted-grid {
-    /* Grid menjadi titik-titik saat snap dinonaktifkan */
-    background-image: radial-gradient(circle at 0 0, #4b5563 1px, transparent 1px);
-    background-size: 20px 20px;
-}
-
-.btn-disabled,
-button:disabled {
-    background-color: #4b5563;
-    color: #9ca3af;
-    cursor: not-allowed;
-}
-
-.loader {
-    border: 4px solid #4b5563;
-    border-top: 4px solid #22d3ee;
-    border-radius: 50%;
-    width: 20px;
-    height: 20px;
-    animation: spin 1s linear infinite;
-    display: inline-block;
-}
-
-@keyframes spin {
-    0% {
-        transform: rotate(0deg);
-    }
-
-    100% {
-        transform: rotate(360deg);
-    }
-}
-
-/* Style untuk toggle switch */
 .switch {
     position: relative;
     display: inline-block;
-    width: 60px;
-    height: 34px;
+    width: 50px; /* Lebar switch */
+    height: 28px; /* Tinggi switch */
 }
 
 .switch input {
@@ -64,80 +23,88 @@ button:disabled {
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: #ccc;
+    background-color: #ccc; /* Warna default slider saat OFF */
     transition: 0.4s;
-    border-radius: 34px;
+    border-radius: 28px; /* Membuatnya bulat */
 }
 
 .slider:before {
     position: absolute;
     content: "";
-    height: 26px;
-    width: 26px;
-    left: 4px;
-    bottom: 4px;
+    height: 20px; /* Tinggi handle */
+    width: 20px; /* Lebar handle */
+    left: 4px; /* Posisi awal handle */
+    bottom: 4px; /* Posisi awal handle */
     background-color: white;
     transition: 0.4s;
-    border-radius: 50%;
+    border-radius: 50%; /* Membuat handle bulat */
 }
 
 input:checked + .slider {
-    background-color: #22d3ee;
+    background-color: #22c55e; /* Warna slider saat ON (hijau) */
+}
+
+input:focus + .slider {
+    box-shadow: 0 0 1px #22c55e;
 }
 
 input:checked + .slider:before {
-    transform: translateX(26px);
+    transform: translateX(22px); /* Menggeser handle saat ON */
 }
 
-/* Styling untuk chat UI */
-#chat-log {
-    height: 280px;
-    overflow-y: auto;
+/* Gaya untuk tombol disabled */
+.btn-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Grid dotted background for canvas wrapper */
+#canvas-wrapper.dotted-grid {
+    background-image: radial-gradient(circle, #4a5568 1px, transparent 1px);
+    background-size: 10px 10px; /* Sesuaikan dengan GRID_SIZE jika perlu */
+}
+
+
+/* Toast Notification Styles */
+#toast-container {
+    position: fixed;
+    bottom: 20px; /* Menggunakan Tailwind: bottom-5 */
+    right: 20px; /* Menggunakan Tailwind: right-5 */
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 8px; /* Menggunakan Tailwind: space-y-2 */
+    z-index: 200; /* Menggunakan Tailwind: z-[200] */
 }
 
-.chat-message {
-    padding: 8px 12px;
-    border-radius: 12px;
-    max-width: 90%;
-    word-wrap: break-word;
+#toast-container .toast {
+    padding: 12px 20px;
+    border-radius: 6px;
+    color: white;
+    font-size: 0.875rem; /* 14px */
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    /* margin-top: 8px; Dihandle oleh gap di container */
 }
 
-.user-message {
-    background-color: #2563eb;
-    align-self: flex-end;
+#toast-container .toast.show {
+    opacity: 1;
+    transform: translateY(0);
 }
 
-.model-message {
-    background-color: #4b5563;
-    align-self: flex-start;
-    display: flex;
-    align-items: center;
+#toast-container .toast-info {
+    background-color: #3b82f6; /* Tailwind: bg-blue-500 */
 }
 
-.thinking-details {
-    align-self: flex-start;
-    max-width: 90%;
-    margin-top: -4px;
-    margin-bottom: 4px;
+#toast-container .toast-success {
+    background-color: #22c55e; /* Tailwind: bg-green-500 */
 }
 
-.thinking-details summary {
-    cursor: pointer;
-    color: #9ca3af;
-    font-size: 0.8rem;
-    padding-left: 12px;
+#toast-container .toast-error {
+    background-color: #ef4444; /* Tailwind: bg-red-500 */
 }
 
-.thinking-details pre {
-    background-color: #111827;
-    border: 1px solid #374151;
-    border-radius: 8px;
-    padding: 8px;
-    font-size: 0.75rem;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    margin-top: 4px;
+#toast-container .toast-warning {
+    background-color: #f59e0b; /* Tailwind: bg-amber-500 */
 }

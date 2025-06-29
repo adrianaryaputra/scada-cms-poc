@@ -17,6 +17,7 @@ import { componentFactory, initComponentFactory } from './componentFactory.js';
 import { initKonvaManager } from './konvaManager.js';
 import { initUiManager } from './uiManager.js';
 import { initDeviceManager, getDeviceById } from './deviceManager.js'; // getDeviceById is passed around
+import ProjectManager from './projectManager.js'; // Import ProjectManager (nama baru)
 import { initAiAssistant } from './aiAssistant.js';
 import { initTopicExplorer } from './topicExplorer.js';
 
@@ -67,7 +68,8 @@ window.addEventListener("load", () => {
         konvaRefs,                     // Initially empty, will be populated by konvaManager and passed back
         () => isSimulationMode,        // Function to get current simulation mode state
         setIsSimulationModeAndInterval, // Function to set simulation mode state
-        getDeviceById                  // Function from deviceManager to get device details
+        getDeviceById,                 // Function from deviceManager to get device details
+        ProjectManager                 // Teruskan ProjectManager
     );
 
     // 2. Konva Manager: Manages the Konva stage, layers, shapes, and interactions.
@@ -118,13 +120,21 @@ window.addEventListener("load", () => {
 
     // --- Initialize Networking and Feature Modules ---
 
-    // 5. Device Manager & Topic Explorer: Handle communication with the server for device data and MQTT topics.
-    //    A single Socket.IO connection is created and shared.
-    const deviceSocket = io('/devices'); // Create client-side socket for the '/devices' namespace
-    initDeviceManager(deviceSocket);    // Pass socket to DeviceManager
-    initTopicExplorer(deviceSocket);    // Pass socket to TopicExplorer
+    // 5. ProjectManager (sebelumnya Layout Manager)
+    //    Diinisialisasi sebelum DeviceManager agar referensi setDirty bisa di-pass.
+    const deviceSocket = io('/devices'); // Buat socket di sini agar bisa di-pass ke keduanya
+    ProjectManager.init(
+        konvaRefs,
+        componentFactory,
+        deviceSocket
+    );
 
-    // 6. AI Assistant: Initializes the AI chat functionality.
+    // 6. Device Manager & Topic Explorer
+    //    Sekarang initDeviceManager menerima ProjectManager.setDirty
+    initDeviceManager(deviceSocket, ProjectManager.setDirty.bind(ProjectManager)); // Pass setDirty, bind context
+    initTopicExplorer(deviceSocket);
+
+    // 7. AI Assistant: Initializes the AI chat functionality.
     //    Dependencies: DOM elements, chatHistory, konvaRefs, getDeviceById.
     initAiAssistant(
         chatLog,      // DOM element for chat log
@@ -147,6 +157,18 @@ window.addEventListener("load", () => {
     // Attach event listeners for Undo/Redo buttons
     if (undoBtn) undoBtn.addEventListener("click", smHandleUndo);
     if (redoBtn) redoBtn.addEventListener("click", smHandleRedo);
+
+    // --- Konfirmasi Sebelum Keluar Jika Ada Perubahan Belum Disimpan ---
+    // Event listener untuk project management buttons dipindahkan ke uiManager.js
+    window.addEventListener('beforeunload', (event) => {
+        if (ProjectManager.isProjectDirty()) { // Menggunakan ProjectManager dan nama fungsi baru
+            // Standar browser memerlukan returnValue untuk di-set.
+            event.preventDefault();
+            event.returnValue = '';
+            // Browser akan menampilkan dialog konfirmasi generik.
+            // Pesan kustom tidak lagi didukung oleh kebanyakan browser modern.
+        }
+    });
 });
 
 // Export GRID_SIZE for potential use by other modules (e.g., aiAssistant for layout calculations)

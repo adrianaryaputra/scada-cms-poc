@@ -1,5 +1,6 @@
 import { setDeviceVariableValue, getDeviceVariableValue, deleteDeviceState as deleteDeviceStateFromManager } from './stateManager.js';
 import { openTopicExplorer } from './topicExplorer.js'; // Import openTopicExplorer
+import ProjectManager from './projectManager.js'; // Impor ProjectManager
 // import { getLayer } from './konvaManager.js'; // getLayer might not be needed if Konva updates via stateManager
 
 // SVG Icons
@@ -22,6 +23,7 @@ const ICON_DELETE = `
 
 let localDeviceCache = [];
 let socket = null;
+let pmSetDirtyFuncRef = null; // Variabel untuk menyimpan referensi fungsi setDirty dari ProjectManager
 
 // DOM Elements
 let deviceManagerModal, closeDeviceManagerModal, addDeviceBtn, deviceList;
@@ -36,7 +38,7 @@ let variableFormModal, variableFormTitle, variableForm, cancelVariableFormBtn, s
     varFormExploreTopicBtn; // Tombol Explore baru
 
 
-export function initDeviceManager(socketInstance) { // Parameter is already a socket instance
+export function initDeviceManager(socketInstance, projectManagerSetDirtyFunc) { // Tambah parameter projectManagerSetDirtyFunc
     if (!socketInstance || typeof socketInstance.on !== 'function' || typeof socketInstance.emit !== 'function') {
         console.error("Valid Socket.IO client instance not provided to initDeviceManager.");
         // Fallback or error display for the user that real-time features are unavailable.
@@ -57,6 +59,7 @@ export function initDeviceManager(socketInstance) { // Parameter is already a so
         return;
     }
     socket = socketInstance; // Use the provided instance directly
+    pmSetDirtyFuncRef = projectManagerSetDirtyFunc; // Simpan referensi fungsi
 
     // Cache DOM elements
     deviceManagerModal = document.getElementById('device-manager-modal');
@@ -234,12 +237,20 @@ export function initDeviceManager(socketInstance) { // Parameter is already a so
             localDeviceCache = localDeviceCache.map(d => d.id === device.id ? device : d);
         }
         renderDeviceList();
+        if (pmSetDirtyFuncRef && ProjectManager && !ProjectManager.getIsLoadingProject()) {
+            console.log("[DeviceManager] device_added: Calling pmSetDirtyFuncRef(true)");
+            pmSetDirtyFuncRef(true);
+        }
     });
 
     socket.on('device_updated', (updatedDevice) => {
         console.log('Device updated by server:', updatedDevice);
         localDeviceCache = localDeviceCache.map(d => d.id === updatedDevice.id ? updatedDevice : d);
         renderDeviceList(); // Re-renders the main device list
+        if (pmSetDirtyFuncRef && ProjectManager && !ProjectManager.getIsLoadingProject()) {
+            console.log("[DeviceManager] device_updated: Calling pmSetDirtyFuncRef(true)");
+            pmSetDirtyFuncRef(true);
+        }
 
         // Check if the Variable Manager is open and showing the updated device
         if (variableManagerModal && !variableManagerModal.classList.contains('hidden') && variableManagerModal.dataset.deviceId === updatedDevice.id) {
@@ -253,6 +264,10 @@ export function initDeviceManager(socketInstance) { // Parameter is already a so
         localDeviceCache = localDeviceCache.filter(d => d.id !== deletedDeviceId);
         deleteDeviceStateFromManager(deletedDeviceId); // Also clear its state from stateManager
         renderDeviceList(); // Re-renders the main device list
+        if (pmSetDirtyFuncRef && ProjectManager && !ProjectManager.getIsLoadingProject()) {
+            console.log("[DeviceManager] device_deleted: Calling pmSetDirtyFuncRef(true)");
+            pmSetDirtyFuncRef(true);
+        }
 
         // Check if the Variable Manager is open and showing the deleted device
         if (variableManagerModal && !variableManagerModal.classList.contains('hidden') && variableManagerModal.dataset.deviceId === deletedDeviceId) {
@@ -571,13 +586,6 @@ function handleFormSubmit(e) {
         deviceData.serialPort = document.getElementById('modbus-rtu-serial-port')?.value.trim() || '';
         deviceData.baudRate = document.getElementById('modbus-rtu-baud-rate')?.value.trim() || '9600';
         deviceData.unitId = document.getElementById('modbus-rtu-unit-id')?.value.trim() || '1';
-    } else { // For other device types, ensure variables array exists
-        if (isEditing) {
-            const existingDevice = localDeviceCache.find(d => d.id === deviceData.id);
-            deviceData.variables = existingDevice ? existingDevice.variables : [];
-        } else {
-            deviceData.variables = [];
-        }
     } else if (deviceData.type === 'internal') {
         // For internal devices, we primarily care about id, name, type, and variables.
         // Ensure variables array exists.
@@ -725,7 +733,7 @@ function openVariableManager(deviceId) {
     variableManagerModal.dataset.deviceId = deviceId; // Store deviceId for "Add Variable" button
     variableListTbody.innerHTML = ''; // Clear previous variables
 
-    if (device.type === 'mqtt' && Array.isArray(device.variables) && device.variables.length > 0) {
+    if (Array.isArray(device.variables) && device.variables.length > 0) {
         device.variables.forEach(variable => {
             const row = variableListTbody.insertRow();
             row.className = "hover:bg-gray-700/50";
@@ -747,26 +755,28 @@ function openVariableManager(deviceId) {
             // Subscribe Setting
             const subscribeCell = row.insertCell();
             subscribeCell.className = "px-4 py-3 whitespace-nowrap text-sm text-gray-300";
-            let subscribeHtml = '<span class="text-xs text-gray-500">Not Subscribed</span>';
-            if (variable.enableSubscribe) {
-                subscribeHtml = `<span class="font-semibold">Topic:</span> ${variable.subscribeTopic || 'N/A'}`;
+            if (device.type === 'mqtt' && variable.enableSubscribe) {
+                let subscribeHtml = `<span class="font-semibold">Topic:</span> ${variable.subscribeTopic || 'N/A'}`;
                 subscribeHtml += `<br><span class="text-xs text-gray-400">QoS: ${variable.qosSubscribe !== undefined ? variable.qosSubscribe : 'N/A'}`;
                 if (variable.jsonPathSubscribe) {
                     subscribeHtml += `, JSONPath: ${variable.jsonPathSubscribe}`;
                 }
                 subscribeHtml += `</span>`;
+                subscribeCell.innerHTML = subscribeHtml;
+            } else {
+                subscribeCell.innerHTML = '<span class="text-xs text-gray-500">N/A</span>';
             }
-            subscribeCell.innerHTML = subscribeHtml;
 
             // Publish Setting
             const publishCell = row.insertCell();
             publishCell.className = "px-4 py-3 whitespace-nowrap text-sm text-gray-300";
-            let publishHtml = '<span class="text-xs text-gray-500">Not Publishing</span>';
-            if (variable.enablePublish) {
-                publishHtml = `<span class="font-semibold">Topic:</span> ${variable.publishTopic || 'N/A'}`;
+            if (device.type === 'mqtt' && variable.enablePublish) {
+                let publishHtml = `<span class="font-semibold">Topic:</span> ${variable.publishTopic || 'N/A'}`;
                 publishHtml += `<br><span class="text-xs text-gray-400">QoS: ${variable.qosPublish !== undefined ? variable.qosPublish : 'N/A'}, Retain: ${variable.retainPublish ? 'Yes' : 'No'}</span>`;
+                publishCell.innerHTML = publishHtml;
+            } else {
+                publishCell.innerHTML = '<span class="text-xs text-gray-500">N/A</span>';
             }
-            publishCell.innerHTML = publishHtml;
 
             // Value Preview Cell
             const valueCell = row.insertCell();
@@ -802,9 +812,9 @@ function openVariableManager(deviceId) {
                     ${ICON_DELETE}
                 </button>
             `;
-
         });
-        // Add event listeners for the new Edit/Delete buttons
+
+        // Add event listeners for the new Edit/Delete buttons (must be inside the 'if' block)
         variableListTbody.querySelectorAll('.edit-variable-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const devId = e.currentTarget.dataset.deviceId;
@@ -819,12 +829,10 @@ function openVariableManager(deviceId) {
                 deleteVariable(devId, varId);
             });
         });
-    } else if (device.type === 'internal' && (!Array.isArray(device.variables) || device.variables.length === 0)) {
-        variableListTbody.innerHTML = `<tr><td colspan="6" class="px-4 py-3 text-sm text-gray-400 text-center">No variables configured for this Internal device.</td></tr>`;
-    }
-    else if (device.type !== 'mqtt' && device.type !== 'internal') { // For non-MQTT, non-Internal devices
+
+    } else if (device.type !== 'mqtt' && device.type !== 'internal') { // For non-MQTT, non-Internal devices
          variableListTbody.innerHTML = `<tr><td colspan="6" class="px-4 py-3 text-sm text-gray-400 text-center">Manajemen variabel untuk tipe device '${device.type}' belum didukung di tampilan ini.</td></tr>`;
-    } else { // MQTT device but no variables (or internal device with no variables, though covered above)
+    } else { // For MQTT or Internal device but no variables
         variableListTbody.innerHTML = `<tr><td colspan="6" class="px-4 py-3 text-sm text-gray-400 text-center">No variables configured for this ${device.type} device.</td></tr>`;
     }
 
@@ -1029,9 +1037,26 @@ export function getDeviceById(id) {
     return localDeviceCache.find(device => device.id === id) || null;
 }
 
-export function writeDataToServer(deviceId, address, value) {
+export function writeDataToServer(deviceId, nameOrAddress, value) { // Mengubah nama parameter kedua
     if (socket && socket.connected) {
-        socket.emit('write_to_device', { deviceId, address, value });
+        const device = getDeviceById(deviceId); // Dapatkan detail device
+
+        if (!device) {
+            console.error(`Device with ID ${deviceId} not found in client cache. Cannot determine type for write.`);
+            alert(`Device ${deviceId} not found. Cannot write data.`);
+            return;
+        }
+
+        let payload = { deviceId, value };
+
+        if (device.type === 'internal') {
+            payload.variableName = nameOrAddress; // Untuk internal, nameOrAddress adalah variableName
+        } else {
+            // Untuk device non-internal, asumsikan nameOrAddress adalah address
+            payload.address = nameOrAddress;
+        }
+
+        socket.emit('write_to_device', payload);
     } else {
         console.error("Socket not connected. Cannot write data.");
         alert("Cannot write data: Server is not connected.");
@@ -1060,4 +1085,90 @@ export function updateLiveVariableValueInManagerUI(deviceId, variableName, newVa
             valueCell.textContent = displayValue;
         }
     }
+}
+
+/**
+ * Mengembalikan array dari semua konfigurasi device yang ada di localDeviceCache.
+ * Ini digunakan untuk menyimpan state project.
+ * @returns {Array<object>} Array dari objek konfigurasi device.
+ */
+export function getAllDeviceConfigsForExport() {
+    // Membuat deep copy dari setiap objek konfigurasi untuk menghindari modifikasi tidak sengaja
+    // dan memastikan hanya data konfigurasi yang relevan (bukan state runtime) yang diekspor.
+    // localDeviceCache seharusnya sudah menyimpan konfigurasi murni.
+    try {
+        return JSON.parse(JSON.stringify(localDeviceCache));
+    } catch (error) {
+        console.error("Gagal membuat deep copy localDeviceCache:", error);
+        // Kembalikan salinan dangkal sebagai fallback, atau array kosong jika localDeviceCache tidak valid
+        return [...(localDeviceCache || [])];
+    }
+}
+
+/**
+ * Membersihkan semua device dari sisi klien.
+ * Mengosongkan localDeviceCache, menghapus state terkait,
+ * dan meminta penghapusan device di server.
+ */
+export function clearAllClientDevices() {
+    if (localDeviceCache && localDeviceCache.length > 0) {
+        // Salin array ID karena kita akan memodifikasi localDeviceCache saat iterasi
+        const deviceIdsToRemove = localDeviceCache.map(d => d.id);
+
+        deviceIdsToRemove.forEach(deviceId => {
+            // Hapus dari state manager klien
+            if (typeof deleteDeviceStateFromManager === 'function') {
+                deleteDeviceStateFromManager(deviceId);
+            }
+            // Minta penghapusan dari server
+            requestDeleteDevice(deviceId); // Fungsi ini sudah ada dan emit 'delete_device'
+        });
+
+        localDeviceCache = []; // Kosongkan cache lokal
+        console.log("Semua device telah dibersihkan dari klien dan permintaan hapus dikirim ke server.");
+    } else {
+        console.log("Tidak ada device di klien untuk dibersihkan.");
+    }
+    renderDeviceList(); // Perbarui UI Device Manager
+}
+
+/**
+ * Menginisialisasi atau mengganti semua device di klien berdasarkan array konfigurasi.
+ * Ini akan membersihkan device klien yang ada dan meminta server untuk menambahkan device baru.
+ * @param {Array<object>} deviceConfigsArray - Array dari objek konfigurasi device.
+ */
+export async function initializeDevicesFromConfigs(deviceConfigsArray) {
+    console.log("[DeviceManager] Menginisialisasi device dari konfigurasi:", deviceConfigsArray);
+
+    // 1. Bersihkan semua device yang ada di klien (ini juga akan mengirim delete request ke server)
+    clearAllClientDevices();
+
+    // Tunggu sebentar untuk memberi waktu server memproses delete request (opsional, tapi bisa membantu)
+    // await new Promise(resolve => setTimeout(resolve, 500)); // Misal 0.5 detik
+
+    // 2. Untuk setiap konfigurasi device baru, kirim 'add_device' ke server
+    // Server akan merespons dengan 'device_added' yang akan mengisi localDeviceCache
+    // dan memicu renderDeviceList.
+    if (socket && socket.connected) {
+        if (Array.isArray(deviceConfigsArray)) {
+            deviceConfigsArray.forEach(config => {
+                // Pastikan config memiliki ID, atau buat jika tidak ada (seharusnya sudah ada dari project file)
+                if (!config.id) {
+                    config.id = `device-${crypto.randomUUID()}`;
+                    console.warn("[DeviceManager] Device config tidak memiliki ID, ID baru dibuat:", config.id);
+                }
+                console.log(`[DeviceManager] Mengirim add_device ke server untuk config:`, config);
+                socket.emit('add_device', config);
+            });
+        }
+    } else {
+        console.error("[DeviceManager] Socket tidak terhubung. Tidak dapat menginisialisasi device dari configs.");
+        // Jika socket tidak terhubung, kita bisa mengisi localDeviceCache secara manual
+        // tapi ini tidak akan sinkron dengan server.
+        // localDeviceCache = Array.isArray(deviceConfigsArray) ? JSON.parse(JSON.stringify(deviceConfigsArray)) : [];
+        // renderDeviceList();
+        alert("Tidak dapat menginisialisasi device: Server tidak terhubung.");
+    }
+    // renderDeviceList() akan dipanggil oleh handler 'device_added' atau 'initial_device_list'
+    // atau bisa dipanggil di sini jika kita mengisi localDeviceCache secara manual saat offline.
 }
