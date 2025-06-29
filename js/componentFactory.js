@@ -100,6 +100,14 @@ export const componentFactory = {
             group.on("dragmove", (e) => {
                  if (handleDragMoveFuncRef) handleDragMoveFuncRef(e);
             });
+
+            // Tambahkan komponen ke layer utama
+            if (layerRef) {
+                layerRef.add(group);
+                // console.log(`[ComponentFactory] Komponen ${group.id()} ditambahkan ke layerRef. Children di layer:`, layerRef.getChildren().length);
+            } else {
+                console.error("[ComponentFactory] layerRef tidak tersedia saat mencoba menambahkan komponen ke layer!");
+            }
         }
         return group;
     },
