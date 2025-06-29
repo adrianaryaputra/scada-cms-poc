@@ -218,17 +218,29 @@ export function initDeviceManager(socketInstance) { // Parameter is already a so
         renderDeviceList();
     });
 
-    socket.on('device_updated', (device) => {
-        console.log('Device updated by server:', device);
-        localDeviceCache = localDeviceCache.map(d => d.id === device.id ? device : d);
-        renderDeviceList();
+    socket.on('device_updated', (updatedDevice) => {
+        console.log('Device updated by server:', updatedDevice);
+        localDeviceCache = localDeviceCache.map(d => d.id === updatedDevice.id ? updatedDevice : d);
+        renderDeviceList(); // Re-renders the main device list
+
+        // Check if the Variable Manager is open and showing the updated device
+        if (variableManagerModal && !variableManagerModal.classList.contains('hidden') && variableManagerModal.dataset.deviceId === updatedDevice.id) {
+            console.log('Refreshing Variable Manager for device ID:', updatedDevice.id);
+            openVariableManager(updatedDevice.id); // Re-populate the variable table
+        }
     });
 
-    socket.on('device_deleted', (deviceId) => {
-        console.log('Device deleted by server:', deviceId);
-        localDeviceCache = localDeviceCache.filter(d => d.id !== deviceId);
-        deleteDeviceStateFromManager(deviceId); // Also clear its state from stateManager
-        renderDeviceList();
+    socket.on('device_deleted', (deletedDeviceId) => {
+        console.log('Device deleted by server:', deletedDeviceId);
+        localDeviceCache = localDeviceCache.filter(d => d.id !== deletedDeviceId);
+        deleteDeviceStateFromManager(deletedDeviceId); // Also clear its state from stateManager
+        renderDeviceList(); // Re-renders the main device list
+
+        // Check if the Variable Manager is open and showing the deleted device
+        if (variableManagerModal && !variableManagerModal.classList.contains('hidden') && variableManagerModal.dataset.deviceId === deletedDeviceId) {
+            console.log('Closing Variable Manager because the device (ID:', deletedDeviceId, ') was deleted.');
+            closeVariableManager();
+        }
     });
 
     // Listen for individual device status updates (e.g., connect/disconnect)
