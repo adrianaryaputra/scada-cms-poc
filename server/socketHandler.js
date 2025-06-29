@@ -5,6 +5,7 @@ const {
     getAllDeviceInstances,
     removeDevice
 } = require('./deviceManager'); // Updated import path
+const layoutHandler = require('./layoutHandler'); // Impor layoutHandler
 
 // In-memory store for device configurations.
 // TODO: Replace with a persistent storage solution (e.g., JSON file, database).
@@ -89,6 +90,53 @@ function setupSocketHandlers(io) {
                 socket.emit('operation_error', {
                     message: `Device with ID ${deviceId} not found for deletion.`,
                     deviceId: deviceId
+                });
+            }
+        });
+
+        // --- Layout Management ---
+        socket.on('layout:save', async ({ name, data }) => {
+            // console.log(`[Socket ${socket.id}] Received 'layout:save' for name: ${name}`);
+            try {
+                await layoutHandler.saveLayoutToFile(name, data);
+                socket.emit('layout:saved_ack', { success: true, name: name, message: `Layout '${name}' berhasil disimpan.` });
+            } catch (error) {
+                console.error(`Error saving layout '${name}':`, error);
+                socket.emit('operation_error', {
+                    message: `Gagal menyimpan layout '${name}'. Server error.`,
+                    details: error.message
+                });
+            }
+        });
+
+        socket.on('layout:load', async ({ name }) => {
+            // console.log(`[Socket ${socket.id}] Received 'layout:load' for name: ${name}`);
+            try {
+                const layoutData = await layoutHandler.loadLayoutFromFile(name);
+                if (layoutData) {
+                    socket.emit('layout:loaded_data', { name: name, data: layoutData });
+                } else {
+                    socket.emit('operation_error', { message: `Layout '${name}' tidak ditemukan.` });
+                }
+            } catch (error) {
+                console.error(`Error loading layout '${name}':`, error);
+                socket.emit('operation_error', {
+                    message: `Gagal memuat layout '${name}'. Server error.`,
+                    details: error.message
+                });
+            }
+        });
+
+        socket.on('layout:list', async () => {
+            // console.log(`[Socket ${socket.id}] Received 'layout:list' request`);
+            try {
+                const layoutNames = await layoutHandler.listLayoutFiles();
+                socket.emit('layout:list_results', layoutNames);
+            } catch (error) {
+                console.error('Error listing layouts:', error);
+                socket.emit('operation_error', {
+                    message: 'Gagal mendapatkan daftar layout. Server error.',
+                    details: error.message
                 });
             }
         });
