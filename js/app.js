@@ -68,7 +68,8 @@ window.addEventListener("load", () => {
         konvaRefs,                     // Initially empty, will be populated by konvaManager and passed back
         () => isSimulationMode,        // Function to get current simulation mode state
         setIsSimulationModeAndInterval, // Function to set simulation mode state
-        getDeviceById                  // Function from deviceManager to get device details
+        getDeviceById,                 // Function from deviceManager to get device details
+        ProjectManager                 // Teruskan ProjectManager
     );
 
     // 2. Konva Manager: Manages the Konva stage, layers, shapes, and interactions.
@@ -159,80 +160,8 @@ window.addEventListener("load", () => {
     if (undoBtn) undoBtn.addEventListener("click", smHandleUndo);
     if (redoBtn) redoBtn.addEventListener("click", smHandleRedo);
 
-    // --- Project Manager UI Event Listeners --- (Sebelumnya Layout Manager)
-    const newProjectBtn = document.getElementById('new-project-btn'); // ID diubah
-    const saveProjectBtn = document.getElementById('save-project-btn'); // ID diubah
-    const loadProjectBtn = document.getElementById('load-project-btn'); // ID diubah
-    const importProjectInput = document.getElementById('import-project-input'); // ID diubah
-    const importProjectBtn = document.getElementById('import-project-btn'); // ID diubah
-    const exportProjectBtn = document.getElementById('export-project-btn'); // ID diubah
-
-    if (newProjectBtn) {
-        newProjectBtn.addEventListener('click', () => {
-            ProjectManager.newProject();
-        });
-    }
-
-    if (saveProjectBtn) {
-        saveProjectBtn.addEventListener('click', async () => {
-            const currentName = ProjectManager.getCurrentProjectName();
-            const projectName = prompt("Masukkan nama untuk project ini:", currentName || "MyDefaultProject");
-            if (projectName) {
-                try {
-                    await ProjectManager.saveProjectToServer(projectName);
-                    alert(`Project '${projectName}' berhasil disimpan ke server.`);
-                } catch (error) {
-                    alert(`Gagal menyimpan project: ${error}`);
-                }
-            }
-        });
-    }
-
-    if (loadProjectBtn) {
-        loadProjectBtn.addEventListener('click', async () => {
-            try {
-                const availableProjects = await ProjectManager.getAvailableProjectsFromServer();
-                if (availableProjects && availableProjects.length > 0) {
-                    const projectToLoad = prompt(`Project yang tersedia:\n${availableProjects.join("\n")}\n\nMasukkan nama project yang ingin dimuat:`);
-                    if (projectToLoad) {
-                        await ProjectManager.loadProjectFromServer(projectToLoad);
-                        alert(`Project '${projectToLoad}' berhasil dimuat.`);
-                    }
-                } else {
-                    alert("Tidak ada project yang tersimpan di server.");
-                }
-            } catch (error) {
-                alert(`Gagal mendapatkan daftar project: ${error}`);
-            }
-        });
-    }
-
-    if (importProjectBtn && importProjectInput) {
-        importProjectBtn.addEventListener('click', () => {
-            importProjectInput.click();
-        });
-        importProjectInput.addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            if (file) {
-                ProjectManager.importProjectFromFile(file)
-                    .then(() => {
-                        // Pesan sukses sudah ada di dalam importProjectFromFile
-                    })
-                    .catch(error => {
-                        // Pesan error sudah ada di dalam importProjectFromFile
-                    });
-            }
-            event.target.value = null;
-        });
-    }
-
-    if (exportProjectBtn) {
-        exportProjectBtn.addEventListener('click', () => {
-            ProjectManager.exportProject();
-        });
-    }
-
     // --- Konfirmasi Sebelum Keluar Jika Ada Perubahan Belum Disimpan ---
+    // Event listener untuk project management buttons dipindahkan ke uiManager.js
     window.addEventListener('beforeunload', (event) => {
         if (ProjectManager.isProjectDirty()) { // Menggunakan ProjectManager dan nama fungsi baru
             // Standar browser memerlukan returnValue untuk di-set.

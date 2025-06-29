@@ -697,5 +697,23 @@
                 </div>
             </div>
         </div>
+
+        <!-- Modal untuk Load Project -->
+        <div id="load-project-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-[150] flex items-center justify-center p-4">
+            <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-cyan-300">Load Project</h2>
+                    <button id="close-load-project-modal-btn" class="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+                </div>
+                <div id="load-project-list-container" class="mb-4 max-h-60 overflow-y-auto">
+                    <!-- Daftar project akan diisi di sini oleh JavaScript -->
+                    <p class="text-gray-400 text-sm">Memuat daftar project...</p>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button id="cancel-load-project-btn" type="button" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Batal</button>
+                    <button id="confirm-load-project-btn" type="button" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Load</button>
+                </div>
+            </div>
+        </div>
     </body>
 </html>

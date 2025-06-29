@@ -31,6 +31,12 @@ let konvaSelectNodes; // Function from konvaManager to select nodes
 // Functions passed from app.js
 let getIsSimulationModeFunc;
 let setIsSimulationModeFunc;
+let projectManagerRef = null; // Referensi ke ProjectManager
+
+// Variabel untuk Modal Load Project
+let loadProjectModalEl, loadProjectListContainerEl, closeLoadProjectModalBtnEl,
+    cancelLoadProjectBtnEl, confirmLoadProjectBtnEl;
+let selectedProjectToLoad = null; // Menyimpan nama project yang dipilih di modal
 
 /**
  * Sets the Konva node currently targeted by the context menu.
@@ -77,11 +83,13 @@ export function initUiManager(
     kr, // konvaRefs are passed initially empty, then set via setKonvaRefs
     getSimModeFunc,
     setSimModeFunc,
-    getDeviceByIdFunc // Currently unused directly in setupEventListeners, but available
+    getDeviceByIdFunc, // Currently unused directly in setupEventListeners, but available
+    projectManager // Tambahkan projectManager sebagai parameter
 ) {
     konvaRefsForUi = kr; // Store initial (likely empty) konvaRefs
     getIsSimulationModeFunc = getSimModeFunc;
     setIsSimulationModeFunc = setSimModeFunc;
+    projectManagerRef = projectManager; // Simpan referensi ke ProjectManager
     // konvaHandleContextMenuClose and konvaSelectNodes will be set later if konvaRefs has them.
 
     // Cache all relevant DOM elements for performance and cleaner access
@@ -100,6 +108,13 @@ export function initUiManager(
     aiSettingsPanelEl = document.getElementById("ai-settings-panel");
     closeAiSettingsBtnEl = document.getElementById("close-ai-settings");
     geminiApiKeyInputEl = document.getElementById("gemini-api-key");
+
+    // Cache elemen Modal Load Project
+    loadProjectModalEl = document.getElementById('load-project-modal');
+    loadProjectListContainerEl = document.getElementById('load-project-list-container');
+    closeLoadProjectModalBtnEl = document.getElementById('close-load-project-modal-btn');
+    cancelLoadProjectBtnEl = document.getElementById('cancel-load-project-btn');
+    confirmLoadProjectBtnEl = document.getElementById('confirm-load-project-btn');
 
     isSimulationModeState = getIsSimulationModeFunc(); // Get initial simulation mode
 
@@ -564,4 +579,157 @@ function setupEventListeners() {
         geminiApiKeyInputEl.value = localStorage.getItem("geminiApiKey") || "";
         geminiApiKeyInputEl.addEventListener("change", (e) => localStorage.setItem("geminiApiKey", e.target.value));
     }
+
+    // --- Project Manager UI Event Listeners ---
+    const newProjectBtn = document.getElementById('new-project-btn');
+    const saveProjectBtn = document.getElementById('save-project-btn');
+    const loadProjectBtn = document.getElementById('load-project-btn');
+    const importProjectInput = document.getElementById('import-project-input');
+    const importProjectBtn = document.getElementById('import-project-btn');
+    const exportProjectBtn = document.getElementById('export-project-btn');
+
+    if (newProjectBtn && projectManagerRef) {
+        newProjectBtn.addEventListener('click', () => {
+            projectManagerRef.newProject();
+        });
+    }
+
+    if (saveProjectBtn && projectManagerRef) {
+        saveProjectBtn.addEventListener('click', async () => {
+            const currentName = projectManagerRef.getCurrentProjectName();
+            const projectName = prompt("Masukkan nama untuk project ini:", currentName || "MyDefaultProject");
+
+            if (projectName && projectName.trim() !== '') {
+                try {
+                    const availableProjects = await projectManagerRef.getAvailableProjectsFromServer();
+                    const projectExists = availableProjects.some(pName => pName.toLowerCase() === projectName.toLowerCase());
+
+                    if (projectExists) {
+                        if (!confirm(`Project dengan nama '${projectName}' sudah ada. Apakah Anda ingin menimpanya?`)) {
+                            alert("Penyimpanan dibatalkan.");
+                            return; // Batalkan jika pengguna tidak mau menimpa
+                        }
+                    }
+                    // Lanjutkan penyimpanan jika project tidak ada atau pengguna setuju untuk menimpa
+                    await projectManagerRef.saveProjectToServer(projectName);
+                    alert(`Project '${projectName}' berhasil disimpan ke server.`);
+                } catch (error) {
+                    alert(`Gagal menyimpan atau memeriksa project: ${error}`);
+                }
+            } else if (projectName !== null) { // Jika prompt tidak dibatalkan tapi input kosong
+                alert("Nama project tidak boleh kosong.");
+            }
+        });
+    }
+
+    if (loadProjectBtn && projectManagerRef) {
+        loadProjectBtn.addEventListener('click', () => { // Tidak perlu async lagi di sini
+            openLoadProjectModal(); // Panggil fungsi untuk membuka modal
+        });
+    }
+
+    if (importProjectBtn && importProjectInput && projectManagerRef) {
+        importProjectBtn.addEventListener('click', () => {
+            importProjectInput.click();
+        });
+        importProjectInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                projectManagerRef.importProjectFromFile(file)
+                    .then(() => {
+                        // Pesan sukses sudah ada di dalam importProjectFromFile
+                    })
+                    .catch(error => {
+                        // Pesan error sudah ada di dalam importProjectFromFile
+                    });
+            }
+            event.target.value = null;
+        });
+    }
+
+    if (exportProjectBtn && projectManagerRef) {
+        exportProjectBtn.addEventListener('click', () => {
+            projectManagerRef.exportProject();
+        });
+    }
+
+    // Event listener untuk tombol-tombol modal Load Project
+    if (closeLoadProjectModalBtnEl) {
+        closeLoadProjectModalBtnEl.addEventListener('click', hideLoadProjectModal);
+    }
+    if (cancelLoadProjectBtnEl) {
+        cancelLoadProjectBtnEl.addEventListener('click', hideLoadProjectModal);
+    }
+    if (confirmLoadProjectBtnEl && projectManagerRef) {
+        confirmLoadProjectBtnEl.addEventListener('click', async () => {
+            if (selectedProjectToLoad) {
+                try {
+                    await projectManagerRef.loadProjectFromServer(selectedProjectToLoad);
+                    alert(`Project '${selectedProjectToLoad}' berhasil dimuat.`);
+                    hideLoadProjectModal();
+                } catch (error) {
+                    alert(`Gagal memuat project '${selectedProjectToLoad}': ${error}`);
+                    // Modal bisa tetap terbuka atau ditutup tergantung preferensi
+                }
+            } else {
+                alert("Silakan pilih project untuk dimuat.");
+            }
+        });
+    }
+}
+
+function hideLoadProjectModal() {
+    if (loadProjectModalEl) {
+        loadProjectModalEl.classList.add('hidden');
+    }
+    selectedProjectToLoad = null; // Reset pilihan
+}
+
+async function openLoadProjectModal() {
+    if (!loadProjectModalEl || !loadProjectListContainerEl || !projectManagerRef) {
+        console.error("Elemen modal load project atau ProjectManager tidak tersedia.");
+        alert("Tidak bisa membuka dialog Load Project saat ini.");
+        return;
+    }
+
+    loadProjectListContainerEl.innerHTML = '<p class="text-gray-400 text-sm">Memuat daftar project...</p>';
+    if (confirmLoadProjectBtnEl) confirmLoadProjectBtnEl.disabled = true; // Nonaktifkan tombol load sampai ada pilihan
+
+    try {
+        const availableProjects = await projectManagerRef.getAvailableProjectsFromServer();
+        if (availableProjects && availableProjects.length > 0) {
+            let listHtml = '<ul class="space-y-1">';
+            availableProjects.forEach(projectName => {
+                listHtml += `
+                    <li>
+                        <label class="block p-2 rounded-md hover:bg-gray-700 cursor-pointer">
+                            <input type="radio" name="project-to-load" value="${projectName}" class="mr-2 project-load-radio">
+                            ${projectName}
+                        </label>
+                    </li>`;
+            });
+            listHtml += '</ul>';
+            loadProjectListContainerEl.innerHTML = listHtml;
+
+            // Tambahkan event listener ke radio buttons yang baru dibuat
+            const radioButtons = loadProjectListContainerEl.querySelectorAll('.project-load-radio');
+            radioButtons.forEach(radio => {
+                radio.addEventListener('change', (event) => {
+                    if (event.target.checked) {
+                        selectedProjectToLoad = event.target.value;
+                        if (confirmLoadProjectBtnEl) confirmLoadProjectBtnEl.disabled = false;
+                        // console.log("Project dipilih:", selectedProjectToLoad);
+                    }
+                });
+            });
+
+        } else {
+            loadProjectListContainerEl.innerHTML = '<p class="text-gray-400 text-sm">Tidak ada project yang tersimpan di server.</p>';
+        }
+    } catch (error) {
+        console.error("Gagal mendapatkan daftar project:", error);
+        loadProjectListContainerEl.innerHTML = `<p class="text-red-400 text-sm">Gagal mendapatkan daftar project: ${error}</p>`;
+    }
+
+    loadProjectModalEl.classList.remove('hidden');
 }
