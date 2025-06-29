@@ -512,6 +512,68 @@
 
         <script type="module" src="js/app.js"></script>
 
+        <!-- Modal for Variable Manager -->
+        <div id="variable-manager-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-[120] flex items-center justify-center p-4">
+            <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-4xl max-h-[90vh] flex flex-col">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 id="variable-manager-title" class="text-2xl font-bold text-cyan-300">Variable Manager</h2>
+                    <button id="close-variable-manager-modal" class="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+                </div>
+                <div class="overflow-x-auto flex-grow">
+                    <table class="min-w-full divide-y divide-gray-700">
+                        <thead class="bg-gray-700">
+                            <tr>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                    Nama Variabel
+                                </th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                    Data Type Setting
+                                </th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                    Subscribe Setting
+                                </th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                    Publish Setting
+                                </th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                    Actions
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="variable-list-tbody" class="bg-gray-800 divide-y divide-gray-700">
+                            <!-- Variable rows will be populated here by JavaScript -->
+                            <!-- Example Row (Remove or comment out after JS implementation) -->
+                            <!--
+                            <tr>
+                                <td class="px-4 py-3 whitespace-nowrap text-sm text-white">MotorSpeed</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-300">
+                                    <span class="font-semibold">Type:</span> number <br>
+                                    <span class="text-xs text-gray-400">Description: Kecepatan motor aktual</span>
+                                </td>
+                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-300">
+                                    <span class="font-semibold">Topic:</span> /device/motor/speed/actual <br>
+                                    <span class="text-xs text-gray-400">QoS: 1, JSONPath: data.value</span>
+                                </td>
+                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-300">
+                                    <span class="font-semibold">Topic:</span> /device/motor/speed/setpoint <br>
+                                    <span class="text-xs text-gray-400">QoS: 0, Retain: false</span>
+                                </td>
+                                <td class="px-4 py-3 whitespace-nowrap text-sm">
+                                    <button class="text-yellow-400 hover:text-yellow-300 text-xs">Edit</button>
+                                    <button class="text-red-400 hover:text-red-300 text-xs ml-2">Delete</button>
+                                </td>
+                            </tr>
+                            -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pt-4 mt-auto border-t border-gray-700 flex justify-end space-x-2">
+                    <button id="add-variable-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Tambah Variabel</button>
+                    <button id="close-variable-manager-modal-bottom" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Tutup</button>
+                </div>
+            </div>
+        </div>
+
         <!-- MQTT Topic Explorer Modal -->
         <div id="mqtt-topic-explorer-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-80 z-[150] flex items-center justify-center p-4">
             <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg max-h-[90vh] flex flex-col">
