@@ -890,7 +890,7 @@ function hideSaveProjectModal() {
     }
 }
 
-function openSaveProjectModal(currentName = '') {
+function openSaveProjectModal(currentName = '', isSaveAs = false) {
     if (!saveProjectModalEl || !saveProjectNameInputEl || !projectManagerRef) {
         console.error("Elemen modal save project atau ProjectManager tidak tersedia.");
         showToast("Tidak bisa membuka dialog Save Project saat ini.", 'error');
