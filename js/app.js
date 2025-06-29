@@ -17,7 +17,7 @@ import { componentFactory, initComponentFactory } from './componentFactory.js';
 import { initKonvaManager } from './konvaManager.js';
 import { initUiManager } from './uiManager.js';
 import { initDeviceManager, getDeviceById } from './deviceManager.js'; // getDeviceById is passed around
-import LayoutManager from './layoutManager.js'; // Import LayoutManager
+import ProjectManager from './projectManager.js'; // Import ProjectManager (nama baru)
 import { initAiAssistant } from './aiAssistant.js';
 import { initTopicExplorer } from './topicExplorer.js';
 
@@ -128,8 +128,8 @@ window.addEventListener("load", () => {
     // 6. Layout Manager: Handles saving, loading, etc., of HMI layouts.
     //    Dependencies: konvaRefs (melalui uiManagerRefs atau langsung), stateManager (akan ditambahkan), componentFactory, deviceSocket.
     //    Untuk saat ini, kita pass konvaRefs.getHmiLayoutAsJson yang ada di dalam konvaRefs.
-    //    stateManager tidak lagi di-pass karena fungsinya diimpor langsung oleh LayoutManager.
-    LayoutManager.init(
+    //    stateManager tidak lagi di-pass karena fungsinya diimpor langsung oleh ProjectManager.
+    ProjectManager.init( // Menggunakan ProjectManager
         konvaRefs,      // Berisi getHmiLayoutAsJson dan clearCanvas
         componentFactory, // componentFactory langsung
         deviceSocket    // Socket untuk komunikasi server
@@ -159,89 +159,85 @@ window.addEventListener("load", () => {
     if (undoBtn) undoBtn.addEventListener("click", smHandleUndo);
     if (redoBtn) redoBtn.addEventListener("click", smHandleRedo);
 
-    // --- Layout Manager UI Event Listeners ---
-    const newLayoutBtn = document.getElementById('new-layout-btn');
-    const saveLayoutBtn = document.getElementById('save-layout-btn');
-    const loadLayoutBtn = document.getElementById('load-layout-btn');
-    const importLayoutInput = document.getElementById('import-layout-input');
-    const importLayoutBtn = document.getElementById('import-layout-btn');
-    const exportLayoutBtn = document.getElementById('export-layout-btn');
+    // --- Project Manager UI Event Listeners --- (Sebelumnya Layout Manager)
+    const newProjectBtn = document.getElementById('new-project-btn'); // ID diubah
+    const saveProjectBtn = document.getElementById('save-project-btn'); // ID diubah
+    const loadProjectBtn = document.getElementById('load-project-btn'); // ID diubah
+    const importProjectInput = document.getElementById('import-project-input'); // ID diubah
+    const importProjectBtn = document.getElementById('import-project-btn'); // ID diubah
+    const exportProjectBtn = document.getElementById('export-project-btn'); // ID diubah
 
-    if (newLayoutBtn) {
-        newLayoutBtn.addEventListener('click', () => {
-            LayoutManager.newLayout();
+    if (newProjectBtn) {
+        newProjectBtn.addEventListener('click', () => {
+            ProjectManager.newProject();
         });
     }
 
-    if (saveLayoutBtn) {
-        saveLayoutBtn.addEventListener('click', async () => {
-            const currentName = LayoutManager.getCurrentLayoutName();
-            const layoutName = prompt("Masukkan nama untuk layout ini:", currentName || "MyLayout");
-            if (layoutName) {
+    if (saveProjectBtn) {
+        saveProjectBtn.addEventListener('click', async () => {
+            const currentName = ProjectManager.getCurrentProjectName();
+            const projectName = prompt("Masukkan nama untuk project ini:", currentName || "MyDefaultProject");
+            if (projectName) {
                 try {
-                    await LayoutManager.saveLayoutToServer(layoutName);
-                    alert(`Layout '${layoutName}' berhasil disimpan ke server.`);
+                    await ProjectManager.saveProjectToServer(projectName);
+                    alert(`Project '${projectName}' berhasil disimpan ke server.`);
                 } catch (error) {
-                    alert(`Gagal menyimpan layout: ${error}`);
+                    alert(`Gagal menyimpan project: ${error}`);
                 }
             }
         });
     }
 
-    if (loadLayoutBtn) {
-        loadLayoutBtn.addEventListener('click', async () => {
+    if (loadProjectBtn) {
+        loadProjectBtn.addEventListener('click', async () => {
             try {
-                const availableLayouts = await LayoutManager.getAvailableLayoutsFromServer();
-                if (availableLayouts && availableLayouts.length > 0) {
-                    // Sederhana: gunakan prompt. Untuk UI lebih baik, gunakan modal.
-                    const layoutToLoad = prompt(`Layout yang tersedia:\n${availableLayouts.join("\n")}\n\nMasukkan nama layout yang ingin dimuat:`);
-                    if (layoutToLoad) {
-                        await LayoutManager.loadLayoutFromServer(layoutToLoad);
-                        alert(`Layout '${layoutToLoad}' berhasil dimuat.`);
+                const availableProjects = await ProjectManager.getAvailableProjectsFromServer();
+                if (availableProjects && availableProjects.length > 0) {
+                    const projectToLoad = prompt(`Project yang tersedia:\n${availableProjects.join("\n")}\n\nMasukkan nama project yang ingin dimuat:`);
+                    if (projectToLoad) {
+                        await ProjectManager.loadProjectFromServer(projectToLoad);
+                        alert(`Project '${projectToLoad}' berhasil dimuat.`);
                     }
                 } else {
-                    alert("Tidak ada layout yang tersimpan di server.");
+                    alert("Tidak ada project yang tersimpan di server.");
                 }
             } catch (error) {
-                alert(`Gagal mendapatkan daftar layout: ${error}`);
+                alert(`Gagal mendapatkan daftar project: ${error}`);
             }
         });
     }
 
-    if (importLayoutBtn && importLayoutInput) {
-        importLayoutBtn.addEventListener('click', () => {
-            importLayoutInput.click(); // Memicu dialog pilih file
+    if (importProjectBtn && importProjectInput) {
+        importProjectBtn.addEventListener('click', () => {
+            importProjectInput.click();
         });
-        importLayoutInput.addEventListener('change', (event) => {
+        importProjectInput.addEventListener('change', (event) => {
             const file = event.target.files[0];
             if (file) {
-                LayoutManager.importLayoutFromFile(file)
+                ProjectManager.importProjectFromFile(file)
                     .then(() => {
-                        // Pesan sukses sudah ada di dalam importLayoutFromFile
-                        // alert(`Layout dari file '${file.name}' berhasil diimpor.`);
+                        // Pesan sukses sudah ada di dalam importProjectFromFile
                     })
                     .catch(error => {
-                        // Pesan error sudah ada di dalam importLayoutFromFile
-                        // alert(`Gagal mengimpor layout: ${error}`);
+                        // Pesan error sudah ada di dalam importProjectFromFile
                     });
             }
-            // Reset input file agar bisa memilih file yang sama lagi jika perlu
             event.target.value = null;
         });
     }
 
-    if (exportLayoutBtn) {
-        exportLayoutBtn.addEventListener('click', () => {
-            LayoutManager.exportLayout();
+    if (exportProjectBtn) {
+        exportProjectBtn.addEventListener('click', () => {
+            ProjectManager.exportProject();
         });
     }
 
     // --- Konfirmasi Sebelum Keluar Jika Ada Perubahan Belum Disimpan ---
     window.addEventListener('beforeunload', (event) => {
-        if (LayoutManager.isLayoutDirty()) {
+        if (ProjectManager.isProjectDirty()) { // Menggunakan ProjectManager dan nama fungsi baru
             // Standar browser memerlukan returnValue untuk di-set.
-            event.preventDefault(); // Sesuai standar MDN
-            event.returnValue = ''; // Diperlukan oleh beberapa browser (Chrome)
+            event.preventDefault();
+            event.returnValue = '';
             // Browser akan menampilkan dialog konfirmasi generik.
             // Pesan kustom tidak lagi didukung oleh kebanyakan browser modern.
         }

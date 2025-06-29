@@ -1071,3 +1071,89 @@ export function updateLiveVariableValueInManagerUI(deviceId, variableName, newVa
         }
     }
 }
+
+/**
+ * Mengembalikan array dari semua konfigurasi device yang ada di localDeviceCache.
+ * Ini digunakan untuk menyimpan state project.
+ * @returns {Array<object>} Array dari objek konfigurasi device.
+ */
+export function getAllDeviceConfigsForExport() {
+    // Membuat deep copy dari setiap objek konfigurasi untuk menghindari modifikasi tidak sengaja
+    // dan memastikan hanya data konfigurasi yang relevan (bukan state runtime) yang diekspor.
+    // localDeviceCache seharusnya sudah menyimpan konfigurasi murni.
+    try {
+        return JSON.parse(JSON.stringify(localDeviceCache));
+    } catch (error) {
+        console.error("Gagal membuat deep copy localDeviceCache:", error);
+        // Kembalikan salinan dangkal sebagai fallback, atau array kosong jika localDeviceCache tidak valid
+        return [...(localDeviceCache || [])];
+    }
+}
+
+/**
+ * Membersihkan semua device dari sisi klien.
+ * Mengosongkan localDeviceCache, menghapus state terkait,
+ * dan meminta penghapusan device di server.
+ */
+export function clearAllClientDevices() {
+    if (localDeviceCache && localDeviceCache.length > 0) {
+        // Salin array ID karena kita akan memodifikasi localDeviceCache saat iterasi
+        const deviceIdsToRemove = localDeviceCache.map(d => d.id);
+
+        deviceIdsToRemove.forEach(deviceId => {
+            // Hapus dari state manager klien
+            if (typeof deleteDeviceStateFromManager === 'function') {
+                deleteDeviceStateFromManager(deviceId);
+            }
+            // Minta penghapusan dari server
+            requestDeleteDevice(deviceId); // Fungsi ini sudah ada dan emit 'delete_device'
+        });
+
+        localDeviceCache = []; // Kosongkan cache lokal
+        console.log("Semua device telah dibersihkan dari klien dan permintaan hapus dikirim ke server.");
+    } else {
+        console.log("Tidak ada device di klien untuk dibersihkan.");
+    }
+    renderDeviceList(); // Perbarui UI Device Manager
+}
+
+/**
+ * Menginisialisasi atau mengganti semua device di klien berdasarkan array konfigurasi.
+ * Ini akan membersihkan device klien yang ada dan meminta server untuk menambahkan device baru.
+ * @param {Array<object>} deviceConfigsArray - Array dari objek konfigurasi device.
+ */
+export async function initializeDevicesFromConfigs(deviceConfigsArray) {
+    console.log("[DeviceManager] Menginisialisasi device dari konfigurasi:", deviceConfigsArray);
+
+    // 1. Bersihkan semua device yang ada di klien (ini juga akan mengirim delete request ke server)
+    clearAllClientDevices();
+
+    // Tunggu sebentar untuk memberi waktu server memproses delete request (opsional, tapi bisa membantu)
+    // await new Promise(resolve => setTimeout(resolve, 500)); // Misal 0.5 detik
+
+    // 2. Untuk setiap konfigurasi device baru, kirim 'add_device' ke server
+    // Server akan merespons dengan 'device_added' yang akan mengisi localDeviceCache
+    // dan memicu renderDeviceList.
+    if (socket && socket.connected) {
+        if (Array.isArray(deviceConfigsArray)) {
+            deviceConfigsArray.forEach(config => {
+                // Pastikan config memiliki ID, atau buat jika tidak ada (seharusnya sudah ada dari project file)
+                if (!config.id) {
+                    config.id = `device-${crypto.randomUUID()}`;
+                    console.warn("[DeviceManager] Device config tidak memiliki ID, ID baru dibuat:", config.id);
+                }
+                console.log(`[DeviceManager] Mengirim add_device ke server untuk config:`, config);
+                socket.emit('add_device', config);
+            });
+        }
+    } else {
+        console.error("[DeviceManager] Socket tidak terhubung. Tidak dapat menginisialisasi device dari configs.");
+        // Jika socket tidak terhubung, kita bisa mengisi localDeviceCache secara manual
+        // tapi ini tidak akan sinkron dengan server.
+        // localDeviceCache = Array.isArray(deviceConfigsArray) ? JSON.parse(JSON.stringify(deviceConfigsArray)) : [];
+        // renderDeviceList();
+        alert("Tidak dapat menginisialisasi device: Server tidak terhubung.");
+    }
+    // renderDeviceList() akan dipanggil oleh handler 'device_added' atau 'initial_device_list'
+    // atau bisa dipanggil di sini jika kita mengisi localDeviceCache secara manual saat offline.
+}

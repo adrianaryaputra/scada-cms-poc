@@ -4,7 +4,7 @@
  */
 
 import { updateLiveVariableValueInManagerUI } from './deviceManager.js';
-import LayoutManager from './layoutManager.js'; // Import LayoutManager
+import ProjectManager from './projectManager.js'; // Import ProjectManager (nama baru)
 
 // Module-level variables for state management
 let undoStack = []; // Stores snapshots of application state for undo operations
@@ -114,8 +114,8 @@ export function saveState() {
     redoStack = []; // Any new state change clears the redo stack
     updateUndoRedoButtons();
     // console.log("State saved. Undo stack size:", undoStack.length);
-    if (LayoutManager && typeof LayoutManager.setDirty === 'function') {
-        LayoutManager.setDirty(true);
+    if (ProjectManager && typeof ProjectManager.setDirty === 'function') { // Menggunakan ProjectManager
+        ProjectManager.setDirty(true);
     }
 }
 

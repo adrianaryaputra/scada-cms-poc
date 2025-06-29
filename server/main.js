@@ -4,7 +4,7 @@ const path = require('path');
 const http = require('http');
 const { Server } = require("socket.io");
 const { setupSocketHandlers } = require('./socketHandler'); // Import the socket handler
-const { ensureLayoutsDirExists } = require('./layoutHandler'); // Import dari layoutHandler
+const { ensureProjectsDirExists } = require('./projectHandler'); // Import dari projectHandler (nama baru)
 
 const app = express();
 const server = http.createServer(app);
@@ -29,11 +29,11 @@ app.get('/', (req, res) => {
 // Initialize Socket.IO handlers
 setupSocketHandlers(io);
 
-// Pastikan direktori layouts ada saat server startup
-ensureLayoutsDirExists().then(() => {
-    console.log("Verifikasi direktori layouts selesai.");
+// Pastikan direktori projects ada saat server startup
+ensureProjectsDirExists().then(() => { // Menggunakan nama fungsi baru
+    console.log("Verifikasi direktori projects selesai."); // Update log
 }).catch(error => {
-    console.error("Gagal memverifikasi/membuat direktori layouts pada startup:", error);
+    console.error("Gagal memverifikasi/membuat direktori projects pada startup:", error); // Update log
     // Pertimbangkan untuk menghentikan server jika direktori penting ini tidak bisa dibuat
     // process.exit(1);
 });
