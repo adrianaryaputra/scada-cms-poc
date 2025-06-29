@@ -14,7 +14,8 @@ let variableManagerModal, closeVariableManagerModal, variableManagerTitle, varia
 let variableFormModal, variableFormTitle, variableForm, cancelVariableFormBtn, saveVariableFormBtn,
     varFormDeviceId, varFormVarId, varFormName, varFormDataType, varFormDescription,
     varFormEnableSubscribe, varFormSubscribeOptions, varFormSubscribeTopic, varFormJsonPathSubscribe, varFormQosSubscribe,
-    varFormEnablePublish, varFormPublishOptions, varFormPublishTopic, varFormQosPublish, varFormRetainPublish;
+    varFormEnablePublish, varFormPublishOptions, varFormPublishTopic, varFormQosPublish, varFormRetainPublish,
+    varFormExploreTopicBtn; // Tombol Explore baru
 
 
 export function initDeviceManager(socketInstance) { // Parameter is already a socket instance
@@ -91,6 +92,7 @@ export function initDeviceManager(socketInstance) { // Parameter is already a so
     varFormPublishTopic = document.getElementById('var-form-publish-topic');
     varFormQosPublish = document.getElementById('var-form-qos-publish');
     varFormRetainPublish = document.getElementById('var-form-retain-publish');
+    varFormExploreTopicBtn = document.getElementById('var-form-explore-topic-btn');
 
 
     // Check if all crucial Modal and Form elements are found
@@ -156,6 +158,30 @@ export function initDeviceManager(socketInstance) { // Parameter is already a so
     if(varFormEnablePublish) varFormEnablePublish.addEventListener('change', (e) => {
         if(varFormPublishOptions) varFormPublishOptions.style.display = e.target.checked ? 'block' : 'none';
     });
+
+    if(varFormExploreTopicBtn) {
+        varFormExploreTopicBtn.addEventListener('click', () => {
+            const deviceId = varFormDeviceId.value;
+            const device = getDeviceById(deviceId);
+            if (device) {
+                // Prepare formElements for openTopicExplorer
+                // The topicExplorer is designed to update a 'row' or a set of specific input elements.
+                // We need to provide it with the correct input elements from the variable form modal.
+                const formElementsForExplorer = {
+                    // This structure mimics how it might have been used with a 'row' previously.
+                    // We are directly giving the input elements.
+                    querySelector: (selector) => {
+                        if (selector === '.variable-subscribe-topic') return varFormSubscribeTopic;
+                        if (selector === '.variable-jsonpath-subscribe') return varFormJsonPathSubscribe;
+                        return null;
+                    }
+                };
+                openTopicExplorer(deviceId, device.name, formElementsForExplorer, varFormSubscribeTopic.value);
+            } else {
+                alert("Device ID tidak ditemukan. Tidak bisa membuka Topic Explorer.");
+            }
+        });
+    }
 
 
     // Socket.IO event listeners
