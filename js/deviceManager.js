@@ -323,8 +323,20 @@ export function initDeviceManager(socketInstance, projectManagerSetDirtyFunc) { 
     });
 
     socket.on('operation_error', (error) => {
-        console.error('Server operation error:', error.message);
-        alert(`Server Error: ${error.message}`);
+        // Check if the error message specifically indicates a "device not found for deletion" scenario
+        if (error && error.message &&
+            (error.message.includes("not found for deletion") || error.message.includes("DEVICE_NOT_FOUND"))) { // Added common error code check
+            console.warn(`Server reported: ${error.message} - This is often benign during a clear operation.`);
+            // No alert for this specific case, as the device is already gone or wasn't there.
+        } else if (error && error.message) {
+            // For other errors, maintain existing behavior
+            console.error('Server operation error:', error.message);
+            alert(`Server Error: ${error.message}`);
+        } else {
+            // Fallback for unexpected error format
+            console.error('Received an undefined server operation error:', error);
+            alert('An unspecified server error occurred.');
+        }
     });
 
     renderDeviceList(); // Initial render
