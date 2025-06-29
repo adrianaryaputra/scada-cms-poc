@@ -181,37 +181,55 @@ const ProjectManager = { // Rename objek
                 removeListeners();
             };
 
-            const errorListener = (serverError) => { // serverError bisa berupa objek
-                let detailedMessage = 'Gagal menyimpan project.';
+            const operationDescription = "menyimpan project"; // Context for logging
+
+            const errorListener = (serverError) => {
+                let errorMessageText = '';
+                if (typeof serverError === 'object' && serverError.message) {
+                    errorMessageText = serverError.message;
+                } else if (typeof serverError === 'string') {
+                    errorMessageText = serverError;
+                }
+
+                if (errorMessageText.includes("not found for deletion") || errorMessageText.includes("DEVICE_NOT_FOUND")) {
+                    console.warn(`[ProjectManager ${operationDescription}] Benign server notice: ${errorMessageText}. Operation may still succeed.`);
+                    // Do not reject the promise for this specific error.
+                    // removeListeners() will be called by ackListener or timeout.
+                    return;
+                }
+
+                let detailedMessage = `Gagal ${operationDescription}.`;
                 if (typeof serverError === 'object' && serverError.message) {
                     detailedMessage = serverError.message;
                     if (serverError.code) detailedMessage += ` (Kode: ${serverError.code})`;
                 } else if (typeof serverError === 'string') {
-                    detailedMessage = serverError; // Untuk error non-objek atau timeout
+                    detailedMessage = serverError;
                 }
-                console.error('Error dari server saat menyimpan project:', serverError);
-                reject(detailedMessage); // Reject dengan pesan yang sudah diproses
+
+                console.error(`Error dari server saat ${operationDescription}:`, serverError);
+                reject(detailedMessage);
                 removeListeners();
             };
 
             const removeListeners = () => {
                 socketRef.off('project:saved_ack', ackListener);
-                socketRef.off('operation_error', errorListener); // Tetap listen ke operation_error umum
+                socketRef.off('operation_error', projectSaveOperationErrorListener);
+            };
+
+            // Define a specific listener for operation_error for this save operation
+            const projectSaveOperationErrorListener = (err) => {
+                // Only call the main errorListener if the error is general or specifically for 'project:save'
+                // This prevents other module's operation_errors (like deviceManager's) from incorrectly failing the save.
+                if (err && (!err.operation || err.operation === 'project:save')) {
+                    errorListener(err);
+                } else if (err && err.operation) {
+                    // Log other operation errors but don't let them fail the save operation itself
+                    console.warn(`[ProjectManager Save] Ignoring unrelated operation_error during save: ${err.message} (Operation: ${err.operation})`);
+                }
             };
 
             socketRef.on('project:saved_ack', ackListener);
-            // Handler operation_error umum akan menangkap error yang dikirim server
-            socketRef.on('operation_error', (err) => {
-                // Kita hanya tertarik pada error yang relevan dengan operasi ini.
-                // Idealnya, server mengirim error dengan ID request atau menggunakan callback emit.
-                // Untuk sekarang, kita asumsikan error ini relevan jika tidak ada ack.
-                // Atau, kita bisa filter berdasarkan err.operation jika ada.
-                if (err && err.operation === 'project:save') {
-                    errorListener(err);
-                } else if (err && !err.operation) { // Error umum tanpa konteks operasi
-                    errorListener(err.message || 'Unknown server error');
-                }
-            });
+            socketRef.on('operation_error', projectSaveOperationErrorListener);
 
             const timeoutId = setTimeout(() => {
                 console.error("Timeout saat menyimpan project. Tidak ada respons dari server.");
@@ -276,32 +294,56 @@ const ProjectManager = { // Rename objek
                 cleanup();
             };
 
+            const operationDescription = `memuat project '${projectName}'`; // Context for logging
+
             const errorListener = (serverError) => {
-                let detailedMessage = `Gagal memuat project '${projectName}'.`;
+                let errorMessageText = '';
                 if (typeof serverError === 'object' && serverError.message) {
+                    errorMessageText = serverError.message;
+                } else if (typeof serverError === 'string') {
+                    errorMessageText = serverError;
+                }
+
+                if (errorMessageText.includes("not found for deletion") || errorMessageText.includes("DEVICE_NOT_FOUND")) {
+                    console.warn(`[ProjectManager ${operationDescription}] Benign server notice: ${errorMessageText}. Operation may still succeed.`);
+                    // Do not reject the promise for this specific error.
+                    // cleanup() will be called by dataListener or timeout.
+                    // We should ensure this specific operation_error listener is removed or ignored for future events for this load.
+                    // However, the main 'removeListeners' in cleanup() handles all listeners for this operation.
+                    return;
+                }
+
+                let detailedMessage = `Gagal ${operationDescription}.`;
+                 if (typeof serverError === 'object' && serverError.message) {
+                    // Use server's message directly if it's more specific, otherwise keep the generic one.
                     detailedMessage = serverError.message;
-                    if (serverError.code === 'PROJECT_NOT_FOUND') { // Contoh penanganan kode spesifik
-                        // Pesan sudah cukup jelas dari server.
+                    if (serverError.code === 'PROJECT_NOT_FOUND') {
+                        // Message is already specific enough.
                     } else if (serverError.code) {
                         detailedMessage += ` (Kode: ${serverError.code})`;
                     }
                 } else if (typeof serverError === 'string') {
                     detailedMessage = serverError;
                 }
-                console.error(`Error dari server saat memuat project '${projectName}':`, serverError);
+
+                console.error(`Error dari server saat ${operationDescription}:`, serverError);
                 reject(detailedMessage);
-                cleanup();
+                cleanup(); // This already calls removeListeners
+            };
+
+            // Define a specific listener for operation_error for this load operation
+            const projectLoadOperationErrorListener = (err) => {
+                // Only call the main errorListener if the error is general or specifically for 'project:load'
+                if (err && (!err.operation || err.operation === 'project:load')) {
+                    errorListener(err);
+                } else if (err && err.operation) {
+                    // Log other operation errors but don't let them fail the load operation itself
+                     console.warn(`[ProjectManager Load] Ignoring unrelated operation_error during load: ${err.message} (Operation: ${err.operation})`);
+                }
             };
 
             socketRef.on('project:loaded_data', dataListener);
-            // Menyesuaikan listener 'operation_error' untuk lebih spesifik
-            socketRef.on('operation_error', (err) => {
-                if (err && err.operation === 'project:load') {
-                    errorListener(err);
-                } else if (err && !err.operation) {
-                    errorListener(err.message || 'Unknown server error on load');
-                }
-            });
+            socketRef.on('operation_error', projectLoadOperationErrorListener); // Use the new specific listener
 
             try {
                 socketRef.emit('project:load', { name: projectName });
