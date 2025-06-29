@@ -5,6 +5,7 @@ const {
     getAllDeviceInstances,
     removeDevice
 } = require('./deviceManager'); // Updated import path
+const projectHandler = require('./projectHandler'); // Impor projectHandler (nama baru)
 
 // In-memory store for device configurations.
 // TODO: Replace with a persistent storage solution (e.g., JSON file, database).
@@ -93,17 +94,112 @@ function setupSocketHandlers(io) {
             }
         });
 
+        // --- Project Management --- (Sebelumnya Layout Management)
+        socket.on('project:save', async ({ name, data }) => { // Event diubah ke 'project:save'
+            // console.log(`[Socket ${socket.id}] Received 'project:save' for name: ${name}`);
+            try {
+                await projectHandler.saveProjectToFile(name, data);
+                socket.emit('project:saved_ack', { success: true, name: name, message: `Project '${name}' berhasil disimpan.` });
+            } catch (error) {
+                console.error(`Error saving project '${name}':`, error);
+                socket.emit('operation_error', {
+                    operation: 'project:save', // Konteks operasi
+                    code: error.code || 'SERVER_ERROR', // Kode error dari projectHandler atau default
+                    message: error.message || `Gagal menyimpan project '${name}'.`, // Pesan dari projectHandler atau default
+                    details: { projectName: name, originalError: error.originalError ? error.originalError.message : error.message }
+                });
+            }
+        });
+
+        socket.on('project:load', async ({ name }) => {
+            // console.log(`[Socket ${socket.id}] Received 'project:load' for name: ${name}`);
+            try {
+                const projectData = await projectHandler.loadProjectFromFile(name);
+                // Jika projectData tidak ditemukan, loadProjectFromFile akan melempar error dengan code PROJECT_NOT_FOUND
+
+                console.log(`[SocketHandler] Project '${name}' loaded. Re-initializing all server-side devices based on project file.`);
+
+                // 1. Stop and remove all currently active device instances on the server
+                const allCurrentInstances = getAllDeviceInstances(); // from serverDeviceManager
+                allCurrentInstances.forEach(instance => {
+                    removeDevice(instance.id); // from serverDeviceManager
+                });
+                // At this point, serverDeviceManager.activeDevices should be empty.
+
+                // 2. Clear and set the new canonical list of device configurations for this handler's context
+                // This serverSideDeviceConfigs is used by other handlers like 'add_device', 'edit_device'
+                // and as a reference for building initial_device_list.
+                // It needs to reflect the state of the loaded project.
+                serverSideDeviceConfigs = projectData.deviceConfigs ? JSON.parse(JSON.stringify(projectData.deviceConfigs)) : [];
+                // TODO: Consider if serverSideDeviceConfigs should be persisted to a file if it's the master list.
+                // For now, it's an in-memory reflection of the last loaded/modified set of configs.
+
+                // 3. Initialize all devices based on the new configurations
+                // initializeDevice in server/deviceManager.js now handles removing an old instance if ID exists,
+                // then creates a new one. Since we cleared activeDevices above, these will all be new creations.
+                serverSideDeviceConfigs.forEach(deviceConfig => {
+                    initializeDevice(deviceConfig, io); // from serverDeviceManager
+                });
+
+                // 4. Emit the new complete list to the client that requested the load
+                const devicesForClient = serverSideDeviceConfigs.map(devConfig => {
+                    const liveInstance = getDeviceInstance(devConfig.id); // from serverDeviceManager
+                    return {
+                        ...devConfig, // This is the authoritative config from the loaded project
+                        connected: liveInstance ? liveInstance.connected : false,
+                        // Variables should ideally come from devConfig as it's the source of truth from the file
+                        variables: devConfig.variables || []
+                    };
+                });
+                socket.emit('initial_device_list', devicesForClient);
+                socket.emit('project:loaded_data', { name: name, data: projectData });
+
+            } catch (error) {
+                console.error(`Error loading project '${name}':`, error);
+                socket.emit('operation_error', {
+                    operation: 'project:load',
+                    code: error.code || 'SERVER_ERROR',
+                    message: error.message || `Gagal memuat project '${name}'.`,
+                    details: { projectName: name, originalError: error.originalError ? error.originalError.message : error.message }
+                });
+            }
+        });
+
+        socket.on('project:list', async () => {
+            // console.log(`[Socket ${socket.id}] Received 'project:list' request`);
+            try {
+                const projectNames = await projectHandler.listProjectFiles();
+                socket.emit('project:list_results', projectNames);
+            } catch (error) {
+                console.error('Error listing projects:', error);
+                socket.emit('operation_error', {
+                    operation: 'project:list',
+                    code: error.code || 'SERVER_ERROR',
+                    message: error.message || 'Gagal mendapatkan daftar project.',
+                    details: { originalError: error.originalError ? error.originalError.message : error.message }
+                });
+            }
+        });
+
         // --- Device Interaction ---
 
         socket.on('request_device_data', (deviceId) => {
             // console.log(`[Socket ${socket.id}] Received 'request_device_data' for device: ${deviceId}`);
             const device = getDeviceInstance(deviceId);
-            if (device && typeof device.readData === 'function') {
-                // This is primarily for polled devices. MQTT devices push data automatically.
-                // The readData method in the device should handle emitting data via socket.
-                device.readData();
-            } else if (device) {
-                console.warn(`[SocketHandler] Device ${deviceId} (${device.type}) does not have a readData method or is not a polled type.`);
+            if (device) {
+                if (device.isInternal) {
+                    console.log(`[SocketHandler] 'request_device_data' ignored for Internal Device: ${deviceId}`);
+                    // Optionally, notify client that this operation is not applicable
+                    // socket.emit('operation_error', { message: `Data request not applicable for Internal Device ${deviceId}.`});
+                    return; // Stop further processing
+                }
+                if (typeof device.readData === 'function') {
+                    // This is primarily for polled devices. MQTT devices push data automatically.
+                    // The readData method in the device should handle emitting data via socket.
+                    device.readData();
+                } else {
+                    console.warn(`[SocketHandler] Device ${deviceId} (${device.type}) does not have a readData method or is not a polled type.`);
+                }
             } else {
                  socket.emit('operation_error', { message: `Device ${deviceId} not found for data request.`});
             }
@@ -114,12 +210,42 @@ function setupSocketHandlers(io) {
             const { deviceId, variableName, address, value } = data;
             const device = getDeviceInstance(deviceId);
 
-            if (device && device.connected) {
+            if (!device) {
+                socket.emit('operation_error', {
+                    message: `Device ${deviceId} not found. Cannot write.`,
+                    details: { deviceId }
+                });
+                return;
+            }
+
+            // Handle Internal Devices separately
+            if (device.isInternal) {
+                if (variableName !== undefined && value !== undefined) {
+                    console.log(`[SocketHandler] Internal Device ${deviceId} variable ${variableName} set to ${value} by ${socket.id}`);
+                    // Emit to all clients in the namespace so their stateManagers can update tagDatabase
+                    deviceNamespace.emit('device_variable_update', {
+                        deviceId,
+                        variableName,
+                        value,
+                        timestamp: new Date().toISOString()
+                    });
+                    // TODO: Persist this change if internal variable values need to be saved on the server.
+                    // This would involve updating serverSideDeviceConfigs[index].variables or a similar mechanism.
+                } else {
+                    socket.emit('operation_error', {
+                        message: `For Internal Device, 'variableName' and 'value' must be provided for 'write_to_device'.`,
+                        details: { deviceId }
+                    });
+                }
+                return; // Stop further processing for internal device
+            }
+
+            // For non-internal devices, proceed with existing logic
+            if (device.connected) {
                 if (variableName && typeof device.writeVariable === 'function') {
                     device.writeVariable(variableName, value);
                 } else if (address && typeof device.writeData === 'function') {
-                    // Fallback for devices that use direct address writing (e.g., Modbus)
-                    device.writeData(address, value);
+                    device.writeData(address, value); // Fallback for direct address writing
                 } else {
                     console.warn(`[SocketHandler] Device ${deviceId} (${device.type}) does not support the required write method (writeVariable or writeData).`);
                     socket.emit('operation_error', {
@@ -129,8 +255,8 @@ function setupSocketHandlers(io) {
                 }
             } else {
                 socket.emit('operation_error', {
-                    message: `Device ${deviceId} not found or not connected. Cannot write.`,
-                    details: { deviceId, connected: device?.connected }
+                    message: `Device ${deviceId} not connected. Cannot write.`,
+                    details: { deviceId, connected: device.connected }
                 });
             }
         });

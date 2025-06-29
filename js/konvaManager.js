@@ -2,7 +2,7 @@ import { GRID_SIZE } from './config.js';
 import { saveState, getCurrentState } from './stateManager.js'; // Untuk context menu save
 
 // Variabel-variabel ini akan dikelola dalam modul ini
-let stage, layer, tr, guideLayer;
+let stage, layer, tr, guideLayer, gridLayer;
 let selectionRectangle;
 let x1, y1;
 let dragStartPositions = null; // Dikelola di sini
@@ -56,9 +56,11 @@ export function initKonvaManager(
         height: containerEl.clientHeight,
     });
 
+    gridLayer = new Konva.Layer();
     layer = new Konva.Layer();
     guideLayer = new Konva.Layer();
-    stage.add(layer, guideLayer);
+    stage.add(gridLayer, layer, guideLayer);
+    drawGrid();
 
     tr = new Konva.Transformer({
         keepRatio: true, // Default, akan diubah oleh selectNodes jika perlu
@@ -70,13 +72,49 @@ export function initKonvaManager(
         if (stage && containerEl) {
             stage.width(containerEl.clientWidth);
             stage.height(containerEl.clientHeight);
+            drawGrid();
         }
     }).observe(containerEl);
 
     setupEventListeners();
 
     // Ekspor referensi yang mungkin dibutuhkan oleh modul lain (seperti componentFactory)
-    return { stage, layer, tr, guideLayer, getDragStartPositions, setDragStartPositions, clearDragStartPositions, handleDragMove };
+    return {
+        stage,
+        layer,
+        tr,
+        guideLayer,
+        getDragStartPositions,
+        setDragStartPositions,
+        clearDragStartPositions,
+        handleDragMove,
+        getHmiLayoutAsJson, // Ditambahkan dari langkah sebelumnya
+        clearCanvas         // Ditambahkan sekarang
+    };
+}
+
+function drawGrid(dotted = false) {
+    gridLayer.destroyChildren();
+    const width = stage.width();
+    const height = stage.height();
+
+    for (let i = 0; i < width / GRID_SIZE; i++) {
+        gridLayer.add(new Konva.Line({
+            points: [Math.round(i * GRID_SIZE) + 0.5, 0, Math.round(i * GRID_SIZE) + 0.5, height],
+            stroke: "rgba(255, 255, 255, 0.1)",
+            strokeWidth: 1,
+            dash: dotted ? [1, 19] : [],
+        }));
+    }
+
+    for (let i = 0; i < height / GRID_SIZE; i++) {
+        gridLayer.add(new Konva.Line({
+            points: [0, Math.round(i * GRID_SIZE) + 0.5, width, Math.round(i * GRID_SIZE) + 0.5],
+            stroke: "rgba(255, 255, 255, 0.1)",
+            strokeWidth: 1,
+            dash: dotted ? [1, 19] : [],
+        }));
+    }
 }
 
 function getDragStartPositions() {
@@ -223,12 +261,12 @@ function setupEventListeners() {
         if (e.key !== "Shift" || isSimulationModeFunc()) return;
         const activeEl = document.activeElement;
         if (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA") return;
-        if (containerEl) containerEl.classList.add("dotted-grid");
+        drawGrid(true); // Draw dotted grid
     });
 
     window.addEventListener("keyup", (e) => {
         if (e.key === "Shift") {
-            if (containerEl) containerEl.classList.remove("dotted-grid");
+            drawGrid(false); // Draw solid grid
         }
     });
 
@@ -319,3 +357,73 @@ export function getLayer() { return layer; }
 export function getTransformer() { return tr; }
 export function getGuideLayer() { return guideLayer; }
 export function getStage() { return stage; }
+
+// Fungsi untuk mendapatkan konfigurasi HMI sebagai JSON
+export function getHmiLayoutAsJson() {
+    if (!layer) { // Menggunakan 'layer' yang sudah didefinisikan di scope modul
+        console.error("Layer Konva belum diinisialisasi di konvaManager.");
+        return [];
+    }
+
+    const components = [];
+    // Temukan semua node yang merupakan komponen HMI.
+    // Asumsi semua komponen HMI memiliki nama 'hmi-component'.
+    const hmiNodes = layer.find('.hmi-component');
+
+    hmiNodes.forEach(node => {
+        // Buat salinan dari attrs untuk menghindari modifikasi objek asli secara tidak sengaja
+        // dan untuk memastikan kita hanya menyimpan data yang relevan.
+        const nodeAttrs = { ...node.attrs };
+
+        // Atribut dasar yang selalu ada
+        const componentData = {
+            id: node.id(),
+            x: node.x(),
+            y: node.y(),
+            componentType: nodeAttrs.componentType, // Pastikan ini selalu ada
+        };
+
+        // Hapus atribut yang tidak perlu atau yang sudah diekstrak secara eksplisit
+        delete nodeAttrs.draggable; // Diatur oleh mode/seleksi
+        delete nodeAttrs.name;      // 'hmi-component' hanya untuk seleksi
+
+        // Gabungkan sisa atribut yang relevan
+        // Ini akan mencakup hal-hal seperti label, deviceId, variableName, warna, teks, dll.
+        // yang disimpan di attrs oleh componentFactory atau diubah via context menu.
+        for (const key in nodeAttrs) {
+            // Hindari menyalin atribut internal Konva atau yang sangat besar jika ada
+            // Untuk saat ini, kita salin semua yang ada di attrs selain yang sudah dihapus.
+            // Jika ada masalah dengan ukuran atau data yang tidak relevan, filter lebih lanjut bisa ditambahkan di sini.
+            if (Object.hasOwnProperty.call(nodeAttrs, key) && componentData[key] === undefined) {
+                componentData[key] = nodeAttrs[key];
+            }
+        }
+
+        if (!componentData.componentType) {
+            console.warn(`Node ${node.id()} tidak memiliki componentType di attrs. Komponen ini mungkin tidak bisa dimuat ulang dengan benar.`);
+            // Pertimbangkan untuk tidak memasukkan komponen ini jika componentType tidak ada
+            // return; // Melewatkan node ini
+        }
+
+        components.push(componentData);
+    });
+
+    return components;
+}
+
+// Fungsi untuk membersihkan semua komponen HMI dari canvas
+export function clearCanvas() {
+    if (!layer || !tr) {
+        console.error("Layer atau Transformer Konva belum diinisialisasi.");
+        return;
+    }
+    // Hapus semua node yang merupakan hmi-component
+    layer.find('.hmi-component').forEach(node => {
+        node.destroy();
+    });
+    // Kosongkan transformer
+    tr.nodes([]);
+    // Gambar ulang layer untuk mencerminkan perubahan
+    layer.batchDraw();
+    console.log("Canvas HMI telah dibersihkan.");
+}
