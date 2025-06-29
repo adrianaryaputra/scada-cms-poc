@@ -117,35 +117,44 @@ function setupSocketHandlers(io) {
                 const projectData = await projectHandler.loadProjectFromFile(name);
                 // Jika projectData tidak ditemukan, loadProjectFromFile akan melempar error dengan code PROJECT_NOT_FOUND
 
-                console.log(`[SocketHandler] Project '${name}' loaded. Re-initializing server-side devices.`);
-                const currentActiveDeviceIds = getAllDeviceInstances().map(d => d.id);
-                const newDeviceConfigIds = projectData.deviceConfigs ? projectData.deviceConfigs.map(dc => dc.id) : [];
+                console.log(`[SocketHandler] Project '${name}' loaded. Re-initializing all server-side devices based on project file.`);
 
-                currentActiveDeviceIds.forEach(existingId => {
-                    if (!newDeviceConfigIds.includes(existingId)) {
-                        removeDevice(existingId);
-                    }
+                // 1. Stop and remove all currently active device instances on the server
+                const allCurrentInstances = getAllDeviceInstances(); // from serverDeviceManager
+                allCurrentInstances.forEach(instance => {
+                    removeDevice(instance.id); // from serverDeviceManager
+                });
+                // At this point, serverDeviceManager.activeDevices should be empty.
+
+                // 2. Clear and set the new canonical list of device configurations for this handler's context
+                // This serverSideDeviceConfigs is used by other handlers like 'add_device', 'edit_device'
+                // and as a reference for building initial_device_list.
+                // It needs to reflect the state of the loaded project.
+                serverSideDeviceConfigs = projectData.deviceConfigs ? JSON.parse(JSON.stringify(projectData.deviceConfigs)) : [];
+                // TODO: Consider if serverSideDeviceConfigs should be persisted to a file if it's the master list.
+                // For now, it's an in-memory reflection of the last loaded/modified set of configs.
+
+                // 3. Initialize all devices based on the new configurations
+                // initializeDevice in server/deviceManager.js now handles removing an old instance if ID exists,
+                // then creates a new one. Since we cleared activeDevices above, these will all be new creations.
+                serverSideDeviceConfigs.forEach(deviceConfig => {
+                    initializeDevice(deviceConfig, io); // from serverDeviceManager
                 });
 
-                if (projectData.deviceConfigs && Array.isArray(projectData.deviceConfigs)) {
-                    projectData.deviceConfigs.forEach(deviceConfig => {
-                        initializeDevice(deviceConfig, io);
-                    });
-                }
-
-                const updatedActiveDevices = getAllDeviceInstances().map(devInstance => {
-                    const config = devInstance.isInternal ? devInstance : serverSideDeviceConfigs.find(c => c.id === devInstance.id) || devInstance.config;
+                // 4. Emit the new complete list to the client that requested the load
+                const devicesForClient = serverSideDeviceConfigs.map(devConfig => {
+                    const liveInstance = getDeviceInstance(devConfig.id); // from serverDeviceManager
                     return {
-                        ...(config || {}),
-                        id: devInstance.id, name: devInstance.name, type: devInstance.type,
-                        connected: devInstance.connected || false,
-                        variables: devInstance.variables || (config ? config.variables : [])
+                        ...devConfig, // This is the authoritative config from the loaded project
+                        connected: liveInstance ? liveInstance.connected : false,
+                        // Variables should ideally come from devConfig as it's the source of truth from the file
+                        variables: devConfig.variables || []
                     };
                 });
-                socket.emit('initial_device_list', updatedActiveDevices);
+                socket.emit('initial_device_list', devicesForClient);
                 socket.emit('project:loaded_data', { name: name, data: projectData });
 
-            } catch (error) { // Menangkap error dari projectHandler.loadProjectFromFile
+            } catch (error) {
                 console.error(`Error loading project '${name}':`, error);
                 socket.emit('operation_error', {
                     operation: 'project:load',
