@@ -69,6 +69,7 @@ class Device {
      */
     _emitVariableUpdateToSocket(variableName, value) {
         if (this.io) {
+            console.log(`[Device: ${this.name}] Attempting to emit 'device_variable_update' for var '${variableName}'. IO available.`); // DEBUG LOG
             this.io.of('/devices').emit('device_variable_update', {
                 deviceId: this.id,
                 variableName: variableName,
@@ -76,7 +77,7 @@ class Device {
                 timestamp: new Date().toISOString()
             });
         } else {
-            console.warn(`[${this.name}] Socket.IO instance (this.io) not available. Cannot emit device_variable_update.`);
+            console.warn(`[Device: ${this.name}] Socket.IO instance (this.io) not available. Cannot emit device_variable_update for var '${variableName}'.`);
         }
     }
 
