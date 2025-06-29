@@ -8,7 +8,14 @@ let socket = null;
 // DOM Elements
 let deviceManagerModal, closeDeviceManagerModal, addDeviceBtn, deviceList;
 let deviceFormModal, deviceForm, deviceFormTitle, cancelDeviceForm, deviceIdInput, deviceNameInput, deviceTypeInput, mqttFields, modbusTcpFields, modbusRtuFields;
-let variableManagerModal, closeVariableManagerModal, variableManagerTitle, variableListTbody, addVariableBtn, closeVariableManagerModalBottom;
+let variableManagerModal, closeVariableManagerModal, variableManagerTitle, variableListTbody, addNewVariableBtnInVarManager, closeVariableManagerModalBottom;
+
+// Variable Form Modal Elements
+let variableFormModal, variableFormTitle, variableForm, cancelVariableFormBtn, saveVariableFormBtn,
+    varFormDeviceId, varFormVarId, varFormName, varFormDataType, varFormDescription,
+    varFormEnableSubscribe, varFormSubscribeOptions, varFormSubscribeTopic, varFormJsonPathSubscribe, varFormQosSubscribe,
+    varFormEnablePublish, varFormPublishOptions, varFormPublishTopic, varFormQosPublish, varFormRetainPublish;
+
 
 export function initDeviceManager(socketInstance) { // Parameter is already a socket instance
     if (!socketInstance || typeof socketInstance.on !== 'function' || typeof socketInstance.emit !== 'function') {
@@ -60,13 +67,35 @@ export function initDeviceManager(socketInstance) { // Parameter is already a so
     closeVariableManagerModal = document.getElementById('close-variable-manager-modal');
     variableManagerTitle = document.getElementById('variable-manager-title');
     variableListTbody = document.getElementById('variable-list-tbody');
-    addVariableBtn = document.getElementById('add-variable-btn'); // Button to add new var in Variable Manager
+    addNewVariableBtnInVarManager = document.getElementById('add-new-variable-btn');
     closeVariableManagerModalBottom = document.getElementById('close-variable-manager-modal-bottom');
+
+    // Cache Variable Form Modal Elements
+    variableFormModal = document.getElementById('variable-form-modal');
+    variableFormTitle = document.getElementById('variable-form-title');
+    variableForm = document.getElementById('variable-form');
+    cancelVariableFormBtn = document.getElementById('cancel-variable-form');
+    saveVariableFormBtn = document.getElementById('save-variable-form');
+    varFormDeviceId = document.getElementById('variable-form-device-id');
+    varFormVarId = document.getElementById('variable-form-var-id');
+    varFormName = document.getElementById('var-form-name');
+    varFormDataType = document.getElementById('var-form-datatype');
+    varFormDescription = document.getElementById('var-form-description');
+    varFormEnableSubscribe = document.getElementById('var-form-enable-subscribe');
+    varFormSubscribeOptions = document.getElementById('var-form-subscribe-options');
+    varFormSubscribeTopic = document.getElementById('var-form-subscribe-topic');
+    varFormJsonPathSubscribe = document.getElementById('var-form-jsonpath-subscribe');
+    varFormQosSubscribe = document.getElementById('var-form-qos-subscribe');
+    varFormEnablePublish = document.getElementById('var-form-enable-publish');
+    varFormPublishOptions = document.getElementById('var-form-publish-options');
+    varFormPublishTopic = document.getElementById('var-form-publish-topic');
+    varFormQosPublish = document.getElementById('var-form-qos-publish');
+    varFormRetainPublish = document.getElementById('var-form-retain-publish');
 
 
     // Check if all crucial Modal and Form elements are found
-    if (!deviceManagerModal || !deviceFormModal || !deviceList || !deviceForm || !variableManagerModal) {
-        console.error("One or more crucial UI elements for Device Manager or Variable Manager are missing from the DOM.");
+    if (!deviceManagerModal || !deviceFormModal || !deviceList || !deviceForm || !variableManagerModal || !variableFormModal) {
+        console.error("One or more crucial UI elements for Device Manager, Variable Manager or Variable Form are missing from the DOM.");
         const deviceManagerBtn = document.getElementById('device-manager-btn');
         if(deviceManagerBtn) {
              deviceManagerBtn.textContent = "Device/Var Manager Error";
@@ -105,16 +134,29 @@ export function initDeviceManager(socketInstance) { // Parameter is already a so
     // Variable Manager event listeners
     if(closeVariableManagerModal) closeVariableManagerModal.addEventListener('click', closeVariableManager);
     if(closeVariableManagerModalBottom) closeVariableManagerModalBottom.addEventListener('click', closeVariableManager);
-    if(addVariableBtn) {
-        addVariableBtn.addEventListener('click', () => {
-            // This should ideally open a form similar to `addVariableRow` but adapted for the new table
-            // For now, let's log it. A full implementation would require a new form/modal or inline editing.
-            console.log("Add Variable button clicked in Variable Manager. Device ID: ", variableManagerModal.dataset.deviceId);
-            alert("Fungsionalitas tambah variabel di sini akan diimplementasikan.");
-            // Example: openDeviceForm(getDeviceById(variableManagerModal.dataset.deviceId), 'addVariable');
-            // This would require openDeviceForm to handle a new mode or a separate variable form.
+    if(addNewVariableBtnInVarManager) {
+        addNewVariableBtnInVarManager.addEventListener('click', () => {
+            const deviceId = variableManagerModal.dataset.deviceId;
+            if (deviceId) {
+                openVariableForm(deviceId);
+            } else {
+                console.error("Device ID not found on Variable Manager modal for adding new variable.");
+                alert("Error: Device ID tidak ditemukan. Tidak bisa menambah variabel.");
+            }
         });
     }
+
+    // Variable Form event listeners
+    if(cancelVariableFormBtn) cancelVariableFormBtn.addEventListener('click', closeVariableForm);
+    if(variableForm) variableForm.addEventListener('submit', handleVariableFormSubmit);
+
+    if(varFormEnableSubscribe) varFormEnableSubscribe.addEventListener('change', (e) => {
+        if(varFormSubscribeOptions) varFormSubscribeOptions.style.display = e.target.checked ? 'block' : 'none';
+    });
+    if(varFormEnablePublish) varFormEnablePublish.addEventListener('change', (e) => {
+        if(varFormPublishOptions) varFormPublishOptions.style.display = e.target.checked ? 'block' : 'none';
+    });
+
 
     // Socket.IO event listeners
     socket.on('connect', () => {
@@ -221,7 +263,8 @@ function openDeviceManager() {
     if(deviceManagerModal) deviceManagerModal.classList.remove('hidden');
 }
 
-// Helper function to add a new variable row to the form
+// Helper function to add a new variable row to the form (NO LONGER USED FOR DEVICE FORM, WILL BE ADAPTED/REPLACED FOR VARIABLE FORM)
+/*
 function addVariableRow(variableData = {}) {
     const container = document.getElementById('mqtt-variables-container');
     const template = document.getElementById('mqtt-variable-row-template');
@@ -281,11 +324,12 @@ function addVariableRow(variableData = {}) {
     container.appendChild(clone);
 }
 
-// Helper function to remove a variable row
+// Helper function to remove a variable row (NO LONGER USED FOR DEVICE FORM)
+/*
 function removeVariableRow(buttonElement) {
     buttonElement.closest('.mqtt-variable-row').remove();
 }
-
+*/
 
 function closeDeviceManager() {
     if(deviceManagerModal) deviceManagerModal.classList.add('hidden');
@@ -297,10 +341,16 @@ function openDeviceForm(device = null) {
         return;
     }
     deviceForm.reset(); // Reset general form fields
-    const mqttVariablesContainer = document.getElementById('mqtt-variables-container');
-    if (mqttVariablesContainer) {
-        mqttVariablesContainer.innerHTML = ''; // Clear existing variable rows
+    // START OF REMOVAL: MQTT variables are no longer managed in the device form
+    // const mqttVariablesContainer = document.getElementById('mqtt-variables-container');
+    // if (mqttVariablesContainer) {
+    //     mqttVariablesContainer.innerHTML = ''; // Clear existing variable rows
+    // }
+    const mqttVariablesSection = document.getElementById('mqtt-variables-section'); // Assuming you wrap the section
+    if (mqttVariablesSection) {
+        mqttVariablesSection.style.display = 'none'; // Hide it
     }
+    // END OF REMOVAL
 
     if (deviceIdInput) {
         deviceIdInput.value = '';
@@ -325,11 +375,21 @@ function openDeviceForm(device = null) {
             if(document.getElementById('mqtt-password')) document.getElementById('mqtt-password').value = device.password || '';
             if(document.getElementById('mqtt-basepath')) document.getElementById('mqtt-basepath').value = device.basepath || '';
 
-            // Populate MQTT variables
-            if (Array.isArray(device.variables)) {
-                device.variables.forEach(variableData => addVariableRow(variableData));
+            // Populate MQTT variables - NO LONGER DONE HERE
+            // if (Array.isArray(device.variables)) {
+            //     device.variables.forEach(variableData => addVariableRow(variableData));
+            // }
+            // Instead, ensure the section is hidden if device type is MQTT
+            const mqttVariablesSection = document.getElementById('mqtt-variables-section');
+            if (mqttVariablesSection) {
+                mqttVariablesSection.style.display = 'block'; // Show the placeholder message
             }
         } else if (device.type === 'modbus-tcp') {
+            // Hide MQTT specific variable section if not MQTT device
+            const mqttVariablesSection = document.getElementById('mqtt-variables-section');
+            if (mqttVariablesSection) {
+                mqttVariablesSection.style.display = 'none';
+            }
             if(document.getElementById('modbus-tcp-host')) document.getElementById('modbus-tcp-host').value = device.host || '';
             if(document.getElementById('modbus-tcp-port')) document.getElementById('modbus-tcp-port').value = device.port || '502';
             if(document.getElementById('modbus-tcp-unit-id')) document.getElementById('modbus-tcp-unit-id').value = device.unitId || '1';
@@ -338,11 +398,16 @@ function openDeviceForm(device = null) {
             if(document.getElementById('modbus-rtu-baud-rate')) document.getElementById('modbus-rtu-baud-rate').value = device.baudRate || '9600';
             if(document.getElementById('modbus-rtu-unit-id')) document.getElementById('modbus-rtu-unit-id').value = device.unitId || '1';
         }
-    } else {
+    } else { // This is for adding a new device
         if (deviceFormTitle) deviceFormTitle.textContent = 'Tambah Device';
-        // Optionally add one empty variable row for new MQTT devices
-        if (deviceTypeInput && deviceTypeInput.value === 'mqtt') {
-            addVariableRow();
+        // Optionally add one empty variable row for new MQTT devices - NO LONGER DONE HERE
+        // if (deviceTypeInput && deviceTypeInput.value === 'mqtt') {
+        //     addVariableRow();
+        // }
+        // Hide MQTT variable section when adding a new device, until type is MQTT
+        const mqttVariablesSection = document.getElementById('mqtt-variables-section');
+        if (mqttVariablesSection) {
+             mqttVariablesSection.style.display = (deviceTypeInput && deviceTypeInput.value === 'mqtt') ? 'block' : 'none';
         }
     }
     toggleDeviceFields(); // Ensure correct sections are visible based on device type
@@ -360,6 +425,12 @@ function toggleDeviceFields() {
 
     if (mqttFields) mqttFields.style.display = selectedType === 'mqtt' ? 'block' : 'none';
     else console.warn("MQTT fields element not found");
+
+    // Also toggle the (now placeholder) MQTT variables section visibility
+    const mqttVariablesSection = document.getElementById('mqtt-variables-section');
+    if (mqttVariablesSection) {
+        mqttVariablesSection.style.display = selectedType === 'mqtt' ? 'block' : 'none';
+    }
 
     if (modbusTcpFields) modbusTcpFields.style.display = selectedType === 'modbus-tcp' ? 'block' : 'none';
     else console.warn("Modbus TCP fields element not found");
@@ -405,39 +476,46 @@ function handleFormSubmit(e) {
         deviceData.password = document.getElementById('mqtt-password')?.value || '';
         deviceData.basepath = document.getElementById('mqtt-basepath')?.value.trim() || '';
 
-        // Collect MQTT Variables
-        deviceData.variables = [];
-        const variableRows = document.querySelectorAll('#mqtt-variables-container .mqtt-variable-row');
-        variableRows.forEach(row => {
-            const variable = {
-                varId: row.querySelector('.variable-id')?.value || `var-${crypto.randomUUID()}`,
-                name: row.querySelector('.variable-name')?.value.trim(),
-                description: row.querySelector('.variable-description')?.value.trim(),
-                dataType: row.querySelector('.variable-datatype')?.value,
-                enableSubscribe: row.querySelector('.variable-enable-subscribe')?.checked,
-                subscribeTopic: row.querySelector('.variable-subscribe-topic')?.value.trim(),
-                jsonPathSubscribe: row.querySelector('.variable-jsonpath-subscribe')?.value.trim(),
-                qosSubscribe: parseInt(row.querySelector('.variable-qos-subscribe')?.value || '0', 10),
-                enablePublish: row.querySelector('.variable-enable-publish')?.checked,
-                publishTopic: row.querySelector('.variable-publish-topic')?.value.trim(),
-                qosPublish: parseInt(row.querySelector('.variable-qos-publish')?.value || '0', 10),
-                retainPublish: row.querySelector('.variable-retain-publish')?.checked
-            };
-            // Only add variable if name is provided
-            if (variable.name) {
-                deviceData.variables.push(variable);
-            }
-        });
+        // MQTT Variables are no longer collected from the device form.
+        // If editing, they are preserved from localDeviceCache. If new, it's an empty array.
+        if (isEditing) {
+            const existingDevice = localDeviceCache.find(d => d.id === deviceData.id);
+            deviceData.variables = existingDevice ? existingDevice.variables : [];
+        } else {
+            deviceData.variables = []; // New device starts with no variables from this form
+        }
 
     } else if (deviceData.type === 'modbus-tcp') {
+        // Ensure variables array exists for non-MQTT types too, even if not managed by Variable Manager yet
+        if (isEditing) {
+            const existingDevice = localDeviceCache.find(d => d.id === deviceData.id);
+            deviceData.variables = existingDevice ? existingDevice.variables : [];
+        } else {
+            deviceData.variables = [];
+        }
         deviceData.host = document.getElementById('modbus-tcp-host')?.value.trim() || '';
         deviceData.port = document.getElementById('modbus-tcp-port')?.value.trim() || '502';
         deviceData.unitId = document.getElementById('modbus-tcp-unit-id')?.value.trim() || '1';
     } else if (deviceData.type === 'modbus-rtu') {
+        // Ensure variables array exists for non-MQTT types too
+        if (isEditing) {
+            const existingDevice = localDeviceCache.find(d => d.id === deviceData.id);
+            deviceData.variables = existingDevice ? existingDevice.variables : [];
+        } else {
+            deviceData.variables = [];
+        }
         deviceData.serialPort = document.getElementById('modbus-rtu-serial-port')?.value.trim() || '';
         deviceData.baudRate = document.getElementById('modbus-rtu-baud-rate')?.value.trim() || '9600';
         deviceData.unitId = document.getElementById('modbus-rtu-unit-id')?.value.trim() || '1';
+    } else { // For other device types, ensure variables array exists
+        if (isEditing) {
+            const existingDevice = localDeviceCache.find(d => d.id === deviceData.id);
+            deviceData.variables = existingDevice ? existingDevice.variables : [];
+        } else {
+            deviceData.variables = [];
+        }
     }
+
 
     if (isEditing) {
         socket.emit('edit_device', deviceData);
@@ -609,14 +687,30 @@ function openVariableManager(deviceId) {
 
             // Actions Cell
             const actionsCell = row.insertCell();
-            actionsCell.className = "px-4 py-3 whitespace-nowrap text-sm";
-            // Future: Add Edit/Delete buttons here. For now, they are in the example HTML.
-            // actionsCell.innerHTML = `<button class="text-yellow-400 hover:text-yellow-300 text-xs variable-edit-btn" data-var-id="${variable.varId}">Edit</button>
-            //                         <button class="text-red-400 hover:text-red-300 text-xs ml-2 variable-delete-btn" data-var-id="${variable.varId}">Delete</button>`;
+            actionsCell.className = "px-4 py-3 whitespace-nowrap text-sm text-right";
+            actionsCell.innerHTML = `
+                <button class="edit-variable-btn text-yellow-400 hover:text-yellow-300 text-xs mr-2" data-device-id="${device.id}" data-var-id="${variable.varId || ''}">Edit</button>
+                <button class="delete-variable-btn text-red-400 hover:text-red-300 text-xs" data-device-id="${device.id}" data-var-id="${variable.varId || ''}">Hapus</button>
+            `;
 
         });
-    } else if (device.type !== 'mqtt') {
-         variableListTbody.innerHTML = `<tr><td colspan="5" class="px-4 py-3 text-sm text-gray-400 text-center">Variable management for ${device.type} is not yet implemented in this view. Please use the 'Edit Device' form.</td></tr>`;
+        // Add event listeners for the new Edit/Delete buttons
+        variableListTbody.querySelectorAll('.edit-variable-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const devId = e.currentTarget.dataset.deviceId;
+                const varId = e.currentTarget.dataset.varId;
+                openVariableForm(devId, varId);
+            });
+        });
+        variableListTbody.querySelectorAll('.delete-variable-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const devId = e.currentTarget.dataset.deviceId;
+                const varId = e.currentTarget.dataset.varId;
+                deleteVariable(devId, varId);
+            });
+        });
+    } else if (device.type !== 'mqtt') { // For non-MQTT devices
+         variableListTbody.innerHTML = `<tr><td colspan="5" class="px-4 py-3 text-sm text-gray-400 text-center">Manajemen variabel untuk tipe device '${device.type}' belum didukung di tampilan ini.</td></tr>`;
     } else {
         variableListTbody.innerHTML = `<tr><td colspan="5" class="px-4 py-3 text-sm text-gray-400 text-center">No variables configured for this MQTT device.</td></tr>`;
     }
@@ -627,6 +721,169 @@ function openVariableManager(deviceId) {
 function closeVariableManager() {
     if (variableManagerModal) {
         variableManagerModal.classList.add('hidden');
+    }
+}
+
+function openVariableForm(deviceId, varIdToEdit = null) {
+    if (!variableFormModal || !variableForm || !varFormDeviceId || !varFormVarId || !variableFormTitle) {
+        console.error("Variable form modal elements not found.");
+        return;
+    }
+    variableForm.reset(); // Reset form fields
+    varFormDeviceId.value = deviceId;
+    varFormVarId.value = varIdToEdit || '';
+
+    const device = getDeviceById(deviceId);
+    if (!device) {
+        alert("Device not found for variable form!");
+        return;
+    }
+
+    if (varIdToEdit) {
+        variableFormTitle.textContent = `Edit Variabel untuk ${device.name}`;
+        const variable = device.variables.find(v => v.varId === varIdToEdit);
+        if (variable) {
+            // Populate form with variable data
+            varFormName.value = variable.name || '';
+            varFormDataType.value = variable.dataType || 'string';
+            varFormDescription.value = variable.description || '';
+
+            varFormEnableSubscribe.checked = variable.enableSubscribe || false;
+            if(varFormSubscribeOptions) varFormSubscribeOptions.style.display = varFormEnableSubscribe.checked ? 'block' : 'none';
+            varFormSubscribeTopic.value = variable.subscribeTopic || '';
+            varFormJsonPathSubscribe.value = variable.jsonPathSubscribe || '';
+            varFormQosSubscribe.value = variable.qosSubscribe !== undefined ? variable.qosSubscribe.toString() : '0';
+
+            varFormEnablePublish.checked = variable.enablePublish || false;
+            if(varFormPublishOptions) varFormPublishOptions.style.display = varFormEnablePublish.checked ? 'block' : 'none';
+            varFormPublishTopic.value = variable.publishTopic || '';
+            varFormQosPublish.value = variable.qosPublish !== undefined ? variable.qosPublish.toString() : '0';
+            varFormRetainPublish.checked = variable.retainPublish || false;
+        } else {
+            alert(`Variabel dengan ID ${varIdToEdit} tidak ditemukan.`);
+            closeVariableForm();
+            return;
+        }
+    } else {
+        variableFormTitle.textContent = `Tambah Variabel Baru untuk ${device.name}`;
+        // Ensure options are hidden for new form
+        if(varFormSubscribeOptions) varFormSubscribeOptions.style.display = 'none';
+        if(varFormPublishOptions) varFormPublishOptions.style.display = 'none';
+    }
+
+    variableFormModal.classList.remove('hidden');
+}
+
+function closeVariableForm() {
+    if (variableFormModal) {
+        variableFormModal.classList.add('hidden');
+    }
+}
+
+function handleVariableFormSubmit(event) {
+    event.preventDefault();
+    const deviceId = varFormDeviceId.value;
+    const varId = varFormVarId.value; // Empty if new, populated if editing
+    const name = varFormName.value.trim();
+
+    if (!name) {
+        alert("Nama variabel harus diisi.");
+        varFormName.focus();
+        return;
+    }
+
+    const device = getDeviceById(deviceId);
+    if (!device) {
+        alert("Device tidak ditemukan. Tidak bisa menyimpan variabel.");
+        return;
+    }
+    if (device.type !== 'mqtt') {
+        alert(`Manajemen variabel saat ini hanya didukung untuk device MQTT dari UI ini.`);
+        return;
+    }
+
+
+    const variableData = {
+        varId: varId || `var-${crypto.randomUUID()}`, // Assign new ID if varId is empty (new variable)
+        name: name,
+        description: varFormDescription.value.trim(),
+        dataType: varFormDataType.value,
+        enableSubscribe: varFormEnableSubscribe.checked,
+        subscribeTopic: varFormSubscribeTopic.value.trim(),
+        jsonPathSubscribe: varFormJsonPathSubscribe.value.trim(),
+        qosSubscribe: parseInt(varFormQosSubscribe.value || '0', 10),
+        enablePublish: varFormEnablePublish.checked,
+        publishTopic: varFormPublishTopic.value.trim(),
+        qosPublish: parseInt(varFormQosPublish.value || '0', 10),
+        retainPublish: varFormRetainPublish.checked
+    };
+
+    if (!Array.isArray(device.variables)) {
+        device.variables = [];
+    }
+
+    if (varId) { // Editing existing variable
+        const varIndex = device.variables.findIndex(v => v.varId === varId);
+        if (varIndex > -1) {
+            device.variables[varIndex] = variableData;
+        } else {
+            alert(`Error: Variabel dengan ID ${varId} tidak ditemukan untuk diedit.`);
+            return;
+        }
+    } else { // Adding new variable
+        // Check for duplicate variable name for the same device (optional but good practice)
+        if (device.variables.some(v => v.name === variableData.name)) {
+            alert(`Variabel dengan nama "${variableData.name}" sudah ada untuk device ini.`);
+            varFormName.focus();
+            return;
+        }
+        device.variables.push(variableData);
+    }
+
+    // Emit edit_device with the updated device object (including all its variables)
+    if (socket && socket.connected) {
+        console.log("Updating device with new/modified variable:", device);
+        socket.emit('edit_device', device); // Server should handle this and update the device
+        closeVariableForm();
+        // openVariableManager(deviceId); // Re-open to refresh, or wait for 'device_updated' event
+    } else {
+        alert("Tidak dapat menyimpan variabel: Server tidak terhubung.");
+    }
+}
+
+function deleteVariable(deviceId, varId) {
+    if (!confirm('Apakah Anda yakin ingin menghapus variabel ini?')) {
+        return;
+    }
+
+    const device = getDeviceById(deviceId);
+    if (!device) {
+        alert("Device tidak ditemukan. Tidak bisa menghapus variabel.");
+        return;
+    }
+     if (device.type !== 'mqtt') {
+        alert(`Manajemen variabel saat ini hanya didukung untuk device MQTT dari UI ini.`);
+        return;
+    }
+
+    if (Array.isArray(device.variables)) {
+        const initialLength = device.variables.length;
+        device.variables = device.variables.filter(v => v.varId !== varId);
+
+        if (device.variables.length < initialLength) { // Variable was found and removed
+            if (socket && socket.connected) {
+                console.log("Updating device after deleting variable:", device);
+                socket.emit('edit_device', device);
+                // openVariableManager(deviceId); // Re-open to refresh, or wait for 'device_updated'
+            } else {
+                alert("Tidak dapat menghapus variabel: Server tidak terhubung.");
+                // Potentially revert local change if server update fails, or handle more gracefully
+            }
+        } else {
+            alert("Variabel tidak ditemukan untuk dihapus.");
+        }
+    } else {
+        alert("Tidak ada variabel untuk dihapus pada device ini.");
     }
 }
 // --- End Variable Manager Functions ---
