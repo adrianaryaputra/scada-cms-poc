@@ -1,49 +1,188 @@
-// Variabel-variabel ini akan diinisialisasi dan dikelola dalam modul ini.
-let undoStack = [];
-let redoStack = [];
-let tagDatabase = {};
+/**
+ * stateManager.js - Manages the application's state, including HMI component configurations,
+ * device variable values (tagDatabase), and undo/redo functionality.
+ */
 
-// Referensi ke elemen UI dan modul lain akan diteruskan saat inisialisasi.
+// Module-level variables for state management
+let undoStack = []; // Stores snapshots of application state for undo operations
+let redoStack = []; // Stores snapshots for redo operations
+let tagDatabase = {}; // Stores current values of device variables: { deviceId: { variableName: value } }
+
+// References to other modules and DOM elements, initialized in initStateManager
 let componentFactoryRef;
-let layerRef;
-let trRef;
-let undoBtnRef;
-let redoBtnRef;
+let layerRef; // Konva layer reference
+let trRef;    // Konva transformer reference
+let undoBtnRef; // DOM reference to the undo button
+let redoBtnRef; // DOM reference to the redo button
 
-export function initStateManager(factory, layer, tr, undoBtn, redoBtn, getDeviceByIdFunc) { // getDeviceByIdFunc is passed but currently unused in this module
+/**
+ * Initializes the state manager with necessary references.
+ * @param {object} factory - Reference to the componentFactory.
+ * @param {object} layer - Reference to the Konva layer.
+ * @param {object} tr - Reference to the Konva transformer.
+ * @param {HTMLElement} undoBtn - DOM element for the undo button.
+ * @param {HTMLElement} redoBtn - DOM element for the redo button.
+ * @param {function} getDeviceByIdFunc - Function to get device details by ID (currently unused here but kept for potential future use).
+ */
+export function initStateManager(factory, layer, tr, undoBtn, redoBtn, getDeviceByIdFunc) {
     componentFactoryRef = factory;
     layerRef = layer;
     trRef = tr;
     undoBtnRef = undoBtn;
     redoBtnRef = redoBtn;
-    // The getDeviceByIdFunc parameter is kept in the function signature for now,
-    // in case future state logic needs it, but it's not stored or used within stateManager currently.
+    // Note: getDeviceByIdFunc is passed but not currently used within stateManager.
+    // It's kept in the signature for potential future enhancements where state logic might need device-specific info.
 
-    // Panggil saveState awal untuk membuat state dasar
-    saveState();
+    saveState(); // Save the initial (empty) state
     updateUndoRedoButtons();
 }
 
+/**
+ * Returns the current tagDatabase.
+ * @returns {object} The current tag database.
+ */
 export function getTagDatabase() {
     return tagDatabase;
 }
 
+/**
+ * Returns the current undo stack.
+ * @returns {Array<string>} The undo stack (array of stringified states).
+ */
 export function getUndoStack() {
     return undoStack;
 }
 
+/**
+ * Returns the current redo stack.
+ * @returns {Array<string>} The redo stack.
+ */
 export function getRedoStack() {
     return redoStack;
 }
 
-
+/**
+ * Saves the current state of HMI components and the tagDatabase to the undo stack.
+ * Clears the redo stack.
+ */
 export function saveState() {
-    const state = { components: [], tags: { ...tagDatabase } };
-    if (layerRef) { // Pastikan layerRef sudah diinisialisasi
+    const state = { components: [], tags: { ...tagDatabase } }; // Deep copy tags
+    if (layerRef) {
         layerRef.find(".hmi-component").forEach((node) => {
-            const cleanAttrs = {
+            // Extract relevant attributes for serialization.
+            // Note: 'address' is saved for legacy reasons or components not yet fully using deviceId/variableName.
+            // Prefer deviceId and variableName for new components.
+            const componentAttrs = {
                 componentType: node.attrs.componentType,
-                address: node.attrs.address,
+                deviceId: node.attrs.deviceId,         // Preferred
+                variableName: node.attrs.variableName, // Preferred
+                address: node.attrs.address,           // Legacy/Fallback
+                label: node.attrs.label,
+                shapeType: node.attrs.shapeType,
+                offColor: node.attrs.offColor,
+                onColor: node.attrs.onColor,
+                offText: node.attrs.offText,
+                onText: node.attrs.onText,
+                states: node.attrs.states, // For components like WordLamp
+                units: node.attrs.units,
+                decimalPlaces: node.attrs.decimalPlaces,
+                // Attributes for LabelComponent
+                text: node.attrs.text,
+                fontSize: node.attrs.fontSize,
+                fill: node.attrs.fill,
+                width: node.attrs.width,
+                align: node.attrs.align,
+            };
+
+            const componentData = {
+                id: node.id(),
+                x: node.x(),
+                y: node.y(),
+                ...componentAttrs,
+            };
+            // Remove undefined properties to keep the state clean
+            Object.keys(componentData).forEach(
+                (key) => componentData[key] === undefined && delete componentData[key]
+            );
+            state.components.push(componentData);
+        });
+    }
+    undoStack.push(JSON.stringify(state));
+    redoStack = []; // Any new state change clears the redo stack
+    updateUndoRedoButtons();
+    // console.log("State saved. Undo stack size:", undoStack.length);
+}
+
+/**
+ * Restores the application state from a given state string (typically from undo/redo stack).
+ * @param {string} stateString - The stringified state to restore.
+ */
+export function restoreState(stateString) {
+    const state = JSON.parse(stateString);
+    // const oldTagDatabase = { ...tagDatabase }; // Kept for potential comparison if needed for complex migrations
+
+    if (layerRef && componentFactoryRef && trRef) {
+        // Clear existing components and selections
+        layerRef.find(".hmi-component").forEach((node) => node.destroy());
+        trRef.nodes([]); // Clear transformer selection
+
+        tagDatabase = { ...state.tags }; // Restore tagDatabase from the saved state
+
+        // Recreate components from the saved state data
+        state.components.forEach((componentData) => {
+            const component = componentFactoryRef.create(
+                componentData.componentType,
+                componentData // Pass all saved attributes including x, y, id
+            );
+            if (component) {
+                layerRef.add(component);
+            }
+        });
+        // Note: Client-side MQTT subscription logic was previously here but has been removed.
+        // The server now manages MQTT subscriptions based on device configurations and client requests.
+    }
+    updateUndoRedoButtons();
+    // Repaint the layer after restoring components
+    if (layerRef) layerRef.batchDraw();
+}
+
+/**
+ * Handles the undo action. Restores the previous state from the undo stack.
+ */
+export function handleUndo() {
+    if (undoStack.length <= 1) return; // Cannot undo the initial empty state
+    const currentState = undoStack.pop();
+    redoStack.push(currentState);
+    const lastState = undoStack[undoStack.length - 1];
+    restoreState(lastState);
+    // console.log("Undo. Undo stack size:", undoStack.length, "Redo stack size:", redoStack.length);
+}
+
+/**
+ * Handles the redo action. Restores the next state from the redo stack.
+ */
+export function handleRedo() {
+    if (redoStack.length === 0) return; // Nothing to redo
+    const nextState = redoStack.pop();
+    undoStack.push(nextState);
+    restoreState(nextState);
+    // console.log("Redo. Undo stack size:", undoStack.length, "Redo stack size:", redoStack.length);
+}
+
+/**
+ * Returns the current state of the application as a stringified JSON.
+ * (Similar to saveState but doesn't modify undo/redo stacks)
+ * @returns {string} Stringified current state.
+ */
+export function getCurrentState() {
+    const state = { components: [], tags: { ...tagDatabase } };
+     if (layerRef) {
+        layerRef.find(".hmi-component").forEach((node) => {
+            const componentAttrs = {
+                componentType: node.attrs.componentType,
+                deviceId: node.attrs.deviceId,
+                variableName: node.attrs.variableName,
+                address: node.attrs.address, // Legacy
                 label: node.attrs.label,
                 shapeType: node.attrs.shapeType,
                 offColor: node.attrs.offColor,
@@ -63,109 +202,10 @@ export function saveState() {
                 id: node.id(),
                 x: node.x(),
                 y: node.y(),
-                ...cleanAttrs,
+                ...componentAttrs,
             };
             Object.keys(componentData).forEach(
-                (key) =>
-                    componentData[key] === undefined &&
-                    delete componentData[key]
-            );
-            state.components.push(componentData);
-        });
-    }
-    undoStack.push(JSON.stringify(state));
-    redoStack = []; // Setiap state baru menghapus redo stack
-    updateUndoRedoButtons();
-    console.log("State saved. Undo stack size:", undoStack.length);
-
-}
-
-export function restoreState(stateString) {
-    const state = JSON.parse(stateString);
-    const oldTagDatabase = { ...tagDatabase }; // Simpan tagDatabase lama untuk perbandingan
-
-    if (layerRef && componentFactoryRef && trRef) { // Pastikan referensi sudah ada
-        layerRef.find(".hmi-component").forEach((node) => node.destroy());
-        trRef.nodes([]);
-        tagDatabase = { ...state.tags };
-
-        // Perbarui langganan MQTT berdasarkan perubahan alamat
-        const newAddresses = new Set(state.components.map(c => c.address));
-        // const oldAddresses = new Set(Object.keys(oldTagDatabase)); // Keep for logic if needed, but not for sub/unsub
-        // const newAddresses = new Set(state.components.map(c => c.address)); // Keep for logic if needed
-
-        // Client-side subscription logic removed. Server manages subscriptions.
-        // oldAddresses.forEach(addr => {
-        //     if (!newAddresses.has(addr) && mqttFuncsRef?.unsubscribeFromComponentAddress) { // mqttFuncsRef is no longer for this
-        //         // mqttFuncsRef.unsubscribeFromComponentAddress(addr);
-        //     }
-        // });
-
-        state.components.forEach((componentData) => {
-            const component = componentFactoryRef.create(
-                componentData.componentType,
-                componentData
-            );
-            layerRef.add(component);
-            // Client-side subscription logic removed.
-            // if (!oldAddresses.has(componentData.address) && mqttFuncsRef?.subscribeToComponentAddress) { // mqttFuncsRef is no longer for this
-            //      // mqttFuncsRef.subscribeToComponentAddress(componentData.address);
-            // }
-        });
-    }
-    updateUndoRedoButtons();
-}
-
-export function handleUndo() {
-    if (undoStack.length <= 1) return; // Tidak bisa undo state awal
-    const currentState = undoStack.pop();
-    redoStack.push(currentState);
-    const lastState = undoStack[undoStack.length - 1];
-    restoreState(lastState);
-    console.log("Undo. Undo stack size:", undoStack.length, "Redo stack size:", redoStack.length);
-}
-
-export function handleRedo() {
-    if (redoStack.length === 0) return;
-    const nextState = redoStack.pop();
-    undoStack.push(nextState);
-    restoreState(nextState);
-    console.log("Redo. Undo stack size:", undoStack.length, "Redo stack size:", redoStack.length);
-
-}
-
-export function getCurrentState() {
-    const state = { components: [], tags: { ...tagDatabase } };
-     if (layerRef) {
-        layerRef.find(".hmi-component").forEach((node) => {
-            const cleanAttrs = {
-                componentType: node.attrs.componentType,
-                address: node.attrs.address,
-                label: node.attrs.label,
-                shapeType: node.attrs.shapeType,
-                offColor: node.attrs.offColor,
-                onColor: node.attrs.onColor,
-                offText: node.attrs.offText,
-                onText: node.attrs.onText,
-                states: node.attrs.states,
-                units: node.attrs.units,
-                decimalPlaces: node.attrs.decimalPlaces,
-                 text: node.attrs.text,
-                fontSize: node.attrs.fontSize,
-                fill: node.attrs.fill,
-                width: node.attrs.width,
-                align: node.attrs.align,
-            };
-            const componentData = {
-                id: node.id(),
-                x: node.x(),
-                y: node.y(),
-                ...cleanAttrs,
-            };
-            Object.keys(componentData).forEach(
-                (key) =>
-                    componentData[key] === undefined &&
-                    delete componentData[key]
+                (key) => componentData[key] === undefined && delete componentData[key]
             );
             state.components.push(componentData);
         });
@@ -173,26 +213,24 @@ export function getCurrentState() {
     return JSON.stringify(state);
 }
 
+/**
+ * Updates the enabled/disabled state of undo/redo buttons based on stack sizes.
+ */
 export function updateUndoRedoButtons() {
-    if (undoBtnRef && redoBtnRef) { // Pastikan referensi sudah ada
-        undoBtnRef.disabled = undoStack.length <= 1;
+    if (undoBtnRef && redoBtnRef) {
+        undoBtnRef.disabled = undoStack.length <= 1; // Initial state is not undoable
         redoBtnRef.disabled = redoStack.length === 0;
     }
 }
 
-// // Fungsi untuk memperbarui tag database, berguna saat komponen dibuat atau address diubah
-// export function updateTagDatabase(address, value) { // To be replaced by setDeviceVariableValue
-//     if (!(address in tagDatabase)) {
-//         tagDatabase[address] = value;
-//     }
-// }
+// --- Device Variable State Management (Modern Approach) ---
 
-// export function deleteFromTagDatabase(address) { // To be replaced by more specific deletion
-//     delete tagDatabase[address];
-// }
-
-
-// New functions for variable-based state
+/**
+ * Gets the value of a specific variable for a given device.
+ * @param {string} deviceId - The ID of the device.
+ * @param {string} variableName - The name of the variable.
+ * @returns {*} The value of the variable, or undefined if not found.
+ */
 export function getDeviceVariableValue(deviceId, variableName) {
     if (tagDatabase[deviceId]) {
         return tagDatabase[deviceId][variableName];
@@ -200,76 +238,103 @@ export function getDeviceVariableValue(deviceId, variableName) {
     return undefined;
 }
 
+/**
+ * Sets the value of a specific variable for a given device in the tagDatabase.
+ * Notifies relevant HMI components to update their state.
+ * @param {string} deviceId - The ID of the device.
+ * @param {string} variableName - The name of the variable.
+ * @param {*} value - The new value of the variable.
+ */
 export function setDeviceVariableValue(deviceId, variableName, value) {
     if (!tagDatabase[deviceId]) {
         tagDatabase[deviceId] = {};
     }
     tagDatabase[deviceId][variableName] = value;
-    // console.log(`Set variable value: Device ${deviceId}, Var ${variableName} =`, value, tagDatabase);
+    console.log(`[StateManager] Set variable value in tagDatabase: Device ${deviceId}, Var ${variableName} =`, value); // DEBUG LOG
 
-    // Notify relevant components to update.
-    // This requires components to be findable by deviceId and variableName.
-    // Or, a more generic event can be dispatched that components listen to if they are active.
+    // Notify relevant HMI components on the Konva layer to update their visual state.
+    // This implements a simple observer pattern: stateManager is the subject, components are observers.
     if (layerRef) {
+        let foundComponent = false;
         layerRef.find('.hmi-component').forEach(node => {
-            // Assumption: components will have deviceId and variableName attributes
+            // Components are expected to have deviceId and variableName attributes if they bind to device data.
             if (node.attrs.deviceId === deviceId && node.attrs.variableName === variableName) {
-                node.updateState?.(); // Trigger component's own update method
+                foundComponent = true;
+                console.log(`[StateManager] Found matching component (ID: ${node.id()}, Type: ${node.attrs.componentType}, Bound DeviceID: ${node.attrs.deviceId}, Bound VarName: ${node.attrs.variableName}) for Update to DeviceID: ${deviceId}, VarName: ${variableName}. Calling updateState.`);
+                node.updateState?.(); // Call the component's own updateState method, if it exists.
             }
         });
+        if (!foundComponent) {
+            console.log(`[StateManager] No component found on layer matching update for DeviceID: ${deviceId}, VarName: ${variableName}. Checking all components:`);
+            layerRef.find('.hmi-component').forEach(n => { // Changed variable name to n to avoid conflict
+                console.log(`  - Component ID: ${n.id()}, Type: ${n.attrs.componentType}, Bound DeviceID: ${n.attrs.deviceId}, Bound VarName: ${n.attrs.variableName}`);
+            });
+        }
+    } else {
+        console.warn("[StateManager] layerRef is not available. Cannot notify components to update."); // DEBUG LOG
     }
 }
 
+/**
+ * Deletes all state (all variables) for a given device from the tagDatabase.
+ * @param {string} deviceId - The ID of the device whose state is to be deleted.
+ */
 export function deleteDeviceState(deviceId) {
     if (tagDatabase[deviceId]) {
         delete tagDatabase[deviceId];
-        console.log(`State for device ${deviceId} deleted.`);
+        // console.log(`State for device ${deviceId} deleted from tagDatabase.`);
     }
 }
 
+/**
+ * Deletes the state for a specific variable of a given device from the tagDatabase.
+ * @param {string} deviceId - The ID of the device.
+ * @param {string} variableName - The name of the variable to delete.
+ */
 export function deleteDeviceVariableState(deviceId, variableName) {
     if (tagDatabase[deviceId] && tagDatabase[deviceId].hasOwnProperty(variableName)) {
         delete tagDatabase[deviceId][variableName];
-        console.log(`State for variable ${variableName} of device ${deviceId} deleted.`);
+        // console.log(`State for variable ${variableName} of device ${deviceId} deleted from tagDatabase.`);
     }
 }
 
 
-// // Fungsi untuk mengganti address di tagDatabase (misal saat diedit di context menu)
-// // This function is likely obsolete as direct address manipulation is replaced by variable binding.
-// export function replaceTagAddress(oldAddress, newAddress) {
-//     if (oldAddress !== newAddress && tagDatabase.hasOwnProperty(oldAddress)) {
-//         tagDatabase[newAddress] = tagDatabase[oldAddress];
-//         delete tagDatabase[oldAddress];
-//         // Client-side subscription logic removed. Server manages subscriptions.
-//         return true; // Berhasil diganti
-//     }
-//     return false; // Tidak ada perubahan atau oldAddress tidak ada
-// }
+// --- Legacy Address-Based Functions (To be phased out) ---
+// These functions operate on a flat address-based tag system and are being replaced by
+// the deviceId/variableName-based system above.
+// They are kept temporarily for backward compatibility or for components not yet updated.
+// AVOID USING THESE FOR NEW DEVELOPMENT.
 
-// Old functions (to be phased out or removed if no longer used by other modules after refactor)
-// For now, let's keep them but comment out their direct usage if possible,
-// or make them call the new functions with some default/global deviceId if that makes sense.
-export function getComponentAddressValue(address) { // Legacy support or for non-device-specific global tags
-    // This might represent a global variable not tied to a device.
-    // Or, if all tags become device-bound, this needs a deviceId.
-    // For now, let's assume it might access a "global" device or a flat part of tagDatabase.
-    return tagDatabase[address]; // This will break if tagDatabase is purely device-scoped.
-                                 // Needs decision: are there global tags or are all tags device variables?
-                                 // Assuming for now all data comes via device variables.
-     console.warn("getComponentAddressValue (legacy) called. Ensure this is intended for non-device-specific tags or update to getDeviceVariableValue.");
-     return undefined;
+/**
+ * LEGACY: Gets a component's value based on a direct address.
+ * @deprecated Prefer getDeviceVariableValue.
+ * @param {string} address - The legacy address.
+ * @returns {*} The value at the address, or undefined.
+ */
+export function getComponentAddressValue(address) {
+    console.warn("[DEPRECATED] getComponentAddressValue called. Please update to use getDeviceVariableValue(deviceId, variableName). This function may not work correctly with the new device-scoped tagDatabase.");
+    // This attempts to read from the root of tagDatabase, which might conflict with deviceId keys.
+    // This will likely return undefined or incorrect data if tagDatabase is purely device-scoped.
+    return tagDatabase[address];
 }
 
+/**
+ * LEGACY: Sets a component's value based on a direct address.
+ * @deprecated Prefer setDeviceVariableValue.
+ * @param {string} address - The legacy address.
+ * @param {*} value - The value to set.
+ * @param {string} [deviceId="_global"] - Optional deviceId; if provided and not "_global", will attempt to use setDeviceVariableValue.
+ */
 export function setComponentAddressValue(address, value, deviceId = "_global") { // Legacy support
-    // If deviceId is provided and it's not the placeholder, use new method.
+    console.warn(`[DEPRECATED] setComponentAddressValue called for address: ${address}. Please update to use setDeviceVariableValue(deviceId, variableName).`);
     if (deviceId && deviceId !== "_global") {
-        setDeviceVariableValue(deviceId, address, value); // Assuming address here might be used as variableName for legacy
+        // If a deviceId is provided, try to use the new system, assuming 'address' might be the 'variableName'.
+        console.warn(`Attempting to map legacy setComponentAddressValue(address="${address}") to setDeviceVariableValue(deviceId="${deviceId}", variableName="${address}"). Ensure this mapping is correct.`);
+        setDeviceVariableValue(deviceId, address, value);
     } else {
-        // If truly global, tagDatabase structure needs to accommodate it, e.g. tagDatabase["_global"][address]
-        // For now, this will put it at the root, which might conflict with device IDs.
-        // This indicates a need for clearer separation if global tags are to be supported alongside device variables.
-        console.warn(`setComponentAddressValue (legacy) called for address: ${address}. Consider scoping to a device or specific global context.`);
-        tagDatabase[address] = value; // This is potentially problematic.
+        // If truly global or no deviceId, this writes to the root of tagDatabase.
+        // This is problematic as it can overwrite device-specific objects if 'address' collides with a 'deviceId'.
+        console.error(`[DANGEROUS] Legacy setComponentAddressValue is writing to tagDatabase['${address}']. This can corrupt device-specific data if '${address}' matches a device ID. This functionality will be removed.`);
+        tagDatabase[address] = value;
     }
 }

@@ -4,23 +4,25 @@ import renderjson from './renderjson.js'; // Import renderjson
 let socket; // Socket.IO client instance, to be set by initTopicExplorer
 let currentExploringDeviceId = null;
 let currentExploringVariableRowElement = null; // The DOM element (mqtt-variable-row) that triggered the explorer
-let currentTemporaryTopic = null;
+let currentTemporaryTopic = null; // The topic/filter currently subscribed to in the explorer
+let lastClickedActualTopic = null; // Stores the actual topic from the last clicked message in the log
 let maxLogMessages = 50;
 
 // DOM Elements for the explorer modal
 let topicExplorerModal,
     topicExplorerTitle,
     closeTopicExplorerModalBtn,
-    explorerTopicInput,
+    explorerTopicInput, // Input for the topic/filter to subscribe to
     explorerSubscribeBtn,
-    explorerMessageLog,
-    explorerJsonPathInput,
-    explorerUseTopicBtn,
-    explorerUseTopicPathBtn;
+    explorerMessageLog, // Log area for received messages
+    explorerJsonPathInput, // Input to display/edit the selected JSON path
+    explorerUseTopicBtn,   // Button to use Topic (without path)
+    explorerUseTopicPathBtn; // Button to use Topic AND Path
 
 export function initTopicExplorer(ioSocket) {
     socket = ioSocket;
 
+    // Cache DOM elements
     topicExplorerModal = document.getElementById('mqtt-topic-explorer-modal');
     topicExplorerTitle = document.getElementById('topic-explorer-title');
     closeTopicExplorerModalBtn = document.getElementById('close-topic-explorer-modal');
@@ -36,27 +38,25 @@ export function initTopicExplorer(ioSocket) {
         return;
     }
 
+    // Event Listeners
     explorerSubscribeBtn.addEventListener('click', handleSubscribeToggle);
     closeTopicExplorerModalBtn.addEventListener('click', closeExplorer);
 
     explorerUseTopicBtn.addEventListener('click', () => {
-        bindDataToVariableForm(false);
+        bindDataToVariableForm(false); // usePath = false
         closeExplorer();
     });
     explorerUseTopicPathBtn.addEventListener('click', () => {
-        bindDataToVariableForm(true);
+        bindDataToVariableForm(true); // usePath = true
         closeExplorer();
     });
 
+    // Listener for clicks within the message log (for JSON path selection)
     explorerMessageLog.addEventListener('click', handleJsonMessageClick);
-
 
     // Listen for messages from the server on temporary subscriptions
     if (socket) {
         socket.on('server_temp_message', (data) => {
-            // Optional: log all incoming temp messages to browser console for debugging
-            // console.log('[TopicExplorer] Received server_temp_message:', JSON.stringify(data));
-            
             // data contains { deviceId, topic (actual message topic), filter (subscribed filter), payloadString }
             if (data.deviceId === currentExploringDeviceId && data.filter === currentTemporaryTopic) {
                 logMessage(data.topic, data.payloadString); // Log the actual topic the message arrived on
@@ -74,19 +74,23 @@ export function openTopicExplorer(deviceId, deviceName, variableRowElement, curr
     }
     currentExploringDeviceId = deviceId;
     currentExploringVariableRowElement = variableRowElement;
+    lastClickedActualTopic = null; // Reset last clicked topic when opening
 
-    if (topicExplorerTitle) topicExplorerTitle.textContent = `Topic Explorer for: ${deviceName} (ID: ${deviceId})`;
-    if (explorerTopicInput) explorerTopicInput.value = currentSubTopic || '';
-    if (explorerMessageLog) explorerMessageLog.innerHTML = ''; // Clear log
-    if (explorerJsonPathInput) explorerJsonPathInput.value = ''; // Clear path
+    if (topicExplorerTitle) topicExplorerTitle.textContent = `Topic Explorer for: ${deviceName} (ID: ${deviceId.substring(0,8)})`;
+    if (explorerTopicInput) explorerTopicInput.value = currentSubTopic || ''; // Pre-fill with current variable's topic if any
+    if (explorerMessageLog) explorerMessageLog.innerHTML = ''; // Clear previous log
+    if (explorerJsonPathInput) explorerJsonPathInput.value = ''; // Clear previous path
 
+    // Manage subscription state if topic input changes or modal reopens
     if (currentTemporaryTopic && currentTemporaryTopic !== explorerTopicInput.value) {
-        unsubscribeFromCurrentTemporaryTopic();
+        unsubscribeFromCurrentTemporaryTopic(); // Unsubscribe if filter changed before opening
     }
+    // Set button text based on current subscription state
     if (explorerTopicInput.value && currentTemporaryTopic === explorerTopicInput.value) {
          if (explorerSubscribeBtn) explorerSubscribeBtn.textContent = 'Unsubscribe';
     } else {
          if (explorerSubscribeBtn) explorerSubscribeBtn.textContent = 'Subscribe';
+         currentTemporaryTopic = null; // Ensure no active subscription if input is different
     }
 
     topicExplorerModal.classList.remove('hidden');
@@ -94,11 +98,12 @@ export function openTopicExplorer(deviceId, deviceName, variableRowElement, curr
 
 function closeExplorer() {
     if (currentTemporaryTopic) {
-        unsubscribeFromCurrentTemporaryTopic();
+        unsubscribeFromCurrentTemporaryTopic(); // Clean up subscription on close
     }
     if (topicExplorerModal) topicExplorerModal.classList.add('hidden');
     currentExploringDeviceId = null;
     currentExploringVariableRowElement = null;
+    lastClickedActualTopic = null; // Reset
 }
 
 function handleSubscribeToggle() {
@@ -111,17 +116,19 @@ function handleSubscribeToggle() {
     }
 
     if (currentTemporaryTopic === topicToExplore) { 
+        // Currently subscribed to this topic, so unsubscribe
         unsubscribeFromCurrentTemporaryTopic();
     } else { 
+        // Not subscribed to this topic or subscribed to a different one
         if (currentTemporaryTopic) { 
-            unsubscribeFromCurrentTemporaryTopic();
+            unsubscribeFromCurrentTemporaryTopic(); // Unsubscribe from the old one first
         }
         currentTemporaryTopic = topicToExplore;
         socket.emit('client_temp_subscribe_request', { deviceId: currentExploringDeviceId, topic: currentTemporaryTopic });
         if (explorerSubscribeBtn) explorerSubscribeBtn.textContent = 'Unsubscribe';
-        if (explorerMessageLog) explorerMessageLog.innerHTML = ''; 
-        if (explorerJsonPathInput) explorerJsonPathInput.value = '';
-        // Log status message for subscribing
+        if (explorerMessageLog) explorerMessageLog.innerHTML = ''; // Clear log for new subscription
+        if (explorerJsonPathInput) explorerJsonPathInput.value = ''; // Clear path
+        lastClickedActualTopic = null; // Reset clicked topic on new subscription
         logMessage(null, `Subscribing to: ${currentTemporaryTopic}...`); 
     }
 }
@@ -129,72 +136,59 @@ function handleSubscribeToggle() {
 function unsubscribeFromCurrentTemporaryTopic() {
     if (socket && currentTemporaryTopic && currentExploringDeviceId) {
         socket.emit('client_temp_unsubscribe_request', { deviceId: currentExploringDeviceId, topic: currentTemporaryTopic });
-        // Log status message for unsubscribing
         logMessage(null, `Unsubscribed from: ${currentTemporaryTopic}.`); 
         currentTemporaryTopic = null;
     }
     if (explorerSubscribeBtn) explorerSubscribeBtn.textContent = 'Subscribe';
+    lastClickedActualTopic = null; // Reset clicked topic
 }
 
 function logMessage(topic, payload) {
     if (!explorerMessageLog) return;
 
     const messageDiv = document.createElement('div');
-    messageDiv.classList.add('mb-1', 'pb-1', 'border-b', 'border-gray-700', 'text-xs');
+    messageDiv.classList.add('message-entry', 'mb-1', 'pb-1', 'border-b', 'border-gray-700', 'text-xs', 'cursor-pointer', 'hover:bg-gray-700');
 
-    // Only try to parse and render JSON if 'topic' is not null (i.e., it's an MQTT message, not a status message)
-    if (topic !== null) {
+    if (topic !== null) { // Actual MQTT message
+        messageDiv.setAttribute('data-actual-topic', topic); // Store actual topic on the element
         try {
-            console.log('[TopicExplorer_DEBUG] logMessage: Attempting to parse payload for topic:', topic, 'Payload:', payload); // DEBUG LOG 1
+            // console.log('[TopicExplorer_DEBUG] logMessage: Attempting to parse payload for topic:', topic, 'Payload:', payload);
             const jsonObj = JSON.parse(payload);
-            console.log('[TopicExplorer_DEBUG] logMessage: Payload parsed successfully. jsonObj:', jsonObj); // DEBUG LOG 2
-            
-            renderjson.set_show_to_level("all"); // Set option first
-            console.log('[TopicExplorer_DEBUG] logMessage: renderjson.set_show_to_level("all") called.'); // DEBUG LOG 3
-            
-            const renderedJsonElement = renderjson(jsonObj); // Then call renderjson with the object
-            console.log('[TopicExplorer_DEBUG] logMessage: renderjson(jsonObj) called.'); // DEBUG LOG 4
-            
+            renderjson.set_show_to_level("all");
+            const renderedJsonElement = renderjson(jsonObj);
             if (renderedJsonElement) {
-                console.log('[TopicExplorer_LOG_RENDERJSON] renderedJsonElement.tagName:', renderedJsonElement.tagName); 
-                console.log('[TopicExplorer_LOG_RENDERJSON] renderedJsonElement.className:', renderedJsonElement.className);
-                console.log('[TopicExplorer_DEBUG] logMessage: Appending renderedJsonElement to messageDiv.'); // DEBUG LOG 5
                 messageDiv.appendChild(renderedJsonElement);
             } else {
-                console.log('[TopicExplorer_LOG_RENDERJSON] renderedJsonElement is null or undefined. Appending raw JSON (parse OK, render failed).'); // DEBUG LOG 6
                 const textSpan = document.createElement('span');
                 textSpan.className = "text-gray-300 whitespace-pre-wrap break-all";
                 textSpan.textContent = "[RAW JSON (RENDER FAILED)]: " + payload;
                 messageDiv.appendChild(textSpan);
             }
-
         } catch (e) {
-            console.error('[TopicExplorer_DEBUG] logMessage: Error during JSON processing or rendering for topic:', topic, 'Error:', e); // DEBUG LOG 7
-            console.error('[TopicExplorer_DEBUG] logMessage: Original payload was:', payload);
+            // console.error('[TopicExplorer_DEBUG] logMessage: Error during JSON processing or rendering for topic:', topic, 'Error:', e);
             const textSpan = document.createElement('span');
             textSpan.className = "text-gray-300 whitespace-pre-wrap break-all";
             textSpan.textContent = "[INVALID JSON RECEIVED]: " + payload;
             messageDiv.appendChild(textSpan);
         }
-    } else { // This is a status message (topic is null)
-        console.log('[TopicExplorer_DEBUG] logMessage: Displaying status message:', payload);
+    } else { // Status message (topic is null)
+        // console.log('[TopicExplorer_DEBUG] logMessage: Displaying status message:', payload);
         const statusSpan = document.createElement('span');
-        statusSpan.className = 'text-yellow-400 italic'; // Style for status messages
+        statusSpan.className = 'text-yellow-400 italic';
         statusSpan.textContent = payload;
         messageDiv.appendChild(statusSpan);
     }
 
-    // Prepend the topic string only if it exists (i.e., not a status message)
     if (topic !== null) {
         const topicStrong = document.createElement('strong');
-        topicStrong.className = "text-sky-400";
+        topicStrong.className = "text-sky-400 block"; // block for better spacing if needed
         topicStrong.textContent = topic + ":";
-        messageDiv.prepend(document.createElement('br')); 
         messageDiv.prepend(topicStrong);
     }
     
     explorerMessageLog.appendChild(messageDiv);
 
+    // Keep log size manageable
     while (explorerMessageLog.childNodes.length > maxLogMessages) {
         explorerMessageLog.firstChild.remove();
     }
@@ -203,28 +197,42 @@ function logMessage(topic, payload) {
 
 
 function handleJsonMessageClick(event) {
-    console.log('[TopicExplorer] handleJsonMessageClick triggered.'); // LOG A
-    console.log('[TopicExplorer] event.target:', event.target); // LOG B
+    // console.log('[TopicExplorer] handleJsonMessageClick triggered.');
+    const messageEntryDiv = event.target.closest('.message-entry');
+    if (!messageEntryDiv) {
+        // console.log('[TopicExplorer] Click was outside a message-entry. Exiting.');
+        return;
+    }
+
+    // Store the actual topic from the clicked message entry
+    const actualTopic = messageEntryDiv.getAttribute('data-actual-topic');
+    if (actualTopic) {
+        lastClickedActualTopic = actualTopic;
+        // console.log(`[TopicExplorer] Stored lastClickedActualTopic: ${lastClickedActualTopic}`);
+    } else {
+        // If for some reason data-actual-topic is not there (e.g. status message), clear it
+        lastClickedActualTopic = null;
+    }
+
+    // Highlight selected message (optional)
+    // Array.from(explorerMessageLog.querySelectorAll('.message-entry.bg-blue-800')).forEach(el => el.classList.remove('bg-blue-800'));
+    // messageEntryDiv.classList.add('bg-blue-800');
+
 
     const renderjsonContainer = event.target.closest('.renderjson'); 
     if (!renderjsonContainer) {
-        console.log('[TopicExplorer] Click was outside .renderjson container. Exiting.'); // LOG C
+        // console.log('[TopicExplorer] Click was outside .renderjson container. Clearing path input.');
+        if (explorerJsonPathInput) explorerJsonPathInput.value = ''; // Clear path if not clicking on JSON
         return;
     }
-    console.log('[TopicExplorer] Click was inside .renderjson container.'); // LOG D
+    // console.log('[TopicExplorer] Click was inside .renderjson container.');
 
     let path = [];
-    let target = event.target;
+    let currentElement = event.target;
 
-    console.log('[TopicExplorer] Initial target for path building:', target); // LOG E
-    console.log('[TopicExplorer] Target classList:', target.classList); // LOG Target Classes
-
-    let currentElement = target;
-    // Traverse up from the clicked target until we are outside the .renderjson container
-    // or we hit the main message log.
     while (currentElement && currentElement !== renderjsonContainer.parentNode && currentElement !== explorerMessageLog) { 
         if (currentElement.classList && currentElement.classList.contains('rdjson-key')) {
-            let rawKeyText = currentElement.textContent.trim(); // e.g., "LBF_1_Bed_1_T_Value": 
+            let rawKeyText = currentElement.textContent.trim();
             let cleanedKey = "";
             const firstQuote = rawKeyText.indexOf('\"');
             const lastQuote = rawKeyText.lastIndexOf('\"');
@@ -234,7 +242,6 @@ function handleJsonMessageClick(event) {
             
             if (cleanedKey && (path.length === 0 || path[0] !== cleanedKey)) { 
                 path.unshift(cleanedKey);
-                console.log(`[TopicExplorer] Added key from .rdjson-key: ${cleanedKey}`); 
             }
         }
         else if (currentElement.classList && currentElement.classList.contains('rdjson-value')) {
@@ -247,24 +254,20 @@ function handleJsonMessageClick(event) {
                 if (firstQuote !== -1 && lastQuote !== -1 && firstQuote < lastQuote) {
                     cleanedKey = rawKeyText.substring(firstQuote + 1, lastQuote);
                 }
-
                 if (cleanedKey && (path.length === 0 || path[0] !== cleanedKey)) {
                     path.unshift(cleanedKey);
-                    console.log(`[TopicExplorer] Added key (from value's sibling): ${cleanedKey}`); 
                 }
             }
         }
-        
-        // Simplified parent LI logic for now, focusing on direct key extraction
         currentElement = currentElement.parentElement;
     }
 
-    console.log('[TopicExplorer] Final path built:', path); // LOG I
+    // console.log('[TopicExplorer] Final path built:', path);
     if (path.length > 0) {
         if (explorerJsonPathInput) explorerJsonPathInput.value = path.join('.');
     } else {
          if (explorerJsonPathInput) explorerJsonPathInput.value = ''; 
-         console.log('[TopicExplorer] Path is empty, clearing input.'); 
+         // console.log('[TopicExplorer] Path is empty, clearing input.');
     }
 }
 
@@ -276,11 +279,18 @@ function bindDataToVariableForm(usePath) {
     const jsonPathInput = currentExploringVariableRowElement.querySelector('.variable-jsonpath-subscribe');
 
     if (subTopicInput) {
-        subTopicInput.value = explorerTopicInput.value.trim();
+        // Prioritize lastClickedActualTopic if available, otherwise use the explorer's input (filter/wildcard)
+        subTopicInput.value = lastClickedActualTopic ? lastClickedActualTopic.trim() : explorerTopicInput.value.trim();
+        // console.log(`[TopicExplorer] Binding topic: ${subTopicInput.value}`);
     }
 
-    if (usePath && jsonPathInput && explorerJsonPathInput) {
-        jsonPathInput.value = explorerJsonPathInput.value.trim();
-    } else if (jsonPathInput) {
+    if (jsonPathInput) { // Always interact with jsonPathInput to clear or set it
+        if (usePath && explorerJsonPathInput) {
+            jsonPathInput.value = explorerJsonPathInput.value.trim();
+            // console.log(`[TopicExplorer] Binding JSON path: ${jsonPathInput.value}`);
+        } else {
+            jsonPathInput.value = ''; // Clear JSON path if not using path or path input doesn't exist
+            // console.log('[TopicExplorer] Clearing JSON path.');
+        }
     }
 }
