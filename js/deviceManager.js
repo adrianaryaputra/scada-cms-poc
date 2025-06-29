@@ -1144,6 +1144,22 @@ export function clearAllClientDevices() {
     renderDeviceList(); // Perbarui UI Device Manager
 }
 
+export function clearLocalDeviceCacheAndState() {
+    if (localDeviceCache && localDeviceCache.length > 0) {
+        localDeviceCache.forEach(device => {
+            if (typeof deleteDeviceStateFromManager === 'function') {
+                // This function should exist in stateManager.js to clear any HMI component bindings or values
+                deleteDeviceStateFromManager(device.id);
+            }
+        });
+        localDeviceCache = []; // Kosongkan cache lokal
+        console.log("[DeviceManager] Local device cache and associated client state cleared without notifying server.");
+    } else {
+        console.log("[DeviceManager] No local devices to clear from client state.");
+    }
+    renderDeviceList(); // Perbarui UI Device Manager (akan menampilkan "No devices")
+}
+
 /**
  * Menginisialisasi atau mengganti semua device di klien berdasarkan array konfigurasi.
  * Ini akan membersihkan device klien yang ada dan meminta server untuk menambahkan device baru.

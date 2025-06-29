@@ -1,6 +1,6 @@
 // js/layoutManager.js
 import { saveState, /* resetHistory */ } from './stateManager.js'; // Import langsung
-import { getAllDeviceConfigsForExport, clearAllClientDevices, initializeDevicesFromConfigs } from './deviceManager.js'; // Impor initializeDevicesFromConfigs
+import { getAllDeviceConfigsForExport, clearAllClientDevices, initializeDevicesFromConfigs, clearLocalDeviceCacheAndState } from './deviceManager.js'; // Impor initializeDevicesFromConfigs
 
 let konvaManagerRef = null; // Akan diisi saat inisialisasi
 // stateManagerRef tidak lagi diperlukan jika fungsi diimpor langsung
@@ -275,7 +275,29 @@ const ProjectManager = { // Rename objek
                     const projectData = response.data;
                     console.log(`Project '${projectData.projectName}' berhasil dimuat dari server:`, projectData);
 
-                    this.newProject(); // Membersihkan HMI & device klien, reset state ProjectManager
+                    // Manually clear client-side state without telling server to delete devices
+                    if (konvaManagerRef && typeof konvaManagerRef.clearCanvas === 'function') {
+                        konvaManagerRef.clearCanvas();
+                        console.log("[ProjectManager Load] Canvas HMI telah dibersihkan.");
+                    } else {
+                        console.warn("[ProjectManager Load] konvaManagerRef atau clearCanvas tidak tersedia saat membersihkan HMI.");
+                    }
+
+                    if (typeof clearLocalDeviceCacheAndState === 'function') {
+                        clearLocalDeviceCacheAndState(); // Clears local device cache and associated stateManager entries
+                        console.log("[ProjectManager Load] Cache device lokal dan state terkait telah dibersihkan.");
+                    } else {
+                        console.warn("[ProjectManager Load] clearLocalDeviceCacheAndState tidak tersedia dari deviceManager.");
+                    }
+
+                    // Reset project-specific properties. Note: setCurrentProjectName and setDirty are handled after processing.
+                    // this.setCurrentProjectName(null); // Will be set by projectData.projectName
+                    // this.setDirty(false); // Will be set after successful load
+                    // if (typeof saveState === 'function') { // saveState will be called after setting new project name
+                    //      saveState();
+                    // }
+                    console.log("[ProjectManager Load] State klien lokal telah direset (kecuali nama project dan status dirty).");
+
 
                     if (projectData.hmiLayout && componentFactoryRef && typeof componentFactoryRef.create === 'function') {
                         projectData.hmiLayout.forEach(componentData => {
