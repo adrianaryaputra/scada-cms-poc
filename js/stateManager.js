@@ -3,6 +3,8 @@
  * device variable values (tagDatabase), and undo/redo functionality.
  */
 
+import { updateLiveVariableValueInManagerUI } from './deviceManager.js';
+
 // Module-level variables for state management
 let undoStack = []; // Stores snapshots of application state for undo operations
 let redoStack = []; // Stores snapshots for redo operations
@@ -272,6 +274,15 @@ export function setDeviceVariableValue(deviceId, variableName, value) {
         }
     } else {
         console.warn("[StateManager] layerRef is not available. Cannot notify components to update."); // DEBUG LOG
+    }
+
+    // Attempt to update the value in the Variable Manager UI if it's open
+    if (typeof updateLiveVariableValueInManagerUI === 'function') {
+        updateLiveVariableValueInManagerUI(deviceId, variableName, value);
+    } else {
+        // This might happen if deviceManager hasn't fully initialized or if there's a circular dependency issue
+        // at the time of the first call. Should be rare in normal operation.
+        console.warn("updateLiveVariableValueInManagerUI is not available to stateManager at this point.");
     }
 }
 

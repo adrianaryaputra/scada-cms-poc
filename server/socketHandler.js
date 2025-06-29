@@ -98,12 +98,20 @@ function setupSocketHandlers(io) {
         socket.on('request_device_data', (deviceId) => {
             // console.log(`[Socket ${socket.id}] Received 'request_device_data' for device: ${deviceId}`);
             const device = getDeviceInstance(deviceId);
-            if (device && typeof device.readData === 'function') {
-                // This is primarily for polled devices. MQTT devices push data automatically.
-                // The readData method in the device should handle emitting data via socket.
-                device.readData();
-            } else if (device) {
-                console.warn(`[SocketHandler] Device ${deviceId} (${device.type}) does not have a readData method or is not a polled type.`);
+            if (device) {
+                if (device.isInternal) {
+                    console.log(`[SocketHandler] 'request_device_data' ignored for Internal Device: ${deviceId}`);
+                    // Optionally, notify client that this operation is not applicable
+                    // socket.emit('operation_error', { message: `Data request not applicable for Internal Device ${deviceId}.`});
+                    return; // Stop further processing
+                }
+                if (typeof device.readData === 'function') {
+                    // This is primarily for polled devices. MQTT devices push data automatically.
+                    // The readData method in the device should handle emitting data via socket.
+                    device.readData();
+                } else {
+                    console.warn(`[SocketHandler] Device ${deviceId} (${device.type}) does not have a readData method or is not a polled type.`);
+                }
             } else {
                  socket.emit('operation_error', { message: `Device ${deviceId} not found for data request.`});
             }
@@ -114,12 +122,42 @@ function setupSocketHandlers(io) {
             const { deviceId, variableName, address, value } = data;
             const device = getDeviceInstance(deviceId);
 
-            if (device && device.connected) {
+            if (!device) {
+                socket.emit('operation_error', {
+                    message: `Device ${deviceId} not found. Cannot write.`,
+                    details: { deviceId }
+                });
+                return;
+            }
+
+            // Handle Internal Devices separately
+            if (device.isInternal) {
+                if (variableName !== undefined && value !== undefined) {
+                    console.log(`[SocketHandler] Internal Device ${deviceId} variable ${variableName} set to ${value} by ${socket.id}`);
+                    // Emit to all clients in the namespace so their stateManagers can update tagDatabase
+                    deviceNamespace.emit('device_variable_update', {
+                        deviceId,
+                        variableName,
+                        value,
+                        timestamp: new Date().toISOString()
+                    });
+                    // TODO: Persist this change if internal variable values need to be saved on the server.
+                    // This would involve updating serverSideDeviceConfigs[index].variables or a similar mechanism.
+                } else {
+                    socket.emit('operation_error', {
+                        message: `For Internal Device, 'variableName' and 'value' must be provided for 'write_to_device'.`,
+                        details: { deviceId }
+                    });
+                }
+                return; // Stop further processing for internal device
+            }
+
+            // For non-internal devices, proceed with existing logic
+            if (device.connected) {
                 if (variableName && typeof device.writeVariable === 'function') {
                     device.writeVariable(variableName, value);
                 } else if (address && typeof device.writeData === 'function') {
-                    // Fallback for devices that use direct address writing (e.g., Modbus)
-                    device.writeData(address, value);
+                    device.writeData(address, value); // Fallback for direct address writing
                 } else {
                     console.warn(`[SocketHandler] Device ${deviceId} (${device.type}) does not support the required write method (writeVariable or writeData).`);
                     socket.emit('operation_error', {
@@ -129,8 +167,8 @@ function setupSocketHandlers(io) {
                 }
             } else {
                 socket.emit('operation_error', {
-                    message: `Device ${deviceId} not found or not connected. Cannot write.`,
-                    details: { deviceId, connected: device?.connected }
+                    message: `Device ${deviceId} not connected. Cannot write.`,
+                    details: { deviceId, connected: device.connected }
                 });
             }
         });
