@@ -698,6 +698,11 @@
             </div>
         </div>
 
+        <!-- Toast Notification Container -->
+        <div id="toast-container" class="fixed bottom-5 right-5 space-y-2 z-[200]">
+            <!-- Toast messages will be appended here -->
+        </div>
+
         <!-- Modal untuk Load Project -->
         <div id="load-project-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-[150] flex items-center justify-center p-4">
             <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md">
@@ -712,6 +717,24 @@
                 <div class="flex justify-end space-x-3">
                     <button id="cancel-load-project-btn" type="button" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Batal</button>
                     <button id="confirm-load-project-btn" type="button" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Load</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal untuk Save Project As -->
+        <div id="save-project-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-[150] flex items-center justify-center p-4">
+            <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 id="save-project-modal-title" class="text-xl font-bold text-cyan-300">Save Project</h2>
+                    <button id="close-save-project-modal-btn" class="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+                </div>
+                <div class="mb-4">
+                    <label for="save-project-name-input" class="block text-sm font-medium text-gray-300 mb-1">Nama Project:</label>
+                    <input type="text" id="save-project-name-input" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white" placeholder="Masukkan nama project...">
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button id="cancel-save-project-btn" type="button" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Batal</button>
+                    <button id="confirm-save-project-btn" type="button" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Simpan</button>
                 </div>
             </div>
         </div>
