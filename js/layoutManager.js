@@ -199,19 +199,30 @@ const LayoutManager = {
                     }
 
                     if (componentFactoryRef && typeof componentFactoryRef.create === 'function') {
+                        console.log("[LayoutManager] Mencoba membuat ulang komponen dari data yang dimuat:", response.data); // LOG TAMBAHAN
                         response.data.forEach(componentData => {
                             try {
-                                componentFactoryRef.create(componentData.componentType, componentData);
+                                console.log("[LayoutManager] Membuat komponen:", componentData.componentType, JSON.stringify(componentData)); // LOG TAMBAHAN
+                                const component = componentFactoryRef.create(componentData.componentType, componentData);
+                                if (component) {
+                                    console.log("[LayoutManager] Komponen dibuat:", component.id(), "di X:", component.x(), "Y:", component.y(), "Attrs:", JSON.stringify(component.attrs)); // LOG TAMBAHAN
+                                    // componentFactory seharusnya sudah menambahkan ke layer
+                                } else {
+                                    console.warn("[LayoutManager] ComponentFactory mengembalikan null/undefined untuk:", componentData);
+                                }
                             } catch (e) {
-                                console.error(`Gagal membuat komponen saat memuat layout: ${componentData.componentType}`, e);
+                                console.error(`[LayoutManager] Gagal membuat komponen saat memuat layout: ${componentData.componentType}`, e);
                             }
                         });
                         // Setelah semua komponen dibuat, gambar ulang layer
                         if (konvaManagerRef && konvaManagerRef.layer) {
+                            console.log("[LayoutManager] Memanggil batchDraw pada layer setelah memuat semua komponen."); // LOG TAMBAHAN
                             konvaManagerRef.layer.batchDraw();
+                        } else {
+                             console.error("[LayoutManager] konvaManagerRef.layer tidak tersedia untuk batchDraw setelah memuat komponen."); // LOG TAMBAHAN
                         }
                     } else {
-                        console.error("componentFactoryRef atau create tidak tersedia.");
+                        console.error("[LayoutManager] componentFactoryRef atau create tidak tersedia."); // LOG TAMBAHAN
                         reject("Gagal membuat komponen: factory tidak tersedia.");
                         removeListeners();
                         return;
