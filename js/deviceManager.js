@@ -224,8 +224,23 @@ export function initDeviceManager(socketInstance, projectManagerSetDirtyFunc) { 
     });
 
     socket.on('initial_device_list', (serverDevices) => {
-        console.log('Received initial device list:', serverDevices);
-        localDeviceCache = Array.isArray(serverDevices) ? serverDevices : [];
+        console.log('Received initial device list:', serverDevices); // Existing log
+        if (Array.isArray(serverDevices)) {
+            console.log(`Processing ${serverDevices.length} device(s) from initial_device_list.`);
+            serverDevices.forEach((device, index) => {
+                // Log structure of each received device for debugging
+                console.log(`Device[${index}]:`, JSON.stringify(device));
+                if (typeof device !== 'object' || device === null) {
+                    console.warn(`Device[${index}] is not an object:`, device);
+                } else if (!device.id) {
+                    console.warn(`Device[${index}] is missing 'id' property:`, device);
+                }
+            });
+            localDeviceCache = serverDevices; // Assign valid or potentially problematic array
+        } else {
+            console.warn('Received initial_device_list was not an array. Clearing local cache.', serverDevices);
+            localDeviceCache = [];
+        }
         renderDeviceList();
     });
 
@@ -661,8 +676,11 @@ function renderDeviceList() {
         return;
     }
 
-    localDeviceCache.forEach(device => {
-        if(typeof device !== 'object' || !device.id) return; // Skip malformed device data
+    localDeviceCache.forEach((device, index) => { // Added index for logging
+        if(typeof device !== 'object' || device === null || !device.id) {
+            console.warn(`[renderDeviceList] Skipping device at index ${index} due to malformed data or missing ID. Device data:`, JSON.stringify(device));
+            return; // Skip malformed device data
+        }
 
         const isDeviceConnected = device.connected || false;
 
