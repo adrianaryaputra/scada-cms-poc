@@ -98,93 +98,76 @@ function setupSocketHandlers(io) {
         socket.on('project:save', async ({ name, data }) => { // Event diubah ke 'project:save'
             // console.log(`[Socket ${socket.id}] Received 'project:save' for name: ${name}`);
             try {
-                // Memanggil fungsi dari projectHandler untuk menyimpan projectData lengkap
                 await projectHandler.saveProjectToFile(name, data);
-                socket.emit('project:saved_ack', { success: true, name: name, message: `Project '${name}' berhasil disimpan.` }); // Event diubah
+                socket.emit('project:saved_ack', { success: true, name: name, message: `Project '${name}' berhasil disimpan.` });
             } catch (error) {
                 console.error(`Error saving project '${name}':`, error);
                 socket.emit('operation_error', {
-                    message: `Gagal menyimpan project '${name}'. Server error.`,
-                    details: error.message
+                    operation: 'project:save', // Konteks operasi
+                    code: error.code || 'SERVER_ERROR', // Kode error dari projectHandler atau default
+                    message: error.message || `Gagal menyimpan project '${name}'.`, // Pesan dari projectHandler atau default
+                    details: { projectName: name, originalError: error.originalError ? error.originalError.message : error.message }
                 });
             }
         });
 
-        socket.on('project:load', async ({ name }) => { // Event diubah ke 'project:load'
+        socket.on('project:load', async ({ name }) => {
             // console.log(`[Socket ${socket.id}] Received 'project:load' for name: ${name}`);
             try {
                 const projectData = await projectHandler.loadProjectFromFile(name);
-                if (projectData) {
-                    // Server-side device re-initialization based on loaded project
-                    console.log(`[SocketHandler] Project '${name}' loaded. Re-initializing server-side devices.`);
+                // Jika projectData tidak ditemukan, loadProjectFromFile akan melempar error dengan code PROJECT_NOT_FOUND
 
-                    // 1. Get all current server-side active device IDs
-                    const currentActiveDeviceIds = getAllDeviceInstances().map(d => d.id);
-                    const newDeviceConfigIds = projectData.deviceConfigs ? projectData.deviceConfigs.map(dc => dc.id) : [];
+                console.log(`[SocketHandler] Project '${name}' loaded. Re-initializing server-side devices.`);
+                const currentActiveDeviceIds = getAllDeviceInstances().map(d => d.id);
+                const newDeviceConfigIds = projectData.deviceConfigs ? projectData.deviceConfigs.map(dc => dc.id) : [];
 
-                    // 2. Remove devices from server that are not in the new project's deviceConfigs
-                    currentActiveDeviceIds.forEach(existingId => {
-                        if (!newDeviceConfigIds.includes(existingId)) {
-                            console.log(`[SocketHandler] Removing device '${existingId}' from server as it's not in loaded project.`);
-                            removeDevice(existingId); // Fungsi dari server/deviceManager.js
-                        }
-                    });
-
-                    // 3. Initialize/update devices from the project's deviceConfigs
-                    // initializeDevice akan meng-update jika ID sudah ada, atau membuat baru.
-                    // Untuk Internal Device, ini akan me-refresh konfigurasinya.
-                    // Untuk device fisik, ini akan membuat instance baru jika belum ada, atau mengembalikan yang ada.
-                    // Jika instance device fisik di-update, ia akan disconnect dan reconnect.
-                    if (projectData.deviceConfigs && Array.isArray(projectData.deviceConfigs)) {
-                        projectData.deviceConfigs.forEach(deviceConfig => {
-                            console.log(`[SocketHandler] Initializing/updating device '${deviceConfig.id}' on server from loaded project.`);
-                            initializeDevice(deviceConfig, io); // Fungsi dari server/deviceManager.js, io diteruskan
-                        });
+                currentActiveDeviceIds.forEach(existingId => {
+                    if (!newDeviceConfigIds.includes(existingId)) {
+                        removeDevice(existingId);
                     }
+                });
 
-                    // 4. Send the new list of active devices to the requesting client (or all clients)
-                    // Klien yang melakukan load akan mendapatkan daftar device yang sudah disesuaikan dengan project.
-                    const updatedActiveDevices = getAllDeviceInstances().map(devInstance => {
-                        // Untuk device non-internal, kita ambil config dari instance.
-                        // Untuk internal, instance adalah config itu sendiri.
-                        const config = devInstance.isInternal ? devInstance : serverSideDeviceConfigs.find(c => c.id === devInstance.id) || devInstance.config;
-                        return {
-                            ...(config || {}), // Fallback ke objek kosong jika config tidak ditemukan (seharusnya tidak terjadi)
-                            id: devInstance.id, // Pastikan ID dari instance
-                            name: devInstance.name, // Nama dari instance
-                            type: devInstance.type, // Tipe dari instance
-                            connected: devInstance.connected || false,
-                            variables: devInstance.variables || (config ? config.variables : []) // Pastikan variabel ada
-                        };
+                if (projectData.deviceConfigs && Array.isArray(projectData.deviceConfigs)) {
+                    projectData.deviceConfigs.forEach(deviceConfig => {
+                        initializeDevice(deviceConfig, io);
                     });
-                    console.log("[SocketHandler] Mengirim initial_device_list baru ke klien setelah project load:", updatedActiveDevices);
-                    socket.emit('initial_device_list', updatedActiveDevices);
-
-                    // 5. Send the HMI layout and other project data to the client
-                    socket.emit('project:loaded_data', { name: name, data: projectData });
-                } else {
-                    socket.emit('operation_error', { message: `Project '${name}' tidak ditemukan.` });
                 }
-            } catch (error) {
+
+                const updatedActiveDevices = getAllDeviceInstances().map(devInstance => {
+                    const config = devInstance.isInternal ? devInstance : serverSideDeviceConfigs.find(c => c.id === devInstance.id) || devInstance.config;
+                    return {
+                        ...(config || {}),
+                        id: devInstance.id, name: devInstance.name, type: devInstance.type,
+                        connected: devInstance.connected || false,
+                        variables: devInstance.variables || (config ? config.variables : [])
+                    };
+                });
+                socket.emit('initial_device_list', updatedActiveDevices);
+                socket.emit('project:loaded_data', { name: name, data: projectData });
+
+            } catch (error) { // Menangkap error dari projectHandler.loadProjectFromFile
                 console.error(`Error loading project '${name}':`, error);
                 socket.emit('operation_error', {
-                    message: `Gagal memuat project '${name}'. Server error.`,
-                    details: error.message
+                    operation: 'project:load',
+                    code: error.code || 'SERVER_ERROR',
+                    message: error.message || `Gagal memuat project '${name}'.`,
+                    details: { projectName: name, originalError: error.originalError ? error.originalError.message : error.message }
                 });
             }
         });
 
-        socket.on('project:list', async () => { // Event diubah ke 'project:list'
+        socket.on('project:list', async () => {
             // console.log(`[Socket ${socket.id}] Received 'project:list' request`);
             try {
-                // Memanggil fungsi dari projectHandler
                 const projectNames = await projectHandler.listProjectFiles();
-                socket.emit('project:list_results', projectNames); // Event diubah
+                socket.emit('project:list_results', projectNames);
             } catch (error) {
                 console.error('Error listing projects:', error);
                 socket.emit('operation_error', {
-                    message: 'Gagal mendapatkan daftar project. Server error.',
-                    details: error.message
+                    operation: 'project:list',
+                    code: error.code || 'SERVER_ERROR',
+                    message: error.message || 'Gagal mendapatkan daftar project.',
+                    details: { originalError: error.originalError ? error.originalError.message : error.message }
                 });
             }
         });

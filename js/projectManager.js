@@ -184,23 +184,43 @@ const ProjectManager = { // Rename objek
                 removeListeners();
             };
 
-            const errorListener = (error) => {
-                console.error('Error dari server saat menyimpan project:', error);
-                reject(error.message || 'Server operation error');
+            const errorListener = (serverError) => { // serverError bisa berupa objek
+                let detailedMessage = 'Gagal menyimpan project.';
+                if (typeof serverError === 'object' && serverError.message) {
+                    detailedMessage = serverError.message;
+                    if (serverError.code) detailedMessage += ` (Kode: ${serverError.code})`;
+                } else if (typeof serverError === 'string') {
+                    detailedMessage = serverError; // Untuk error non-objek atau timeout
+                }
+                console.error('Error dari server saat menyimpan project:', serverError);
+                reject(detailedMessage); // Reject dengan pesan yang sudah diproses
                 removeListeners();
             };
 
             const removeListeners = () => {
-                socketRef.off('project:saved_ack', ackListener); // Listen ke event 'project:saved_ack'
-                socketRef.off('operation_error', errorListener);
+                socketRef.off('project:saved_ack', ackListener);
+                socketRef.off('operation_error', errorListener); // Tetap listen ke operation_error umum
             };
 
-            socketRef.on('project:saved_ack', ackListener); // Listen ke event 'project:saved_ack'
+            socketRef.on('project:saved_ack', ackListener);
+            // Handler operation_error umum akan menangkap error yang dikirim server
+            socketRef.on('operation_error', (err) => {
+                // Kita hanya tertarik pada error yang relevan dengan operasi ini.
+                // Idealnya, server mengirim error dengan ID request atau menggunakan callback emit.
+                // Untuk sekarang, kita asumsikan error ini relevan jika tidak ada ack.
+                // Atau, kita bisa filter berdasarkan err.operation jika ada.
+                if (err && err.operation === 'project:save') {
+                    errorListener(err);
+                } else if (err && !err.operation) { // Error umum tanpa konteks operasi
+                    errorListener(err.message || 'Unknown server error');
+                }
+            });
 
             const timeoutId = setTimeout(() => {
                 console.error("Timeout saat menyimpan project. Tidak ada respons dari server.");
-                reject("Timeout: Server tidak merespons.");
-                removeListeners();
+                // errorListener akan dipanggil oleh reject() di bawah ini
+                reject("Timeout menyimpan project: Server tidak merespons.");
+                removeListeners(); // Panggil removeListeners secara eksplisit di sini juga
             }, 10000);
 
             const originalResolve = resolve;
@@ -228,94 +248,83 @@ const ProjectManager = { // Rename objek
             }
         }
 
-        return new Promise(async (resolve, reject) => { // Jadikan callback async untuk await
-            this.setIsLoadingProject(true); // Set flag sebelum memulai
-            try {
-                socketRef.emit('project:load', { name: projectName }); // Emit event 'project:load'
+        return new Promise((resolve, reject) => {
+            this.setIsLoadingProject(true);
+            let timeoutId = null;
 
-                const dataListener = (response) => { // response akan berisi { name, data: projectData }
-                    if (response.name === projectName && response.data) {
-                        const projectData = response.data;
-                        console.log(`Project '${projectData.projectName}' berhasil dimuat dari server:`, projectData);
-
-                        // newProject() sudah dipanggil di dalam loadProjectFromServer (sebelumnya)
-                        // atau akan dipanggil sebelum render HMI.
-                        // Pembersihan device klien sudah di-handle oleh newProject().
-                        // Server akan mengirim initial_device_list yang baru.
-
-                        // 1. Render HMI Layout
-                        if (projectData.hmiLayout && componentFactoryRef && typeof componentFactoryRef.create === 'function') {
-                            console.log("[ProjectManager] Membuat ulang komponen HMI dari data project:", projectData.hmiLayout);
-                            projectData.hmiLayout.forEach(componentData => {
-                                try {
-                                    componentFactoryRef.create(componentData.componentType, componentData);
-                                } catch (e) {
-                                    console.error(`[ProjectManager] Gagal membuat komponen HMI: ${componentData.componentType}`, e);
-                                }
-                            });
-                            if (konvaManagerRef && konvaManagerRef.layer) {
-                                konvaManagerRef.layer.batchDraw();
-                            }
-                        } else {
-                            console.warn("[ProjectManager] Tidak ada data HMI atau componentFactory tidak tersedia.");
-                        }
-
-                        // Device akan di-handle oleh 'initial_device_list' dari server.
-                        console.log("[ProjectManager] Menunggu 'initial_device_list' dari server setelah project load.");
-
-                        this.setCurrentProjectName(projectData.projectName);
-                        if (typeof saveState === 'function') {
-                            saveState();
-                        }
-                        this.setDirty(false);
-                        resolve(projectData);
-                    }
-                    removeListeners();
-                };
-
-                const errorListener = (error) => {
-                    console.error(`Error dari server saat memuat project '${projectName}':`, error);
-                    reject(error.message || `Gagal memuat project '${projectName}'.`);
-                    removeListeners();
-                };
-
-                const removeListeners = () => {
-                    socketRef.off('project:loaded_data', dataListener);
-                    socketRef.off('operation_error', errorListener);
-                    this.setIsLoadingProject(false); // Reset flag di sini juga
-                };
-
-                socketRef.on('project:loaded_data', dataListener);
-                socketRef.on('operation_error', errorListener);
-
-                const timeoutId = setTimeout(() => {
-                    console.error(`Timeout saat memuat project '${projectName}'.`);
-                    reject("Timeout: Server tidak merespons permintaan load project.");
-                    removeListeners(); // Ini juga akan memanggil setIsLoadingProject(false)
-                }, 10000);
-
-                // Modifikasi resolve dan reject untuk membersihkan timeout dan flag
-                const originalResolve = resolve;
-                const originalReject = reject;
-                resolve = (val) => {
-                    clearTimeout(timeoutId);
-                    this.setIsLoadingProject(false); // Reset flag
-                    originalResolve(val);
-                };
-                reject = (err) => {
-                    clearTimeout(timeoutId);
-                    this.setIsLoadingProject(false); // Reset flag
-                    originalReject(err);
-                };
-
-            } catch (error) { // Catch untuk error emit atau setup promise awal
+            const cleanup = () => {
+                if (timeoutId) clearTimeout(timeoutId);
+                socketRef.off('project:loaded_data', dataListener);
+                socketRef.off('operation_error', errorListener);
                 this.setIsLoadingProject(false);
-                reject(error);
+            };
+
+            const dataListener = (response) => {
+                if (response.name === projectName && response.data) {
+                    const projectData = response.data;
+                    console.log(`Project '${projectData.projectName}' berhasil dimuat dari server:`, projectData);
+
+                    this.newProject(); // Membersihkan HMI & device klien, reset state ProjectManager
+
+                    if (projectData.hmiLayout && componentFactoryRef && typeof componentFactoryRef.create === 'function') {
+                        projectData.hmiLayout.forEach(componentData => {
+                            try { componentFactoryRef.create(componentData.componentType, componentData); }
+                            catch (e) { console.error(`[PM] Gagal membuat HMI dari load: ${componentData.componentType}`, e); }
+                        });
+                        if (konvaManagerRef && konvaManagerRef.layer) konvaManagerRef.layer.batchDraw();
+                    }
+                    // Device akan di-handle oleh 'initial_device_list' dari server.
+
+                    this.setCurrentProjectName(projectData.projectName);
+                    if (typeof saveState === 'function') saveState();
+                    this.setDirty(false);
+                    resolve(projectData);
+                }
+                cleanup();
+            };
+
+            const errorListener = (serverError) => {
+                let detailedMessage = `Gagal memuat project '${projectName}'.`;
+                if (typeof serverError === 'object' && serverError.message) {
+                    detailedMessage = serverError.message;
+                    if (serverError.code === 'PROJECT_NOT_FOUND') { // Contoh penanganan kode spesifik
+                        // Pesan sudah cukup jelas dari server.
+                    } else if (serverError.code) {
+                        detailedMessage += ` (Kode: ${serverError.code})`;
+                    }
+                } else if (typeof serverError === 'string') {
+                    detailedMessage = serverError;
+                }
+                console.error(`Error dari server saat memuat project '${projectName}':`, serverError);
+                reject(detailedMessage);
+                cleanup();
+            };
+
+            socketRef.on('project:loaded_data', dataListener);
+            // Menyesuaikan listener 'operation_error' untuk lebih spesifik
+            socketRef.on('operation_error', (err) => {
+                if (err && err.operation === 'project:load') {
+                    errorListener(err);
+                } else if (err && !err.operation) {
+                    errorListener(err.message || 'Unknown server error on load');
+                }
+            });
+
+            try {
+                socketRef.emit('project:load', { name: projectName });
+                timeoutId = setTimeout(() => {
+                    console.error(`Timeout saat memuat project '${projectName}'.`);
+                    reject(`Timeout memuat project '${projectName}': Server tidak merespons.`);
+                    cleanup();
+                }, 10000);
+            } catch (error) {
+                console.error("Error saat emit 'project:load':", error);
+                this.setIsLoadingProject(false);
+                reject("Gagal mengirim permintaan load ke server.");
             }
         });
     },
 
-    // Fungsi ini untuk sementara masih meminta daftar layout (akan diubah ke project)
     getAvailableProjectsFromServer() {
         if (!socketRef) {
             console.error("Socket.IO client tidak terinisialisasi di ProjectManager.");
