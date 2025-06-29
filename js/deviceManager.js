@@ -571,13 +571,6 @@ function handleFormSubmit(e) {
         deviceData.serialPort = document.getElementById('modbus-rtu-serial-port')?.value.trim() || '';
         deviceData.baudRate = document.getElementById('modbus-rtu-baud-rate')?.value.trim() || '9600';
         deviceData.unitId = document.getElementById('modbus-rtu-unit-id')?.value.trim() || '1';
-    } else { // For other device types, ensure variables array exists
-        if (isEditing) {
-            const existingDevice = localDeviceCache.find(d => d.id === deviceData.id);
-            deviceData.variables = existingDevice ? existingDevice.variables : [];
-        } else {
-            deviceData.variables = [];
-        }
     } else if (deviceData.type === 'internal') {
         // For internal devices, we primarily care about id, name, type, and variables.
         // Ensure variables array exists.
@@ -725,7 +718,7 @@ function openVariableManager(deviceId) {
     variableManagerModal.dataset.deviceId = deviceId; // Store deviceId for "Add Variable" button
     variableListTbody.innerHTML = ''; // Clear previous variables
 
-    if (device.type === 'mqtt' && Array.isArray(device.variables) && device.variables.length > 0) {
+    if (Array.isArray(device.variables) && device.variables.length > 0) {
         device.variables.forEach(variable => {
             const row = variableListTbody.insertRow();
             row.className = "hover:bg-gray-700/50";
@@ -747,26 +740,28 @@ function openVariableManager(deviceId) {
             // Subscribe Setting
             const subscribeCell = row.insertCell();
             subscribeCell.className = "px-4 py-3 whitespace-nowrap text-sm text-gray-300";
-            let subscribeHtml = '<span class="text-xs text-gray-500">Not Subscribed</span>';
-            if (variable.enableSubscribe) {
-                subscribeHtml = `<span class="font-semibold">Topic:</span> ${variable.subscribeTopic || 'N/A'}`;
+            if (device.type === 'mqtt' && variable.enableSubscribe) {
+                let subscribeHtml = `<span class="font-semibold">Topic:</span> ${variable.subscribeTopic || 'N/A'}`;
                 subscribeHtml += `<br><span class="text-xs text-gray-400">QoS: ${variable.qosSubscribe !== undefined ? variable.qosSubscribe : 'N/A'}`;
                 if (variable.jsonPathSubscribe) {
                     subscribeHtml += `, JSONPath: ${variable.jsonPathSubscribe}`;
                 }
                 subscribeHtml += `</span>`;
+                subscribeCell.innerHTML = subscribeHtml;
+            } else {
+                subscribeCell.innerHTML = '<span class="text-xs text-gray-500">N/A</span>';
             }
-            subscribeCell.innerHTML = subscribeHtml;
 
             // Publish Setting
             const publishCell = row.insertCell();
             publishCell.className = "px-4 py-3 whitespace-nowrap text-sm text-gray-300";
-            let publishHtml = '<span class="text-xs text-gray-500">Not Publishing</span>';
-            if (variable.enablePublish) {
-                publishHtml = `<span class="font-semibold">Topic:</span> ${variable.publishTopic || 'N/A'}`;
+            if (device.type === 'mqtt' && variable.enablePublish) {
+                let publishHtml = `<span class="font-semibold">Topic:</span> ${variable.publishTopic || 'N/A'}`;
                 publishHtml += `<br><span class="text-xs text-gray-400">QoS: ${variable.qosPublish !== undefined ? variable.qosPublish : 'N/A'}, Retain: ${variable.retainPublish ? 'Yes' : 'No'}</span>`;
+                publishCell.innerHTML = publishHtml;
+            } else {
+                publishCell.innerHTML = '<span class="text-xs text-gray-500">N/A</span>';
             }
-            publishCell.innerHTML = publishHtml;
 
             // Value Preview Cell
             const valueCell = row.insertCell();
@@ -802,9 +797,9 @@ function openVariableManager(deviceId) {
                     ${ICON_DELETE}
                 </button>
             `;
-
         });
-        // Add event listeners for the new Edit/Delete buttons
+
+        // Add event listeners for the new Edit/Delete buttons (must be inside the 'if' block)
         variableListTbody.querySelectorAll('.edit-variable-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const devId = e.currentTarget.dataset.deviceId;
@@ -819,12 +814,10 @@ function openVariableManager(deviceId) {
                 deleteVariable(devId, varId);
             });
         });
-    } else if (device.type === 'internal' && (!Array.isArray(device.variables) || device.variables.length === 0)) {
-        variableListTbody.innerHTML = `<tr><td colspan="6" class="px-4 py-3 text-sm text-gray-400 text-center">No variables configured for this Internal device.</td></tr>`;
-    }
-    else if (device.type !== 'mqtt' && device.type !== 'internal') { // For non-MQTT, non-Internal devices
+
+    } else if (device.type !== 'mqtt' && device.type !== 'internal') { // For non-MQTT, non-Internal devices
          variableListTbody.innerHTML = `<tr><td colspan="6" class="px-4 py-3 text-sm text-gray-400 text-center">Manajemen variabel untuk tipe device '${device.type}' belum didukung di tampilan ini.</td></tr>`;
-    } else { // MQTT device but no variables (or internal device with no variables, though covered above)
+    } else { // For MQTT or Internal device but no variables
         variableListTbody.innerHTML = `<tr><td colspan="6" class="px-4 py-3 text-sm text-gray-400 text-center">No variables configured for this ${device.type} device.</td></tr>`;
     }
 
