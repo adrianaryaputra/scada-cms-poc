@@ -228,6 +228,8 @@ export const componentFactory = {
      * @returns {Konva.Group} The Konva.Group representing the BitLamp.
      */
     createBitLamp(id, config) {
+        // console.log('[DEBUG_COMPONENT_FACTORY] Konva.Rect in createBitLamp:', Konva.Rect);
+        // console.log('[DEBUG_COMPONENT_FACTORY] Konva.Circle in createBitLamp:', Konva.Circle);
         const group = new Konva.Group({
             id: id,
             x: config.x,
