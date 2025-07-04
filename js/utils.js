@@ -15,7 +15,9 @@ let statusTimeoutId = null; // Variable to store the timeout ID for status updat
 export function updateStatus(message, duration = 2000) {
     const statusInfo = document.getElementById("status-info");
     if (!statusInfo) {
-        console.warn("Element with ID 'status-info' not found for updateStatus.");
+        console.warn(
+            "Element with ID 'status-info' not found for updateStatus.",
+        );
         return;
     }
 
@@ -56,7 +58,10 @@ export function addMessageToChatLog(chatLogEl, chatHistoryArr, sender, text) {
     messageDiv.textContent = text;
     chatLogEl.appendChild(messageDiv);
     // Ensure scroll properties are available and writable for testing and functionality
-    if (typeof chatLogEl.scrollTop === 'number' && typeof chatLogEl.scrollHeight === 'number') {
+    if (
+        typeof chatLogEl.scrollTop === "number" &&
+        typeof chatLogEl.scrollHeight === "number"
+    ) {
         chatLogEl.scrollTop = chatLogEl.scrollHeight;
     }
     chatHistoryArr.push({ role: sender, parts: [{ text }] });
@@ -87,7 +92,10 @@ export function addThinkingDetails(chatLogEl, planJson) {
     details.appendChild(pre);
     chatLogEl.appendChild(details);
     // Ensure scroll properties are available and writable
-    if (typeof chatLogEl.scrollTop === 'number' && typeof chatLogEl.scrollHeight === 'number') {
+    if (
+        typeof chatLogEl.scrollTop === "number" &&
+        typeof chatLogEl.scrollHeight === "number"
+    ) {
         chatLogEl.scrollTop = chatLogEl.scrollHeight;
     }
 }
@@ -102,10 +110,10 @@ export function addThinkingDetails(chatLogEl, planJson) {
 export function getCanvasContext(currentLayer, currentTr) {
     let context = "";
     // Basic checks for Konva objects
-    if (!currentLayer || typeof currentLayer.find !== 'function') {
+    if (!currentLayer || typeof currentLayer.find !== "function") {
         return "Error: Invalid Konva Layer provided.";
     }
-    if (!currentTr || typeof currentTr.nodes !== 'function') {
+    if (!currentTr || typeof currentTr.nodes !== "function") {
         return "Error: Invalid Konva Transformer provided.";
     }
 
@@ -117,9 +125,9 @@ export function getCanvasContext(currentLayer, currentTr) {
         context += components
             .map(
                 (n) =>
-                    `- ${n.attrs.componentType || 'N/A'} (id: "${n.id()}", label: "${
-                        n.attrs.label || 'N/A'
-                    }", alamat: "${n.attrs.address || 'N/A'}")`,
+                    `- ${n.attrs.componentType || "N/A"} (id: "${n.id()}", label: "${
+                        n.attrs.label || "N/A"
+                    }", alamat: "${n.attrs.address || "N/A"}")`,
             )
             .join("\n");
     }
@@ -130,7 +138,7 @@ export function getCanvasContext(currentLayer, currentTr) {
         context += selectedNodes
             .map(
                 (n) =>
-                    `- ${n.attrs.componentType || 'N/A'} (id: "${n.id()}", alamat: "${n.attrs.address || 'N/A'}")`,
+                    `- ${n.attrs.componentType || "N/A"} (id: "${n.id()}", alamat: "${n.attrs.address || "N/A"}")`,
             )
             .join("\n");
     }

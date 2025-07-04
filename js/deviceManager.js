@@ -1,3 +1,8 @@
+/**
+ * @file Manages device configurations, communication with the server via Socket.IO,
+ * and the UI for device and variable management.
+ * @module js/deviceManager
+ */
 import {
     setDeviceVariableValue,
     getDeviceVariableValue,
@@ -71,8 +76,14 @@ let variableFormModal,
     varFormRetainPublish,
     varFormExploreTopicBtn; // Tombol Explore baru
 
+/**
+ * Initializes the DeviceManager module.
+ * Sets up Socket.IO listeners, caches DOM elements for modals and forms,
+ * and attaches event listeners for UI interactions.
+ * @param {object} socketInstance - The Socket.IO client instance.
+ * @param {function} projectManagerSetDirtyFunc - Function from ProjectManager to mark the project as dirty.
+ */
 export function initDeviceManager(socketInstance, projectManagerSetDirtyFunc) {
-    // Tambah parameter projectManagerSetDirtyFunc
     if (
         !socketInstance ||
         typeof socketInstance.on !== "function" ||
@@ -548,14 +559,21 @@ export function initDeviceManager(socketInstance, projectManagerSetDirtyFunc) {
         }
     });
 
-    renderDeviceList(); // Initial render
+    renderDeviceList(); // Initial render.
 }
 
-function openDeviceManager() {
+/**
+ * Opens the main Device Manager modal.
+ * @private
+ */
+function _openDeviceManagerModal() {
     if (deviceManagerModal) deviceManagerModal.classList.remove("hidden");
 }
 
 // Helper function to add a new variable row to the form (NO LONGER USED FOR DEVICE FORM, WILL BE ADAPTED/REPLACED FOR VARIABLE FORM)
+// This function is currently not used as variable management has been moved to a separate modal.
+// It's kept here commented out for historical reference or if a similar inline variable editing
+// feature for specific device types (other than MQTT) is considered in the future.
 /*
 function addVariableRow(variableData = {}) {
     const container = document.getElementById('mqtt-variables-container');
@@ -623,28 +641,31 @@ function removeVariableRow(buttonElement) {
 }
 */
 
-function closeDeviceManager() {
+/**
+ * Closes the main Device Manager modal.
+ * @private
+ */
+function _closeDeviceManagerModal() {
     if (deviceManagerModal) deviceManagerModal.classList.add("hidden");
 }
 
-function openDeviceForm(device = null) {
+/**
+ * Opens the Device Form modal, optionally populating it with existing device data for editing.
+ * @param {object|null} [device=null] - The device object to edit, or null to add a new device.
+ * @private
+ */
+function _openDeviceFormModal(device = null) {
     if (!deviceFormModal || !deviceForm) {
         console.error("Device form modal or form element not found.");
         return;
     }
-    deviceForm.reset(); // Reset general form fields
-    // START OF REMOVAL: MQTT variables are no longer managed in the device form
-    // const mqttVariablesContainer = document.getElementById('mqtt-variables-container');
-    // if (mqttVariablesContainer) {
-    //     mqttVariablesContainer.innerHTML = ''; // Clear existing variable rows
-    // }
+    deviceForm.reset();
     const mqttVariablesSection = document.getElementById(
         "mqtt-variables-section",
-    ); // Assuming you wrap the section
+    );
     if (mqttVariablesSection) {
-        mqttVariablesSection.style.display = "none"; // Hide it
+        mqttVariablesSection.style.display = "none";
     }
-    // END OF REMOVAL
 
     if (deviceIdInput) {
         deviceIdInput.value = "";
@@ -660,7 +681,6 @@ function openDeviceForm(device = null) {
         if (deviceNameInput) deviceNameInput.value = device.name || "";
         if (deviceTypeInput) deviceTypeInput.value = device.type || "";
 
-        // Populate common device fields
         if (device.type === "mqtt") {
             if (document.getElementById("mqtt-protocol"))
                 document.getElementById("mqtt-protocol").value =
@@ -678,23 +698,10 @@ function openDeviceForm(device = null) {
             if (document.getElementById("mqtt-basepath"))
                 document.getElementById("mqtt-basepath").value =
                     device.basepath || "";
-
-            // Populate MQTT variables - NO LONGER DONE HERE
-            // if (Array.isArray(device.variables)) {
-            //     device.variables.forEach(variableData => addVariableRow(variableData));
-            // }
-            // Instead, ensure the section is hidden if device type is MQTT
-            const mqttVariablesSection = document.getElementById(
-                "mqtt-variables-section",
-            );
             if (mqttVariablesSection) {
-                mqttVariablesSection.style.display = "block"; // Show the placeholder message
+                mqttVariablesSection.style.display = "block";
             }
         } else if (device.type === "modbus-tcp") {
-            // Hide MQTT specific variable section if not MQTT device
-            const mqttVariablesSection = document.getElementById(
-                "mqtt-variables-section",
-            );
             if (mqttVariablesSection) {
                 mqttVariablesSection.style.display = "none";
             }
@@ -719,16 +726,7 @@ function openDeviceForm(device = null) {
                     device.unitId || "1";
         }
     } else {
-        // This is for adding a new device
         if (deviceFormTitle) deviceFormTitle.textContent = "Tambah Device";
-        // Optionally add one empty variable row for new MQTT devices - NO LONGER DONE HERE
-        // if (deviceTypeInput && deviceTypeInput.value === 'mqtt') {
-        //     addVariableRow();
-        // }
-        // Hide MQTT variable section when adding a new device, until type is MQTT
-        const mqttVariablesSection = document.getElementById(
-            "mqtt-variables-section",
-        );
         if (mqttVariablesSection) {
             mqttVariablesSection.style.display =
                 deviceTypeInput && deviceTypeInput.value === "mqtt"
@@ -736,15 +734,23 @@ function openDeviceForm(device = null) {
                     : "none";
         }
     }
-    toggleDeviceFields(); // Ensure correct sections are visible based on device type
+    _toggleDeviceSpecificFormFields();
     if (deviceFormModal) deviceFormModal.classList.remove("hidden");
 }
 
-function closeDeviceForm() {
+/**
+ * Closes the Device Form modal.
+ * @private
+ */
+function _closeDeviceFormModal() {
     if (deviceFormModal) deviceFormModal.classList.add("hidden");
 }
 
-function toggleDeviceFields() {
+/**
+ * Shows or hides device-specific sections in the Device Form based on the selected device type.
+ * @private
+ */
+function _toggleDeviceSpecificFormFields() {
     if (!deviceTypeInput) return;
     const selectedType = deviceTypeInput.value;
 
@@ -752,7 +758,6 @@ function toggleDeviceFields() {
         mqttFields.style.display = selectedType === "mqtt" ? "block" : "none";
     else console.warn("MQTT fields element not found");
 
-    // Also toggle the (now placeholder) MQTT variables section visibility
     const mqttVariablesSection = document.getElementById(
         "mqtt-variables-section",
     );
@@ -771,16 +776,21 @@ function toggleDeviceFields() {
             selectedType === "modbus-rtu" ? "block" : "none";
     else console.warn("Modbus RTU fields element not found");
 
-    // If internal, hide all specific sections explicitly
     if (selectedType === "internal") {
         if (mqttFields) mqttFields.style.display = "none";
         if (modbusTcpFields) modbusTcpFields.style.display = "none";
         if (modbusRtuFields) modbusRtuFields.style.display = "none";
-        if (mqttVariablesSection) mqttVariablesSection.style.display = "none"; // Hide placeholder variable section too
+        if (mqttVariablesSection) mqttVariablesSection.style.display = "none";
     }
 }
 
-function handleFormSubmit(e) {
+/**
+ * Handles the submission of the Device Form (for adding or editing a device).
+ * Collects form data, validates it, and emits an event to the server.
+ * @param {Event} e - The form submission event.
+ * @private
+ */
+function _handleDeviceFormSubmit(e) {
     e.preventDefault();
     if (!deviceIdInput || !deviceNameInput || !deviceTypeInput || !socket) {
         console.error("Form elements or socket missing for submission.");
@@ -797,7 +807,6 @@ function handleFormSubmit(e) {
     }
 
     const isEditing = !!(id && localDeviceCache.some((d) => d.id === id));
-
     const deviceData = {
         id: id || `device-${crypto.randomUUID()}`,
         name: name,
@@ -808,7 +817,6 @@ function handleFormSubmit(e) {
         deviceIdInput.value = deviceData.id;
     }
 
-    // Populate type-specific data
     if (deviceData.type === "mqtt") {
         deviceData.protocol =
             document.getElementById("mqtt-protocol")?.value || "mqtt";
@@ -822,9 +830,6 @@ function handleFormSubmit(e) {
             document.getElementById("mqtt-password")?.value || "";
         deviceData.basepath =
             document.getElementById("mqtt-basepath")?.value.trim() || "";
-
-        // MQTT Variables are no longer collected from the device form.
-        // If editing, they are preserved from localDeviceCache. If new, it's an empty array.
         if (isEditing) {
             const existingDevice = localDeviceCache.find(
                 (d) => d.id === deviceData.id,
@@ -833,10 +838,9 @@ function handleFormSubmit(e) {
                 ? existingDevice.variables
                 : [];
         } else {
-            deviceData.variables = []; // New device starts with no variables from this form
+            deviceData.variables = [];
         }
     } else if (deviceData.type === "modbus-tcp") {
-        // Ensure variables array exists for non-MQTT types too, even if not managed by Variable Manager yet
         if (isEditing) {
             const existingDevice = localDeviceCache.find(
                 (d) => d.id === deviceData.id,
@@ -854,7 +858,6 @@ function handleFormSubmit(e) {
         deviceData.unitId =
             document.getElementById("modbus-tcp-unit-id")?.value.trim() || "1";
     } else if (deviceData.type === "modbus-rtu") {
-        // Ensure variables array exists for non-MQTT types too
         if (isEditing) {
             const existingDevice = localDeviceCache.find(
                 (d) => d.id === deviceData.id,
@@ -874,8 +877,6 @@ function handleFormSubmit(e) {
         deviceData.unitId =
             document.getElementById("modbus-rtu-unit-id")?.value.trim() || "1";
     } else if (deviceData.type === "internal") {
-        // For internal devices, we primarily care about id, name, type, and variables.
-        // Ensure variables array exists.
         if (isEditing) {
             const existingDevice = localDeviceCache.find(
                 (d) => d.id === deviceData.id,
@@ -886,10 +887,7 @@ function handleFormSubmit(e) {
         } else {
             deviceData.variables = [];
         }
-        // No other specific fields like host/port are needed for internal devices.
     } else {
-        // For truly other/unknown device types
-        // Ensure variables array exists, primarily for future compatibility or unhandled types.
         if (isEditing) {
             const existingDevice = localDeviceCache.find(
                 (d) => d.id === deviceData.id,
@@ -921,10 +919,15 @@ function handleFormSubmit(e) {
         }
         socket.emit("add_device", deviceData);
     }
-    closeDeviceForm();
+    _closeDeviceFormModal();
 }
 
-function requestDeleteDevice(id) {
+/**
+ * Sends a request to the server to delete a device.
+ * @param {string} id - The ID of the device to delete.
+ * @private
+ */
+function _requestDeleteDevice(id) {
     if (socket && socket.connected) {
         socket.emit("delete_device", id);
     } else {
@@ -932,7 +935,12 @@ function requestDeleteDevice(id) {
     }
 }
 
-function renderDeviceList() {
+/**
+ * Renders the list of devices in the Device Manager modal.
+ * Attaches event listeners to edit/delete buttons for each device.
+ * @private
+ */
+function _renderDeviceList() {
     if (!deviceList) {
         console.warn(
             "Device list DOM element not found. Cannot render devices.",
@@ -954,17 +962,15 @@ function renderDeviceList() {
     }
 
     localDeviceCache.forEach((device, index) => {
-        // Added index for logging
         if (typeof device !== "object" || device === null || !device.id) {
             console.warn(
                 `[renderDeviceList] Skipping device at index ${index} due to malformed data or missing ID. Device data:`,
                 JSON.stringify(device),
             );
-            return; // Skip malformed device data
+            return;
         }
 
         const isDeviceConnected = device.connected || false;
-
         let statusTitle;
         let statusColorClass;
 
@@ -1006,10 +1012,9 @@ function renderDeviceList() {
         deviceList.appendChild(deviceElement);
     });
 
-    // Re-attach event listeners for newly created buttons
     deviceList.querySelectorAll(".variable-manager-btn").forEach((btn) => {
         btn.addEventListener("click", (e) => {
-            openVariableManager(e.currentTarget.dataset.id);
+            _openVariableManagerModal(e.currentTarget.dataset.id);
         });
     });
 
@@ -1018,7 +1023,7 @@ function renderDeviceList() {
             const deviceToEdit = localDeviceCache.find(
                 (d) => d.id === e.currentTarget.dataset.id,
             );
-            if (deviceToEdit) openDeviceForm(deviceToEdit);
+            if (deviceToEdit) _openDeviceFormModal(deviceToEdit);
         });
     });
 
@@ -1029,14 +1034,20 @@ function renderDeviceList() {
                     "Are you sure you want to request deletion of this device from the server?",
                 )
             ) {
-                requestDeleteDevice(e.currentTarget.dataset.id);
+                _requestDeleteDevice(e.currentTarget.dataset.id);
             }
         });
     });
 }
 
 // --- Variable Manager Functions ---
-function openVariableManager(deviceId) {
+/**
+ * Opens the Variable Manager modal for a specific device.
+ * Populates the modal with the device's variables.
+ * @param {string} deviceId - The ID of the device whose variables are to be managed.
+ * @private
+ */
+function _openVariableManagerModal(deviceId) {
     if (!variableManagerModal || !variableListTbody || !variableManagerTitle) {
         console.error("Variable Manager modal elements not found.");
         return;
@@ -1048,21 +1059,19 @@ function openVariableManager(deviceId) {
     }
 
     variableManagerTitle.textContent = `Variable Manager for ${device.name || "Unnamed Device"}`;
-    variableManagerModal.dataset.deviceId = deviceId; // Store deviceId for "Add Variable" button
-    variableListTbody.innerHTML = ""; // Clear previous variables
+    variableManagerModal.dataset.deviceId = deviceId;
+    variableListTbody.innerHTML = "";
 
     if (Array.isArray(device.variables) && device.variables.length > 0) {
         device.variables.forEach((variable) => {
             const row = variableListTbody.insertRow();
             row.className = "hover:bg-gray-700/50";
 
-            // Nama Variabel
             const nameCell = row.insertCell();
             nameCell.className =
                 "px-4 py-3 whitespace-nowrap text-sm text-white";
             nameCell.textContent = variable.name || "N/A";
 
-            // Data Type Setting
             const dataTypeCell = row.insertCell();
             dataTypeCell.className =
                 "px-4 py-3 whitespace-nowrap text-sm text-gray-300";
@@ -1072,7 +1081,6 @@ function openVariableManager(deviceId) {
             }
             dataTypeCell.innerHTML = dataTypeHtml;
 
-            // Subscribe Setting
             const subscribeCell = row.insertCell();
             subscribeCell.className =
                 "px-4 py-3 whitespace-nowrap text-sm text-gray-300";
@@ -1089,7 +1097,6 @@ function openVariableManager(deviceId) {
                     '<span class="text-xs text-gray-500">N/A</span>';
             }
 
-            // Publish Setting
             const publishCell = row.insertCell();
             publishCell.className =
                 "px-4 py-3 whitespace-nowrap text-sm text-gray-300";
@@ -1102,22 +1109,20 @@ function openVariableManager(deviceId) {
                     '<span class="text-xs text-gray-500">N/A</span>';
             }
 
-            // Value Preview Cell
             const valueCell = row.insertCell();
             valueCell.className =
-                "px-4 py-3 whitespace-nowrap text-sm text-cyan-300 variable-value-preview"; // Added a class for easier selection if needed
+                "px-4 py-3 whitespace-nowrap text-sm text-cyan-300 variable-value-preview";
             valueCell.dataset.deviceId = device.id;
             valueCell.dataset.variableName = variable.name;
             let currentValue = getDeviceVariableValue(device.id, variable.name);
             if (typeof currentValue === "object" && currentValue !== null) {
                 try {
                     currentValue = JSON.stringify(currentValue);
-                    // Truncate if too long
                     if (currentValue.length > 30) {
                         currentValue = currentValue.substring(0, 27) + "...";
                     }
                 } catch (e) {
-                    currentValue = "[Object]"; // Fallback for non-serializable objects, though unlikely for basic JSON
+                    currentValue = "[Object]";
                 }
             } else if (currentValue === undefined) {
                 currentValue = "-";
@@ -1126,7 +1131,6 @@ function openVariableManager(deviceId) {
             }
             valueCell.textContent = currentValue;
 
-            // Actions Cell (with Icons)
             const actionsCell = row.insertCell();
             actionsCell.className =
                 "px-4 py-3 whitespace-nowrap text-sm text-right";
@@ -1140,14 +1144,13 @@ function openVariableManager(deviceId) {
             `;
         });
 
-        // Add event listeners for the new Edit/Delete buttons (must be inside the 'if' block)
         variableListTbody
             .querySelectorAll(".edit-variable-btn")
             .forEach((btn) => {
                 btn.addEventListener("click", (e) => {
                     const devId = e.currentTarget.dataset.deviceId;
                     const varId = e.currentTarget.dataset.varId;
-                    openVariableForm(devId, varId);
+                    _openVariableFormModal(devId, varId);
                 });
             });
         variableListTbody
@@ -1156,27 +1159,35 @@ function openVariableManager(deviceId) {
                 btn.addEventListener("click", (e) => {
                     const devId = e.currentTarget.dataset.deviceId;
                     const varId = e.currentTarget.dataset.varId;
-                    deleteVariable(devId, varId);
+                    _deleteVariable(devId, varId);
                 });
             });
     } else if (device.type !== "mqtt" && device.type !== "internal") {
-        // For non-MQTT, non-Internal devices
         variableListTbody.innerHTML = `<tr><td colspan="6" class="px-4 py-3 text-sm text-gray-400 text-center">Manajemen variabel untuk tipe device '${device.type}' belum didukung di tampilan ini.</td></tr>`;
     } else {
-        // For MQTT or Internal device but no variables
         variableListTbody.innerHTML = `<tr><td colspan="6" class="px-4 py-3 text-sm text-gray-400 text-center">No variables configured for this ${device.type} device.</td></tr>`;
     }
 
     variableManagerModal.classList.remove("hidden");
 }
 
-function closeVariableManager() {
+/**
+ * Closes the Variable Manager modal.
+ * @private
+ */
+function _closeVariableManagerModal() {
     if (variableManagerModal) {
         variableManagerModal.classList.add("hidden");
     }
 }
 
-function openVariableForm(deviceId, varIdToEdit = null) {
+/**
+ * Opens the Variable Form modal for adding or editing a variable for a specific device.
+ * @param {string} deviceId - The ID of the device.
+ * @param {string|null} [varIdToEdit=null] - The ID of the variable to edit, or null to add a new variable.
+ * @private
+ */
+function _openVariableFormModal(deviceId, varIdToEdit = null) {
     if (
         !variableFormModal ||
         !variableForm ||
@@ -1187,7 +1198,7 @@ function openVariableForm(deviceId, varIdToEdit = null) {
         console.error("Variable form modal elements not found.");
         return;
     }
-    variableForm.reset(); // Reset form fields
+    variableForm.reset();
     varFormDeviceId.value = deviceId;
     varFormVarId.value = varIdToEdit || "";
 
@@ -1201,11 +1212,9 @@ function openVariableForm(deviceId, varIdToEdit = null) {
         variableFormTitle.textContent = `Edit Variabel untuk ${device.name}`;
         const variable = device.variables.find((v) => v.varId === varIdToEdit);
         if (variable) {
-            // Populate form with variable data
             varFormName.value = variable.name || "";
             varFormDataType.value = variable.dataType || "string";
             varFormDescription.value = variable.description || "";
-
             varFormEnableSubscribe.checked = variable.enableSubscribe || false;
             if (varFormSubscribeOptions)
                 varFormSubscribeOptions.style.display =
@@ -1216,7 +1225,6 @@ function openVariableForm(deviceId, varIdToEdit = null) {
                 variable.qosSubscribe !== undefined
                     ? variable.qosSubscribe.toString()
                     : "0";
-
             varFormEnablePublish.checked = variable.enablePublish || false;
             if (varFormPublishOptions)
                 varFormPublishOptions.style.display =
@@ -1229,26 +1237,23 @@ function openVariableForm(deviceId, varIdToEdit = null) {
             varFormRetainPublish.checked = variable.retainPublish || false;
         } else {
             alert(`Variabel dengan ID ${varIdToEdit} tidak ditemukan.`);
-            closeVariableForm();
+            _closeVariableFormModal();
             return;
         }
     } else {
         variableFormTitle.textContent = `Tambah Variabel Baru untuk ${device.name}`;
-        // Ensure options are hidden for new form
         if (varFormSubscribeOptions)
             varFormSubscribeOptions.style.display = "none";
         if (varFormPublishOptions) varFormPublishOptions.style.display = "none";
     }
 
-    // Show/Hide Subscribe/Publish sections based on device type
-    const subscribeSection = varFormEnableSubscribe.closest(".border-t"); // Find the parent div of subscribe parts
-    const publishSection = varFormEnablePublish.closest(".border-t"); // Find the parent div of publish parts
+    const subscribeSection = varFormEnableSubscribe.closest(".border-t");
+    const publishSection = varFormEnablePublish.closest(".border-t");
 
     if (device.type === "internal") {
         if (subscribeSection) subscribeSection.style.display = "none";
         if (publishSection) publishSection.style.display = "none";
     } else {
-        // For MQTT or other types that might use it
         if (subscribeSection) subscribeSection.style.display = "block";
         if (publishSection) publishSection.style.display = "block";
     }
@@ -1256,16 +1261,26 @@ function openVariableForm(deviceId, varIdToEdit = null) {
     variableFormModal.classList.remove("hidden");
 }
 
-function closeVariableForm() {
+/**
+ * Closes the Variable Form modal.
+ * @private
+ */
+function _closeVariableFormModal() {
     if (variableFormModal) {
         variableFormModal.classList.add("hidden");
     }
 }
 
-function handleVariableFormSubmit(event) {
+/**
+ * Handles the submission of the Variable Form (for adding or editing a variable).
+ * Collects form data, validates it, updates the device's variable list, and emits an event to the server.
+ * @param {Event} event - The form submission event.
+ * @private
+ */
+function _handleVariableFormSubmit(event) {
     event.preventDefault();
     const deviceId = varFormDeviceId.value;
-    const varId = varFormVarId.value; // Empty if new, populated if editing
+    const varId = varFormVarId.value;
     const name = varFormName.value.trim();
 
     if (!name) {
@@ -1279,8 +1294,6 @@ function handleVariableFormSubmit(event) {
         alert("Device tidak ditemukan. Tidak bisa menyimpan variabel.");
         return;
     }
-    // Allow variable management for 'mqtt' and 'internal' types through this form.
-    // Other types might need different variable structures or management UIs.
     if (device.type !== "mqtt" && device.type !== "internal") {
         alert(
             `Manajemen variabel untuk tipe device '${device.type}' tidak didukung melalui form ini.`,
@@ -1295,7 +1308,6 @@ function handleVariableFormSubmit(event) {
         dataType: varFormDataType.value,
     };
 
-    // Add subscribe/publish fields only if not an internal device
     if (device.type !== "internal") {
         variableData.enableSubscribe = varFormEnableSubscribe.checked;
         variableData.subscribeTopic = varFormSubscribeTopic.value.trim();
@@ -1309,16 +1321,12 @@ function handleVariableFormSubmit(event) {
         variableData.qosPublish = parseInt(varFormQosPublish.value || "0", 10);
         variableData.retainPublish = varFormRetainPublish.checked;
     }
-    // For 'internal' devices, the fields above are simply not added to variableData.
-    // If they were part of an 'mqtt' variable that is being changed to 'internal' (not typical),
-    // they would be effectively stripped.
 
     if (!Array.isArray(device.variables)) {
         device.variables = [];
     }
 
     if (varId) {
-        // Editing existing variable
         const varIndex = device.variables.findIndex((v) => v.varId === varId);
         if (varIndex > -1) {
             device.variables[varIndex] = variableData;
@@ -1329,8 +1337,6 @@ function handleVariableFormSubmit(event) {
             return;
         }
     } else {
-        // Adding new variable
-        // Check for duplicate variable name for the same device (optional but good practice)
         if (device.variables.some((v) => v.name === variableData.name)) {
             alert(
                 `Variabel dengan nama "${variableData.name}" sudah ada untuk device ini.`,
@@ -1341,18 +1347,23 @@ function handleVariableFormSubmit(event) {
         device.variables.push(variableData);
     }
 
-    // Emit edit_device with the updated device object (including all its variables)
     if (socket && socket.connected) {
         console.log("Updating device with new/modified variable:", device);
-        socket.emit("edit_device", device); // Server should handle this and update the device
-        closeVariableForm();
-        // openVariableManager(deviceId); // Re-open to refresh, or wait for 'device_updated' event
+        socket.emit("edit_device", device);
+        _closeVariableFormModal();
     } else {
         alert("Tidak dapat menyimpan variabel: Server tidak terhubung.");
     }
 }
 
-function deleteVariable(deviceId, varId) {
+/**
+ * Deletes a variable from a device.
+ * Prompts for confirmation, then updates the device's variable list and emits an event to the server.
+ * @param {string} deviceId - The ID of the device.
+ * @param {string} varId - The ID of the variable to delete.
+ * @private
+ */
+function _deleteVariable(deviceId, varId) {
     if (!confirm("Apakah Anda yakin ingin menghapus variabel ini?")) {
         return;
     }
@@ -1374,16 +1385,13 @@ function deleteVariable(deviceId, varId) {
         device.variables = device.variables.filter((v) => v.varId !== varId);
 
         if (device.variables.length < initialLength) {
-            // Variable was found and removed
             if (socket && socket.connected) {
                 console.log("Updating device after deleting variable:", device);
                 socket.emit("edit_device", device);
-                // openVariableManager(deviceId); // Re-open to refresh, or wait for 'device_updated'
             } else {
                 alert(
                     "Tidak dapat menghapus variabel: Server tidak terhubung.",
                 );
-                // Potentially revert local change if server update fails, or handle more gracefully
             }
         } else {
             alert("Variabel tidak ditemukan untuk dihapus.");
@@ -1394,18 +1402,34 @@ function deleteVariable(deviceId, varId) {
 }
 // --- End Variable Manager Functions ---
 
+/**
+ * Retrieves the local cache of all configured devices.
+ * @returns {Array<object>} An array of device configuration objects.
+ */
 export function getDevices() {
     return localDeviceCache;
 }
 
+/**
+ * Retrieves a specific device configuration by its ID.
+ * @param {string} id - The ID of the device to retrieve.
+ * @returns {object|null} The device configuration object, or null if not found.
+ */
 export function getDeviceById(id) {
     return localDeviceCache.find((device) => device.id === id) || null;
 }
 
+/**
+ * Sends data to a specific variable on a device via the server.
+ * The `nameOrAddress` parameter is treated as `variableName` for "internal" devices,
+ * and as a generic `address` for other device types (for potential legacy or direct addressing).
+ * @param {string} deviceId - The ID of the target device.
+ * @param {string} nameOrAddress - The name of the variable (for internal devices) or the address (for other types).
+ * @param {*} value - The value to write to the variable/address.
+ */
 export function writeDataToServer(deviceId, nameOrAddress, value) {
-    // Mengubah nama parameter kedua
     if (socket && socket.connected) {
-        const device = getDeviceById(deviceId); // Dapatkan detail device
+        const device = getDeviceById(deviceId);
 
         if (!device) {
             console.error(
@@ -1418,9 +1442,8 @@ export function writeDataToServer(deviceId, nameOrAddress, value) {
         let payload = { deviceId, value };
 
         if (device.type === "internal") {
-            payload.variableName = nameOrAddress; // Untuk internal, nameOrAddress adalah variableName
+            payload.variableName = nameOrAddress;
         } else {
-            // Untuk device non-internal, asumsikan nameOrAddress adalah address
             payload.address = nameOrAddress;
         }
 
@@ -1431,6 +1454,12 @@ export function writeDataToServer(deviceId, nameOrAddress, value) {
     }
 }
 
+/**
+ * Updates the displayed value of a variable in the Variable Manager UI if it's currently open and showing that variable.
+ * @param {string} deviceId - The ID of the device.
+ * @param {string} variableName - The name of the variable.
+ * @param {*} newValue - The new value to display.
+ */
 export function updateLiveVariableValueInManagerUI(
     deviceId,
     variableName,
@@ -1450,7 +1479,6 @@ export function updateLiveVariableValueInManagerUI(
                 try {
                     displayValue = JSON.stringify(displayValue);
                     if (displayValue.length > 30) {
-                        // Truncate if too long
                         displayValue = displayValue.substring(0, 27) + "...";
                     }
                 } catch (e) {
@@ -1467,61 +1495,65 @@ export function updateLiveVariableValueInManagerUI(
 }
 
 /**
- * Mengembalikan array dari semua konfigurasi device yang ada di localDeviceCache.
- * Ini digunakan untuk menyimpan state project.
- * @returns {Array<object>} Array dari objek konfigurasi device.
+ * Retrieves all device configurations from the local cache for export.
+ * Creates a deep copy to prevent unintended modifications.
+ * @returns {Array<object>} An array of device configuration objects.
  */
 export function getAllDeviceConfigsForExport() {
     // Membuat deep copy dari setiap objek konfigurasi untuk menghindari modifikasi tidak sengaja
     // dan memastikan hanya data konfigurasi yang relevan (bukan state runtime) yang diekspor.
-    // localDeviceCache seharusnya sudah menyimpan konfigurasi murni.
+    // localDeviceCache should already store pure configurations.
     try {
         return JSON.parse(JSON.stringify(localDeviceCache));
     } catch (error) {
-        console.error("Gagal membuat deep copy localDeviceCache:", error);
-        // Kembalikan salinan dangkal sebagai fallback, atau array kosong jika localDeviceCache tidak valid
+        console.error("Failed to deep copy localDeviceCache:", error);
+        // Return a shallow copy as a fallback, or an empty array if localDeviceCache is invalid.
         return [...(localDeviceCache || [])];
     }
 }
 
 /**
- * Membersihkan semua device dari sisi klien.
- * Mengosongkan localDeviceCache, menghapus state terkait,
- * dan meminta penghapusan device di server.
+ * Clears all devices from the client-side.
+ * Empties the localDeviceCache, removes associated state from stateManager,
+ * and requests device deletion from the server for each device.
  */
 export function clearAllClientDevices() {
     if (localDeviceCache && localDeviceCache.length > 0) {
-        // Salin array ID karena kita akan memodifikasi localDeviceCache saat iterasi
+        // Copy IDs as localDeviceCache will be modified during iteration by server responses.
         const deviceIdsToRemove = localDeviceCache.map((d) => d.id);
 
         deviceIdsToRemove.forEach((deviceId) => {
-            // Hapus dari state manager klien
+            // Remove from client-side state manager.
             if (typeof deleteDeviceStateFromManager === "function") {
                 deleteDeviceStateFromManager(deviceId);
             }
-            // Minta penghapusan dari server
-            requestDeleteDevice(deviceId); // Fungsi ini sudah ada dan emit 'delete_device'
+            // Request deletion from the server.
+            _requestDeleteDevice(deviceId); // Uses the private helper.
         });
 
-        localDeviceCache = []; // Kosongkan cache lokal
+        localDeviceCache = []; // Clear local cache.
         console.log(
-            "Semua device telah dibersihkan dari klien dan permintaan hapus dikirim ke server.",
+            "All devices cleared from client, and delete requests sent to server.",
         );
     } else {
-        console.log("Tidak ada device di klien untuk dibersihkan.");
+        console.log("No client devices to clear.");
     }
-    renderDeviceList(); // Perbarui UI Device Manager
+    _renderDeviceList(); // Update the Device Manager UI.
 }
 
+/**
+ * Clears the local device cache and associated client-side state (from stateManager)
+ * without notifying the server. This is typically used when loading a new project,
+ * where the server will then send a new list of devices.
+ */
 export function clearLocalDeviceCacheAndState() {
     if (localDeviceCache && localDeviceCache.length > 0) {
         localDeviceCache.forEach((device) => {
             if (typeof deleteDeviceStateFromManager === "function") {
-                // This function should exist in stateManager.js to clear any HMI component bindings or values
                 deleteDeviceStateFromManager(device.id);
             }
         });
-        localDeviceCache = []; // Kosongkan cache lokal
+        localDeviceCache = []; // Clear local cache.
         console.log(
             "[DeviceManager] Local device cache and associated client state cleared without notifying server.",
         );
@@ -1530,57 +1562,60 @@ export function clearLocalDeviceCacheAndState() {
             "[DeviceManager] No local devices to clear from client state.",
         );
     }
-    renderDeviceList(); // Perbarui UI Device Manager (akan menampilkan "No devices")
+    _renderDeviceList(); // Update UI (will show "No devices").
 }
 
 /**
- * Menginisialisasi atau mengganti semua device di klien berdasarkan array konfigurasi.
- * Ini akan membersihkan device klien yang ada dan meminta server untuk menambahkan device baru.
- * @param {Array<object>} deviceConfigsArray - Array dari objek konfigurasi device.
+ * Initializes or replaces all client-side devices based on an array of device configurations.
+ * This function first clears all existing client devices (which also requests server-side deletion),
+ * then sends "add_device" requests to the server for each new configuration.
+ * The server's responses ('device_added' events) will repopulate the local cache and UI.
+ * @param {Array<object>} deviceConfigsArray - An array of device configuration objects.
+ * @returns {Promise<void>} A promise that resolves when all add requests have been sent,
+ *                          or rejects if the socket is not connected.
  */
 export async function initializeDevicesFromConfigs(deviceConfigsArray) {
     console.log(
-        "[DeviceManager] Menginisialisasi device dari konfigurasi:",
+        "[DeviceManager] Initializing devices from configurations:",
         deviceConfigsArray,
     );
 
-    // 1. Bersihkan semua device yang ada di klien (ini juga akan mengirim delete request ke server)
+    // 1. Clear all existing client devices (also sends delete requests to server).
     clearAllClientDevices();
 
-    // Tunggu sebentar untuk memberi waktu server memproses delete request (opsional, tapi bisa membantu)
-    // await new Promise(resolve => setTimeout(resolve, 500)); // Misal 0.5 detik
+    // Optional: Wait briefly for server to process delete requests.
+    // await new Promise(resolve => setTimeout(resolve, 500));
 
-    // 2. Untuk setiap konfigurasi device baru, kirim 'add_device' ke server
-    // Server akan merespons dengan 'device_added' yang akan mengisi localDeviceCache
-    // dan memicu renderDeviceList.
+    // 2. For each new device configuration, send 'add_device' to the server.
+    // The server will respond with 'device_added', which populates localDeviceCache
+    // and triggers _renderDeviceList.
     if (socket && socket.connected) {
         if (Array.isArray(deviceConfigsArray)) {
             deviceConfigsArray.forEach((config) => {
-                // Pastikan config memiliki ID, atau buat jika tidak ada (seharusnya sudah ada dari project file)
+                // Ensure config has an ID, or create one (should already exist from project file).
                 if (!config.id) {
                     config.id = `device-${crypto.randomUUID()}`;
                     console.warn(
-                        "[DeviceManager] Device config tidak memiliki ID, ID baru dibuat:",
+                        "[DeviceManager] Device config missing ID, new ID generated:",
                         config.id,
                     );
                 }
                 console.log(
-                    `[DeviceManager] Mengirim add_device ke server untuk config:`,
+                    `[DeviceManager] Sending add_device to server for config:`,
                     config,
                 );
                 socket.emit("add_device", config);
             });
         }
+        return Promise.resolve();
     } else {
         console.error(
-            "[DeviceManager] Socket tidak terhubung. Tidak dapat menginisialisasi device dari configs.",
+            "[DeviceManager] Socket not connected. Cannot initialize devices from configs.",
         );
-        // Jika socket tidak terhubung, kita bisa mengisi localDeviceCache secara manual
-        // tapi ini tidak akan sinkron dengan server.
-        // localDeviceCache = Array.isArray(deviceConfigsArray) ? JSON.parse(JSON.stringify(deviceConfigsArray)) : [];
-        // renderDeviceList();
-        alert("Tidak dapat menginisialisasi device: Server tidak terhubung.");
+        alert("Cannot initialize devices: Server is not connected.");
+        return Promise.reject(
+            "Socket not connected during device initialization.",
+        );
     }
-    // renderDeviceList() akan dipanggil oleh handler 'device_added' atau 'initial_device_list'
-    // atau bisa dipanggil di sini jika kita mengisi localDeviceCache secara manual saat offline.
+    // _renderDeviceList() will be called by 'device_added' or 'initial_device_list' handlers.
 }

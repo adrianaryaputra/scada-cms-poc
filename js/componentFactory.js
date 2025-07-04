@@ -14,7 +14,13 @@ import {
 import { writeDataToServer } from "./deviceManager.js"; // For components that publish data
 
 // Helper function for standardised component selection click logic
-function handleComponentSelectionClick(group, event, isSimulationModeFunc, transformer, selectNodesCallback) {
+function handleComponentSelectionClick(
+    group,
+    event,
+    isSimulationModeFunc,
+    transformer,
+    selectNodesCallback,
+) {
     if (event.evt.button === 2) return true; // Indicate event handled (ignore right click)
 
     // If in simulation mode, selection logic is typically bypassed unless specifically handled by the component type
@@ -245,7 +251,13 @@ export const componentFactory = {
         group.on("click", (e) => {
             // BitLamp doesn't have special simulation mode click behavior, so directly use the helper.
             // The helper itself checks for simulation mode and right-click.
-            handleComponentSelectionClick(group, e, isSimulationModeRef, trRef, selectNodesFuncRef);
+            handleComponentSelectionClick(
+                group,
+                e,
+                isSimulationModeRef,
+                trRef,
+                selectNodesFuncRef,
+            );
         });
 
         group.updateState = function () {
@@ -361,7 +373,13 @@ export const componentFactory = {
                 // Tidak memanggil helper seleksi karena aksi sudah dilakukan.
             } else {
                 // Mode Desain: Gunakan helper untuk logika seleksi
-                handleComponentSelectionClick(group, e, isSimulationModeRef, trRef, selectNodesFuncRef);
+                handleComponentSelectionClick(
+                    group,
+                    e,
+                    isSimulationModeRef,
+                    trRef,
+                    selectNodesFuncRef,
+                );
             }
         });
         group.updateState = function () {
@@ -427,7 +445,13 @@ export const componentFactory = {
         });
         group.add(background);
         group.on("click", (e) => {
-            handleComponentSelectionClick(group, e, isSimulationModeRef, trRef, selectNodesFuncRef);
+            handleComponentSelectionClick(
+                group,
+                e,
+                isSimulationModeRef,
+                trRef,
+                selectNodesFuncRef,
+            );
         });
         const text = new Konva.Text({
             width: 120,
@@ -498,7 +522,13 @@ export const componentFactory = {
         });
         group.add(background);
         group.on("click", (e) => {
-            handleComponentSelectionClick(group, e, isSimulationModeRef, trRef, selectNodesFuncRef);
+            handleComponentSelectionClick(
+                group,
+                e,
+                isSimulationModeRef,
+                trRef,
+                selectNodesFuncRef,
+            );
         });
         const valueText = new Konva.Text({
             y: 25,
@@ -585,7 +615,13 @@ export const componentFactory = {
         });
 
         group.on("click", (e) => {
-            handleComponentSelectionClick(group, e, isSimulationModeRef, trRef, selectNodesFuncRef);
+            handleComponentSelectionClick(
+                group,
+                e,
+                isSimulationModeRef,
+                trRef,
+                selectNodesFuncRef,
+            );
         });
         group.updateState = function () {
             this.findOne(".label-text").text(this.attrs.text);

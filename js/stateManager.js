@@ -56,13 +56,7 @@ let redoBtnRef;
  * @param {HTMLElement} undoBtn - DOM element for the undo button.
  * @param {HTMLElement} redoBtn - DOM element for the redo button.
  */
-export function initStateManager(
-    factory,
-    layer,
-    tr,
-    undoBtn,
-    redoBtn,
-) {
+export function initStateManager(factory, layer, tr, undoBtn, redoBtn) {
     componentFactoryRef = factory;
     layerRef = layer;
     trRef = tr;
@@ -126,8 +120,10 @@ export function saveState() {
             };
 
             if (!componentData.componentType) {
-                console.warn(`Component with ID ${node.id()} is missing componentType in attrs during saveState. Setting to 'Unknown'.`);
-                componentData.componentType = 'Unknown';
+                console.warn(
+                    `Component with ID ${node.id()} is missing componentType in attrs during saveState. Setting to 'Unknown'.`,
+                );
+                componentData.componentType = "Unknown";
             }
             state.components.push(componentData);
         });
@@ -150,8 +146,15 @@ export function saveState() {
 export function restoreState(stateString) {
     try {
         const state = JSON.parse(stateString);
-        if (!state || typeof state.components === 'undefined' || typeof state.tags === 'undefined') {
-            console.error("[StateManager] Invalid state string provided to restoreState:", stateString);
+        if (
+            !state ||
+            typeof state.components === "undefined" ||
+            typeof state.tags === "undefined"
+        ) {
+            console.error(
+                "[StateManager] Invalid state string provided to restoreState:",
+                stateString,
+            );
             return;
         }
 
@@ -165,7 +168,10 @@ export function restoreState(stateString) {
             // Recreate components from the saved state data
             state.components.forEach((componentData) => {
                 if (!componentData.componentType) {
-                    console.warn("[StateManager] Skipping component in restoreState due to missing componentType:", componentData);
+                    console.warn(
+                        "[StateManager] Skipping component in restoreState due to missing componentType:",
+                        componentData,
+                    );
                     return;
                 }
                 const component = componentFactoryRef.create(
@@ -175,16 +181,25 @@ export function restoreState(stateString) {
                 if (component) {
                     layerRef.add(component);
                 } else {
-                    console.warn(`[StateManager] Failed to create component of type ${componentData.componentType} during restoreState.`);
+                    console.warn(
+                        `[StateManager] Failed to create component of type ${componentData.componentType} during restoreState.`,
+                    );
                 }
             });
         } else {
-            console.error("[StateManager] Critical references (layer, factory, transformer) missing for restoreState.");
+            console.error(
+                "[StateManager] Critical references (layer, factory, transformer) missing for restoreState.",
+            );
         }
         updateUndoRedoButtons();
         if (layerRef) layerRef.batchDraw(); // Repaint the layer after restoring components
     } catch (error) {
-        console.error("[StateManager] Error parsing or restoring state:", error, "State string:", stateString);
+        console.error(
+            "[StateManager] Error parsing or restoring state:",
+            error,
+            "State string:",
+            stateString,
+        );
         // Potentially notify user of failed state restoration
     }
 }
@@ -233,18 +248,25 @@ export function getCurrentState() {
             };
 
             if (!componentData.componentType) {
-                console.warn(`Component with ID ${node.id()} is missing componentType in attrs during getCurrentState. Setting to 'Unknown'.`);
-                componentData.componentType = 'Unknown';
+                console.warn(
+                    `Component with ID ${node.id()} is missing componentType in attrs during getCurrentState. Setting to 'Unknown'.`,
+                );
+                componentData.componentType = "Unknown";
             }
             state.components.push(componentData);
         });
     } else {
-        console.warn("[StateManager] layerRef not available for getCurrentState. State will be incomplete.");
+        console.warn(
+            "[StateManager] layerRef not available for getCurrentState. State will be incomplete.",
+        );
     }
     try {
         return JSON.stringify(state);
     } catch (error) {
-        console.error("[StateManager] Error stringifying current state:", error);
+        console.error(
+            "[StateManager] Error stringifying current state:",
+            error,
+        );
         return JSON.stringify({ components: [], tags: {} }); // Return minimal valid state
     }
 }
