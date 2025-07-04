@@ -1,13 +1,16 @@
 /* HMI Drag & Drop Styles */
 body {
-    overscroll-behavior: none; /* Prevent pull-to-refresh on mobile */
+    overscroll-behavior: none;
+    /* Prevent pull-to-refresh on mobile */
 }
 
 .switch {
     position: relative;
     display: inline-block;
-    width: 50px; /* Lebar switch */
-    height: 28px; /* Tinggi switch */
+    width: 50px;
+    /* Lebar switch */
+    height: 28px;
+    /* Tinggi switch */
 }
 
 .switch input {
@@ -23,33 +26,42 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: #ccc; /* Warna default slider saat OFF */
+    background-color: #ccc;
+    /* Warna default slider saat OFF */
     transition: 0.4s;
-    border-radius: 28px; /* Membuatnya bulat */
+    border-radius: 28px;
+    /* Membuatnya bulat */
 }
 
 .slider:before {
     position: absolute;
     content: "";
-    height: 20px; /* Tinggi handle */
-    width: 20px; /* Lebar handle */
-    left: 4px; /* Posisi awal handle */
-    bottom: 4px; /* Posisi awal handle */
+    height: 20px;
+    /* Tinggi handle */
+    width: 20px;
+    /* Lebar handle */
+    left: 4px;
+    /* Posisi awal handle */
+    bottom: 4px;
+    /* Posisi awal handle */
     background-color: white;
     transition: 0.4s;
-    border-radius: 50%; /* Membuat handle bulat */
+    border-radius: 50%;
+    /* Membuat handle bulat */
 }
 
-input:checked + .slider {
-    background-color: #22c55e; /* Warna slider saat ON (hijau) */
+input:checked+.slider {
+    background-color: #22c55e;
+    /* Warna slider saat ON (hijau) */
 }
 
-input:focus + .slider {
+input:focus+.slider {
     box-shadow: 0 0 1px #22c55e;
 }
 
-input:checked + .slider:before {
-    transform: translateX(22px); /* Menggeser handle saat ON */
+input:checked+.slider:before {
+    transform: translateX(22px);
+    /* Menggeser handle saat ON */
 }
 
 /* Gaya untuk tombol disabled */
@@ -64,19 +76,24 @@ input:checked + .slider:before {
 /* Toast Notification Styles */
 #toast-container {
     position: fixed;
-    bottom: 20px; /* Menggunakan Tailwind: bottom-5 */
-    right: 20px; /* Menggunakan Tailwind: right-5 */
+    bottom: 20px;
+    /* Menggunakan Tailwind: bottom-5 */
+    right: 20px;
+    /* Menggunakan Tailwind: right-5 */
     display: flex;
     flex-direction: column;
-    gap: 8px; /* Menggunakan Tailwind: space-y-2 */
-    z-index: 200; /* Menggunakan Tailwind: z-[200] */
+    gap: 8px;
+    /* Menggunakan Tailwind: space-y-2 */
+    z-index: 200;
+    /* Menggunakan Tailwind: z-[200] */
 }
 
 #toast-container .toast {
     padding: 12px 20px;
     border-radius: 6px;
     color: white;
-    font-size: 0.875rem; /* 14px */
+    font-size: 0.875rem;
+    /* 14px */
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     opacity: 0;
     transform: translateY(20px);
@@ -90,17 +107,111 @@ input:checked + .slider:before {
 }
 
 #toast-container .toast-info {
-    background-color: #3b82f6; /* Tailwind: bg-blue-500 */
+    background-color: #3b82f6;
+    /* Tailwind: bg-blue-500 */
 }
 
 #toast-container .toast-success {
-    background-color: #22c55e; /* Tailwind: bg-green-500 */
+    background-color: #22c55e;
+    /* Tailwind: bg-green-500 */
 }
 
 #toast-container .toast-error {
-    background-color: #ef4444; /* Tailwind: bg-red-500 */
+    background-color: #ef4444;
+    /* Tailwind: bg-red-500 */
 }
 
 #toast-container .toast-warning {
-    background-color: #f59e0b; /* Tailwind: bg-amber-500 */
+    background-color: #f59e0b;
+    /* Tailwind: bg-amber-500 */
+}
+
+/* Chat Message Styles */
+.chat-message {
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    border-radius: 7px;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+.user-message {
+    background-color: #006666;
+    /* Warna hijau muda seperti WhatsApp */
+    align-self: flex-end;
+    /* Rata kanan */
+    margin-left: auto;
+    /* Mendorong ke kanan */
+}
+
+.model-message {
+    background-color: #666600;
+    /* Warna abu-abu muda */
+    align-self: flex-start;
+    /* Rata kiri */
+    margin-right: auto;
+    /* Mendorong ke kiri */
+}
+
+/* Container untuk chat log agar flexbox berfungsi untuk align-self */
+/* Asumsikan chatLogEl memiliki id 'chat-log' atau kelas '.chat-log-container' */
+/* Jika tidak, ini perlu disesuaikan dengan elemen pembungkus pesan yang sebenarnya */
+/* Contoh: #chat-log atau .chat-log-container */
+#chat-log,
+.chat-log-container {
+    /* Ganti dengan selector yang benar jika perlu, misalnya #chatLog dari app.js */
+    display: flex;
+    flex-direction: column;
+}
+
+
+/* Gaya untuk loader/spinner di dalam pesan model */
+.model-message .loader {
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #3498db;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+    /* Agar bisa di dalam baris yang sama dengan teks jika ada */
+    margin-left: 5px;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Gaya untuk detail proses berpikir */
+.thinking-details {
+    font-size: 0.8em;
+    background-color: #0d0d0d;
+    padding: 5px 10px;
+    border-radius: 5px;
+    margin-top: 5px;
+    margin-bottom: 10px;
+    max-width: 90%;
+    align-self: center;
+    /* Bisa juga diatur ke flex-start jika ingin rata kiri */
+}
+
+.thinking-details summary {
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.thinking-details pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    max-height: 200px;
+    overflow-y: auto;
+    background-color: #000;
+    padding: 5px;
+    border-radius: 3px;
 }
