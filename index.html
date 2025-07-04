@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="id">
     <head>
         <meta charset="UTF-8" />
@@ -86,9 +86,21 @@
                         class="col-span-2 flex items-center justify-center gap-2 bg-red-700 hover:bg-red-600 p-2 rounded-lg transition-colors btn-disabled"
                         disabled
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
                             <path d="M3 6h18"></path>
-                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                            <path
+                                d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"
+                            ></path>
                             <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
                         </svg>
                         <span>Delete</span>
@@ -133,7 +145,9 @@
                 </div>
 
                 <div class="pt-4 border-t border-gray-700">
-                    <h2 class="text-lg font-semibold text-cyan-400">Manajemen</h2>
+                    <h2 class="text-lg font-semibold text-cyan-400">
+                        Manajemen
+                    </h2>
                     <button
                         id="device-manager-btn"
                         class="w-full mt-2 bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg"
@@ -141,24 +155,51 @@
                         Device Manager
                     </button>
 
-                    <h3 class="text-md font-semibold text-cyan-400 mt-4 pt-2 border-t border-gray-700">Manajemen Project</h3>
-                    <button id="new-project-btn" class="w-full mt-1 bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                    <h3
+                        class="text-md font-semibold text-cyan-400 mt-4 pt-2 border-t border-gray-700"
+                    >
+                        Manajemen Project
+                    </h3>
+                    <button
+                        id="new-project-btn"
+                        class="w-full mt-1 bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-lg text-sm"
+                    >
                         New Project
                     </button>
-                    <button id="save-project-btn" class="w-full mt-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                    <button
+                        id="save-project-btn"
+                        class="w-full mt-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm"
+                    >
                         Save Project
                     </button>
-                    <button id="save-project-as-btn" class="w-full mt-1 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                    <button
+                        id="save-project-as-btn"
+                        class="w-full mt-1 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-lg text-sm"
+                    >
                         Save Project As...
                     </button>
-                    <button id="load-project-btn" class="w-full mt-1 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                    <button
+                        id="load-project-btn"
+                        class="w-full mt-1 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg text-sm"
+                    >
                         Load Project
                     </button>
-                    <input type="file" id="import-project-input" accept=".json" style="display: none;" />
-                    <button id="import-project-btn" class="w-full mt-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                    <input
+                        type="file"
+                        id="import-project-input"
+                        accept=".json"
+                        style="display: none"
+                    />
+                    <button
+                        id="import-project-btn"
+                        class="w-full mt-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg text-sm"
+                    >
                         Import Project (.json)
                     </button>
-                    <button id="export-project-btn" class="w-full mt-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                    <button
+                        id="export-project-btn"
+                        class="w-full mt-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-sm"
+                    >
                         Export Project (.json)
                     </button>
                 </div>
@@ -183,14 +224,29 @@
         </div>
 
         <!-- Modal for Device Manager -->
-        <div id="device-manager-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-50 flex items-center justify-center">
+        <div
+            id="device-manager-modal"
+            class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-50 flex items-center justify-center"
+        >
             <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-2xl">
                 <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-2xl font-bold text-cyan-300">Device Manager</h2>
-                    <button id="close-device-manager-modal" class="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+                    <h2 class="text-2xl font-bold text-cyan-300">
+                        Device Manager
+                    </h2>
+                    <button
+                        id="close-device-manager-modal"
+                        class="text-gray-400 hover:text-white text-3xl leading-none"
+                    >
+                        &times;
+                    </button>
                 </div>
                 <div class="flex space-x-4 mb-4">
-                    <button id="add-device-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Tambah Device</button>
+                    <button
+                        id="add-device-btn"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg"
+                    >
+                        Tambah Device
+                    </button>
                 </div>
                 <div id="device-list" class="space-y-3">
                     <!-- Device items will be populated here -->
@@ -199,110 +255,269 @@
         </div>
 
         <!-- Modal for Adding/Editing Device -->
-        <div id="device-form-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-[100] flex items-center justify-center">
+        <div
+            id="device-form-modal"
+            class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-[100] flex items-center justify-center"
+        >
             <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md">
-                <h2 id="device-form-title" class="text-2xl font-bold text-cyan-300 mb-4">Tambah Device</h2>
+                <h2
+                    id="device-form-title"
+                    class="text-2xl font-bold text-cyan-300 mb-4"
+                >
+                    Tambah Device
+                </h2>
                 <form id="device-form">
-                    <input type="hidden" id="device-id">
+                    <input type="hidden" id="device-id" />
                     <div class="mb-4">
-                        <label for="device-name" class="block text-sm font-medium text-gray-300">Nama Device</label>
-                        <input type="text" id="device-name" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white" required>
+                        <label
+                            for="device-name"
+                            class="block text-sm font-medium text-gray-300"
+                            >Nama Device</label
+                        >
+                        <input
+                            type="text"
+                            id="device-name"
+                            class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white"
+                            required
+                        />
                     </div>
                     <div class="mb-4">
-                        <label for="device-type" class="block text-sm font-medium text-gray-300">Tipe</label>
-                        <select id="device-type" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
+                        <label
+                            for="device-type"
+                            class="block text-sm font-medium text-gray-300"
+                            >Tipe</label
+                        >
+                        <select
+                            id="device-type"
+                            class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white"
+                        >
                             <option value="mqtt">MQTT Broker</option>
                             <option value="modbus-tcp">Modbus TCP</option>
                             <option value="modbus-rtu">Modbus RTU</option>
                             <option value="internal">Internal Device</option>
-                            <option value="external">External Device (Placeholder)</option>
+                            <option value="external">
+                                External Device (Placeholder)
+                            </option>
                             <!-- Add S7, OPC-UA options here later -->
                         </select>
                     </div>
 
                     <!-- MQTT Fields -->
-                    <div id="mqtt-fields" style="display: none;">
+                    <div id="mqtt-fields" style="display: none">
                         <div class="mb-4">
-                            <label for="mqtt-protocol" class="block text-sm font-medium text-gray-300">Protokol</label>
-                            <select id="mqtt-protocol" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
+                            <label
+                                for="mqtt-protocol"
+                                class="block text-sm font-medium text-gray-300"
+                                >Protokol</label
+                            >
+                            <select
+                                id="mqtt-protocol"
+                                class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white"
+                            >
                                 <option value="mqtt">mqtt</option>
-                                <option value="mqtts">mqtts (MQTT over TLS)</option>
-                                <option value="ws">ws (MQTT over WebSocket)</option>
-                                <option value="wss">wss (MQTT over Secure WebSocket)</option>
+                                <option value="mqtts">
+                                    mqtts (MQTT over TLS)
+                                </option>
+                                <option value="ws">
+                                    ws (MQTT over WebSocket)
+                                </option>
+                                <option value="wss">
+                                    wss (MQTT over Secure WebSocket)
+                                </option>
                             </select>
                         </div>
                         <div class="mb-4">
-                            <label for="mqtt-host" class="block text-sm font-medium text-gray-300">Host</label>
-                            <input type="text" id="mqtt-host" value="broker.hivemq.com" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
+                            <label
+                                for="mqtt-host"
+                                class="block text-sm font-medium text-gray-300"
+                                >Host</label
+                            >
+                            <input
+                                type="text"
+                                id="mqtt-host"
+                                value="broker.hivemq.com"
+                                class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white"
+                            />
                         </div>
                         <div class="mb-4">
-                            <label for="mqtt-port" class="block text-sm font-medium text-gray-300">Port</label>
-                            <input type="number" id="mqtt-port" value="8000" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
+                            <label
+                                for="mqtt-port"
+                                class="block text-sm font-medium text-gray-300"
+                                >Port</label
+                            >
+                            <input
+                                type="number"
+                                id="mqtt-port"
+                                value="8000"
+                                class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white"
+                            />
                         </div>
                         <div class="mb-4">
-                            <label for="mqtt-username" class="block text-sm font-medium text-gray-300">Username (Opsional)</label>
-                            <input type="text" id="mqtt-username" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
+                            <label
+                                for="mqtt-username"
+                                class="block text-sm font-medium text-gray-300"
+                                >Username (Opsional)</label
+                            >
+                            <input
+                                type="text"
+                                id="mqtt-username"
+                                class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white"
+                            />
                         </div>
                         <div class="mb-4">
-                            <label for="mqtt-password" class="block text-sm font-medium text-gray-300">Password (Opsional)</label>
-                            <input type="password" id="mqtt-password" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
+                            <label
+                                for="mqtt-password"
+                                class="block text-sm font-medium text-gray-300"
+                                >Password (Opsional)</label
+                            >
+                            <input
+                                type="password"
+                                id="mqtt-password"
+                                class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white"
+                            />
                         </div>
                         <div class="mb-4">
-                            <label for="mqtt-basepath" class="block text-sm font-medium text-gray-300">Base Path (Opsional)</label>
-                            <input type="text" id="mqtt-basepath" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
+                            <label
+                                for="mqtt-basepath"
+                                class="block text-sm font-medium text-gray-300"
+                                >Base Path (Opsional)</label
+                            >
+                            <input
+                                type="text"
+                                id="mqtt-basepath"
+                                class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white"
+                            />
                         </div>
 
                         <!-- MQTT Device Variables Section (to be hidden by JS) -->
-                        <div id="mqtt-variables-section" class="mt-6 pt-4 border-t border-gray-700">
+                        <div
+                            id="mqtt-variables-section"
+                            class="mt-6 pt-4 border-t border-gray-700"
+                        >
                             <div class="flex justify-between items-center mb-2">
-                                <h4 class="text-md font-semibold text-cyan-200">Device Variables (MQTT) - Moved to Variable Manager</h4>
-                                <button type="button" id="add-mqtt-variable-btn" class="bg-sky-600 hover:bg-sky-700 text-white py-1 px-3 rounded-md text-sm" style="display:none;">Add Variable</button>
+                                <h4 class="text-md font-semibold text-cyan-200">
+                                    Device Variables (MQTT) - Moved to Variable
+                                    Manager
+                                </h4>
+                                <button
+                                    type="button"
+                                    id="add-mqtt-variable-btn"
+                                    class="bg-sky-600 hover:bg-sky-700 text-white py-1 px-3 rounded-md text-sm"
+                                    style="display: none"
+                                >
+                                    Add Variable
+                                </button>
                             </div>
-                            <div id="mqtt-variables-container" class="space-y-3 max-h-60 overflow-y-auto pr-2">
+                            <div
+                                id="mqtt-variables-container"
+                                class="space-y-3 max-h-60 overflow-y-auto pr-2"
+                            >
                                 <!-- Variable rows were injected here by JavaScript -->
-                                <p class="text-xs text-gray-400 italic">Manajemen variabel kini dilakukan melalui tombol "Variabel" di daftar device.</p>
+                                <p class="text-xs text-gray-400 italic">
+                                    Manajemen variabel kini dilakukan melalui
+                                    tombol "Variabel" di daftar device.
+                                </p>
                             </div>
                         </div>
-                         <!-- Template for a single variable row (hidden, no longer used here directly for adding) -->
+                        <!-- Template for a single variable row (hidden, no longer used here directly for adding) -->
                         <template id="mqtt-variable-row-template">
-                            <div class="mqtt-variable-row p-3 border border-gray-600 rounded-lg space-y-2 bg-gray-700/50">
-                                <input type="hidden" class="variable-id">
-                                <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
+                            <div
+                                class="mqtt-variable-row p-3 border border-gray-600 rounded-lg space-y-2 bg-gray-700/50"
+                            >
+                                <input type="hidden" class="variable-id" />
+                                <div
+                                    class="grid grid-cols-2 gap-x-2 gap-y-1 text-xs"
+                                >
                                     <div>
-                                        <label class="block font-medium text-gray-300">Var Name</label>
-                                        <input type="text" class="variable-name w-full bg-gray-600 border-gray-500 rounded p-1" placeholder="e.g., motorSpeed">
+                                        <label
+                                            class="block font-medium text-gray-300"
+                                            >Var Name</label
+                                        >
+                                        <input
+                                            type="text"
+                                            class="variable-name w-full bg-gray-600 border-gray-500 rounded p-1"
+                                            placeholder="e.g., motorSpeed"
+                                        />
                                     </div>
                                     <div>
-                                        <label class="block font-medium text-gray-300">Data Type</label>
-                                        <select class="variable-datatype w-full bg-gray-600 border-gray-500 rounded p-1">
-                                            <option value="string">String</option>
-                                            <option value="number">Number</option>
-                                            <option value="boolean">Boolean</option>
+                                        <label
+                                            class="block font-medium text-gray-300"
+                                            >Data Type</label
+                                        >
+                                        <select
+                                            class="variable-datatype w-full bg-gray-600 border-gray-500 rounded p-1"
+                                        >
+                                            <option value="string">
+                                                String
+                                            </option>
+                                            <option value="number">
+                                                Number
+                                            </option>
+                                            <option value="boolean">
+                                                Boolean
+                                            </option>
                                             <option value="json">JSON</option>
                                         </select>
                                     </div>
                                 </div>
                                 <div class="text-xs">
-                                    <label class="block font-medium text-gray-300">Description</label>
-                                    <input type="text" class="variable-description w-full bg-gray-600 border-gray-500 rounded p-1" placeholder="Optional description">
+                                    <label
+                                        class="block font-medium text-gray-300"
+                                        >Description</label
+                                    >
+                                    <input
+                                        type="text"
+                                        class="variable-description w-full bg-gray-600 border-gray-500 rounded p-1"
+                                        placeholder="Optional description"
+                                    />
                                 </div>
                                 <div class="pt-1 border-t border-gray-600/50">
-                                    <div class="flex items-center justify-start text-xs mt-1">
-                                        <input type="checkbox" class="variable-enable-subscribe h-4 w-4 bg-gray-600 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600 mr-2">
-                                        <label class="font-medium text-gray-200">Subscribe</label>
+                                    <div
+                                        class="flex items-center justify-start text-xs mt-1"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            class="variable-enable-subscribe h-4 w-4 bg-gray-600 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600 mr-2"
+                                        />
+                                        <label class="font-medium text-gray-200"
+                                            >Subscribe</label
+                                        >
                                     </div>
-                                    <div class="variable-subscribe-options pl-5 space-y-1 mt-1" style="display: none;"> <!-- Hidden by default, shown if checkbox is checked -->
+                                    <div
+                                        class="variable-subscribe-options pl-5 space-y-1 mt-1"
+                                        style="display: none"
+                                    >
+                                        <!-- Hidden by default, shown if checkbox is checked -->
                                         <div>
-                                            <label class="block font-medium text-gray-300">Sub Topic</label>
-                                            <input type="text" class="variable-subscribe-topic w-full bg-gray-600 border-gray-500 rounded p-1" placeholder="topic/to/subscribe">
+                                            <label
+                                                class="block font-medium text-gray-300"
+                                                >Sub Topic</label
+                                            >
+                                            <input
+                                                type="text"
+                                                class="variable-subscribe-topic w-full bg-gray-600 border-gray-500 rounded p-1"
+                                                placeholder="topic/to/subscribe"
+                                            />
                                         </div>
                                         <div>
-                                            <label class="block font-medium text-gray-300">JSON Path (Optional)</label>
-                                            <input type="text" class="variable-jsonpath-subscribe w-full bg-gray-600 border-gray-500 rounded p-1" placeholder="e.g., data.value">
+                                            <label
+                                                class="block font-medium text-gray-300"
+                                                >JSON Path (Optional)</label
+                                            >
+                                            <input
+                                                type="text"
+                                                class="variable-jsonpath-subscribe w-full bg-gray-600 border-gray-500 rounded p-1"
+                                                placeholder="e.g., data.value"
+                                            />
                                         </div>
                                         <div>
-                                            <label class="block font-medium text-gray-300">Sub QoS</label>
-                                            <select class="variable-qos-subscribe w-full bg-gray-600 border-gray-500 rounded p-1">
+                                            <label
+                                                class="block font-medium text-gray-300"
+                                                >Sub QoS</label
+                                            >
+                                            <select
+                                                class="variable-qos-subscribe w-full bg-gray-600 border-gray-500 rounded p-1"
+                                            >
                                                 <option value="0">0</option>
                                                 <option value="1">1</option>
                                                 <option value="2">2</option>
@@ -311,72 +526,179 @@
                                     </div>
                                 </div>
                                 <div class="pt-1 border-t border-gray-600/50">
-                                    <div class="flex items-center justify-start text-xs mt-1">
-                                        <input type="checkbox" class="variable-enable-publish h-4 w-4 bg-gray-600 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600 mr-2">
-                                        <label class="font-medium text-gray-200">Publish</label>
+                                    <div
+                                        class="flex items-center justify-start text-xs mt-1"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            class="variable-enable-publish h-4 w-4 bg-gray-600 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600 mr-2"
+                                        />
+                                        <label class="font-medium text-gray-200"
+                                            >Publish</label
+                                        >
                                     </div>
-                                    <div class="variable-publish-options pl-5 space-y-1 mt-1" style="display: none;"> <!-- Hidden by default -->
+                                    <div
+                                        class="variable-publish-options pl-5 space-y-1 mt-1"
+                                        style="display: none"
+                                    >
+                                        <!-- Hidden by default -->
                                         <div>
-                                            <label class="block font-medium text-gray-300">Pub Topic</label>
-                                            <input type="text" class="variable-publish-topic w-full bg-gray-600 border-gray-500 rounded p-1" placeholder="topic/to/publish">
+                                            <label
+                                                class="block font-medium text-gray-300"
+                                                >Pub Topic</label
+                                            >
+                                            <input
+                                                type="text"
+                                                class="variable-publish-topic w-full bg-gray-600 border-gray-500 rounded p-1"
+                                                placeholder="topic/to/publish"
+                                            />
                                         </div>
                                         <div>
-                                            <label class="block font-medium text-gray-300">Pub QoS</label>
-                                            <select class="variable-qos-publish w-full bg-gray-600 border-gray-500 rounded p-1">
+                                            <label
+                                                class="block font-medium text-gray-300"
+                                                >Pub QoS</label
+                                            >
+                                            <select
+                                                class="variable-qos-publish w-full bg-gray-600 border-gray-500 rounded p-1"
+                                            >
                                                 <option value="0">0</option>
                                                 <option value="1">1</option>
                                                 <option value="2">2</option>
                                             </select>
                                         </div>
-                                        <div class="flex items-center text-xs mt-1">
-                                             <input type="checkbox" class="variable-retain-publish h-3 w-3 bg-gray-600 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600 mr-1.5">
-                                             <label class="font-medium text-gray-300">Retain</label>
+                                        <div
+                                            class="flex items-center text-xs mt-1"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                class="variable-retain-publish h-3 w-3 bg-gray-600 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600 mr-1.5"
+                                            />
+                                            <label
+                                                class="font-medium text-gray-300"
+                                                >Retain</label
+                                            >
                                         </div>
                                     </div>
                                 </div>
-                                <button type="button" class="remove-mqtt-variable-btn text-red-400 hover:text-red-300 text-xs font-semibold float-right">Remove Variable</button>
+                                <button
+                                    type="button"
+                                    class="remove-mqtt-variable-btn text-red-400 hover:text-red-300 text-xs font-semibold float-right"
+                                >
+                                    Remove Variable
+                                </button>
                             </div>
                         </template>
                     </div>
 
                     <!-- Modbus TCP Fields -->
-                    <div id="modbus-tcp-fields" style="display: none;">
-                        <p class="text-sm text-gray-400 italic my-2">Modbus TCP variable configuration will be added here.</p>
+                    <div id="modbus-tcp-fields" style="display: none">
+                        <p class="text-sm text-gray-400 italic my-2">
+                            Modbus TCP variable configuration will be added
+                            here.
+                        </p>
                         <div class="mb-4">
-                            <label for="modbus-tcp-host" class="block text-sm font-medium text-gray-300">IP Address</label>
-                            <input type="text" id="modbus-tcp-host" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white" placeholder="e.g., 192.168.1.10">
+                            <label
+                                for="modbus-tcp-host"
+                                class="block text-sm font-medium text-gray-300"
+                                >IP Address</label
+                            >
+                            <input
+                                type="text"
+                                id="modbus-tcp-host"
+                                class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white"
+                                placeholder="e.g., 192.168.1.10"
+                            />
                         </div>
                         <div class="mb-4">
-                            <label for="modbus-tcp-port" class="block text-sm font-medium text-gray-300">Port</label>
-                            <input type="number" id="modbus-tcp-port" value="502" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
+                            <label
+                                for="modbus-tcp-port"
+                                class="block text-sm font-medium text-gray-300"
+                                >Port</label
+                            >
+                            <input
+                                type="number"
+                                id="modbus-tcp-port"
+                                value="502"
+                                class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white"
+                            />
                         </div>
                         <div class="mb-4">
-                            <label for="modbus-tcp-unit-id" class="block text-sm font-medium text-gray-300">Unit ID</label>
-                            <input type="number" id="modbus-tcp-unit-id" value="1" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
+                            <label
+                                for="modbus-tcp-unit-id"
+                                class="block text-sm font-medium text-gray-300"
+                                >Unit ID</label
+                            >
+                            <input
+                                type="number"
+                                id="modbus-tcp-unit-id"
+                                value="1"
+                                class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white"
+                            />
                         </div>
                     </div>
 
                     <!-- Modbus RTU Fields -->
-                    <div id="modbus-rtu-fields" style="display: none;">
-                        <p class="text-sm text-gray-400 italic my-2">Modbus RTU variable configuration will be added here.</p>
+                    <div id="modbus-rtu-fields" style="display: none">
+                        <p class="text-sm text-gray-400 italic my-2">
+                            Modbus RTU variable configuration will be added
+                            here.
+                        </p>
                         <div class="mb-4">
-                            <label for="modbus-rtu-serial-port" class="block text-sm font-medium text-gray-300">Serial Port</label>
-                            <input type="text" id="modbus-rtu-serial-port" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white" placeholder="e.g., /dev/ttyUSB0 or COM3">
+                            <label
+                                for="modbus-rtu-serial-port"
+                                class="block text-sm font-medium text-gray-300"
+                                >Serial Port</label
+                            >
+                            <input
+                                type="text"
+                                id="modbus-rtu-serial-port"
+                                class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white"
+                                placeholder="e.g., /dev/ttyUSB0 or COM3"
+                            />
                         </div>
                         <div class="mb-4">
-                            <label for="modbus-rtu-baud-rate" class="block text-sm font-medium text-gray-300">Baud Rate</label>
-                            <input type="number" id="modbus-rtu-baud-rate" value="9600" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
+                            <label
+                                for="modbus-rtu-baud-rate"
+                                class="block text-sm font-medium text-gray-300"
+                                >Baud Rate</label
+                            >
+                            <input
+                                type="number"
+                                id="modbus-rtu-baud-rate"
+                                value="9600"
+                                class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white"
+                            />
                         </div>
                         <div class="mb-4">
-                            <label for="modbus-rtu-unit-id" class="block text-sm font-medium text-gray-300">Unit ID</label>
-                            <input type="number" id="modbus-rtu-unit-id" value="1" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white">
+                            <label
+                                for="modbus-rtu-unit-id"
+                                class="block text-sm font-medium text-gray-300"
+                                >Unit ID</label
+                            >
+                            <input
+                                type="number"
+                                id="modbus-rtu-unit-id"
+                                value="1"
+                                class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white"
+                            />
                         </div>
                         <!-- Add other Modbus RTU params like data bits, parity, stop bits if needed -->
                     </div>
 
                     <div class="flex justify-end space-x-3">
-                        <button type="button" id="cancel-device-form" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Batal</button>
-                        <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">Simpan</button>
+                        <button
+                            type="button"
+                            id="cancel-device-form"
+                            class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg"
+                        >
+                            Batal
+                        </button>
+                        <button
+                            type="submit"
+                            class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg"
+                        >
+                            Simpan
+                        </button>
                     </div>
                 </form>
             </div>
@@ -536,65 +858,139 @@
         <script type="module" src="js/app.js"></script>
 
         <!-- Modal for Variable Manager -->
-        <div id="variable-manager-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-[120] flex items-center justify-center p-4">
-            <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-4xl max-h-[90vh] flex flex-col">
+        <div
+            id="variable-manager-modal"
+            class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-[120] flex items-center justify-center p-4"
+        >
+            <div
+                class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-4xl max-h-[90vh] flex flex-col"
+            >
                 <div class="flex justify-between items-center mb-4">
-                    <h2 id="variable-manager-title" class="text-2xl font-bold text-cyan-300">Variable Manager</h2>
-                    <button id="close-variable-manager-modal" class="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+                    <h2
+                        id="variable-manager-title"
+                        class="text-2xl font-bold text-cyan-300"
+                    >
+                        Variable Manager
+                    </h2>
+                    <button
+                        id="close-variable-manager-modal"
+                        class="text-gray-400 hover:text-white text-3xl leading-none"
+                    >
+                        &times;
+                    </button>
                 </div>
                 <div class="overflow-x-auto flex-grow">
                     <table class="min-w-full divide-y divide-gray-700">
                         <thead class="bg-gray-700">
                             <tr>
-                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                <th
+                                    scope="col"
+                                    class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider"
+                                >
                                     Nama Variabel
                                 </th>
-                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                <th
+                                    scope="col"
+                                    class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider"
+                                >
                                     Data Type Setting
                                 </th>
-                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                <th
+                                    scope="col"
+                                    class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider"
+                                >
                                     Subscribe Setting
                                 </th>
-                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                <th
+                                    scope="col"
+                                    class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider"
+                                >
                                     Publish Setting
                                 </th>
-                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                <th
+                                    scope="col"
+                                    class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider"
+                                >
                                     Value Preview
                                 </th>
-                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                <th
+                                    scope="col"
+                                    class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider"
+                                >
                                     Aksi
                                 </th>
                             </tr>
                         </thead>
-                        <tbody id="variable-list-tbody" class="bg-gray-800 divide-y divide-gray-700">
+                        <tbody
+                            id="variable-list-tbody"
+                            class="bg-gray-800 divide-y divide-gray-700"
+                        >
                             <!-- Variable rows will be populated here by JavaScript -->
                         </tbody>
                     </table>
                 </div>
-                <div class="pt-4 mt-auto border-t border-gray-700 flex justify-end space-x-2">
-                    <button id="add-new-variable-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Tambah Variabel Baru</button>
-                    <button id="close-variable-manager-modal-bottom" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Tutup</button>
+                <div
+                    class="pt-4 mt-auto border-t border-gray-700 flex justify-end space-x-2"
+                >
+                    <button
+                        id="add-new-variable-btn"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm"
+                    >
+                        Tambah Variabel Baru
+                    </button>
+                    <button
+                        id="close-variable-manager-modal-bottom"
+                        class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm"
+                    >
+                        Tutup
+                    </button>
                 </div>
             </div>
         </div>
 
         <!-- Modal for Adding/Editing Variable (within Variable Manager) -->
-        <div id="variable-form-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-85 z-[160] flex items-center justify-center p-4">
+        <div
+            id="variable-form-modal"
+            class="hidden fixed inset-0 bg-gray-900 bg-opacity-85 z-[160] flex items-center justify-center p-4"
+        >
             <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg">
-                <h2 id="variable-form-title" class="text-xl font-bold text-cyan-300 mb-4">Tambah Variabel</h2>
+                <h2
+                    id="variable-form-title"
+                    class="text-xl font-bold text-cyan-300 mb-4"
+                >
+                    Tambah Variabel
+                </h2>
                 <form id="variable-form">
-                    <input type="hidden" id="variable-form-device-id">
-                    <input type="hidden" id="variable-form-var-id"> <!-- For editing existing variable -->
+                    <input type="hidden" id="variable-form-device-id" />
+                    <input type="hidden" id="variable-form-var-id" />
+                    <!-- For editing existing variable -->
                     <!-- Fields similar to mqtt-variable-row-template -->
                     <div class="space-y-3 max-h-[70vh] overflow-y-auto pr-2">
                         <div class="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
                             <div>
-                                <label for="var-form-name" class="block font-medium text-gray-300">Nama Variabel*</label>
-                                <input type="text" id="var-form-name" class="variable-name w-full bg-gray-700 border-gray-600 rounded p-2 mt-1" placeholder="e.g., motorSpeed" required>
+                                <label
+                                    for="var-form-name"
+                                    class="block font-medium text-gray-300"
+                                    >Nama Variabel*</label
+                                >
+                                <input
+                                    type="text"
+                                    id="var-form-name"
+                                    class="variable-name w-full bg-gray-700 border-gray-600 rounded p-2 mt-1"
+                                    placeholder="e.g., motorSpeed"
+                                    required
+                                />
                             </div>
                             <div>
-                                <label for="var-form-datatype" class="block font-medium text-gray-300">Data Type</label>
-                                <select id="var-form-datatype" class="variable-datatype w-full bg-gray-700 border-gray-600 rounded p-2 mt-1">
+                                <label
+                                    for="var-form-datatype"
+                                    class="block font-medium text-gray-300"
+                                    >Data Type</label
+                                >
+                                <select
+                                    id="var-form-datatype"
+                                    class="variable-datatype w-full bg-gray-700 border-gray-600 rounded p-2 mt-1"
+                                >
                                     <option value="string">String</option>
                                     <option value="number">Number</option>
                                     <option value="boolean">Boolean</option>
@@ -603,30 +999,84 @@
                             </div>
                         </div>
                         <div class="text-sm">
-                            <label for="var-form-description" class="block font-medium text-gray-300">Deskripsi</label>
-                            <input type="text" id="var-form-description" class="variable-description w-full bg-gray-700 border-gray-600 rounded p-2 mt-1" placeholder="Deskripsi opsional">
+                            <label
+                                for="var-form-description"
+                                class="block font-medium text-gray-300"
+                                >Deskripsi</label
+                            >
+                            <input
+                                type="text"
+                                id="var-form-description"
+                                class="variable-description w-full bg-gray-700 border-gray-600 rounded p-2 mt-1"
+                                placeholder="Deskripsi opsional"
+                            />
                         </div>
 
                         <div class="pt-2 border-t border-gray-700/50">
-                            <div class="flex items-center justify-start text-sm mt-1">
-                                <input type="checkbox" id="var-form-enable-subscribe" class="variable-enable-subscribe h-4 w-4 bg-gray-700 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600 mr-2">
-                                <label for="var-form-enable-subscribe" class="font-medium text-gray-200">Subscribe</label>
+                            <div
+                                class="flex items-center justify-start text-sm mt-1"
+                            >
+                                <input
+                                    type="checkbox"
+                                    id="var-form-enable-subscribe"
+                                    class="variable-enable-subscribe h-4 w-4 bg-gray-700 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600 mr-2"
+                                />
+                                <label
+                                    for="var-form-enable-subscribe"
+                                    class="font-medium text-gray-200"
+                                    >Subscribe</label
+                                >
                             </div>
-                            <div id="var-form-subscribe-options" class="pl-6 space-y-2 mt-1 text-sm" style="display: none;">
+                            <div
+                                id="var-form-subscribe-options"
+                                class="pl-6 space-y-2 mt-1 text-sm"
+                                style="display: none"
+                            >
                                 <div>
-                                    <label for="var-form-subscribe-topic" class="block font-medium text-gray-300">Topic Subscribe</label>
+                                    <label
+                                        for="var-form-subscribe-topic"
+                                        class="block font-medium text-gray-300"
+                                        >Topic Subscribe</label
+                                    >
                                     <div class="flex items-center mt-1">
-                                        <input type="text" id="var-form-subscribe-topic" class="variable-subscribe-topic w-full bg-gray-700 border-gray-600 rounded-l p-2" placeholder="topic/to/subscribe">
-                                        <button type="button" id="var-form-explore-topic-btn" class="bg-cyan-700 hover:bg-cyan-800 text-white py-2 px-3 rounded-r text-sm">Explore</button>
+                                        <input
+                                            type="text"
+                                            id="var-form-subscribe-topic"
+                                            class="variable-subscribe-topic w-full bg-gray-700 border-gray-600 rounded-l p-2"
+                                            placeholder="topic/to/subscribe"
+                                        />
+                                        <button
+                                            type="button"
+                                            id="var-form-explore-topic-btn"
+                                            class="bg-cyan-700 hover:bg-cyan-800 text-white py-2 px-3 rounded-r text-sm"
+                                        >
+                                            Explore
+                                        </button>
                                     </div>
                                 </div>
                                 <div>
-                                    <label for="var-form-jsonpath-subscribe" class="block font-medium text-gray-300">JSON Path (Opsional)</label>
-                                    <input type="text" id="var-form-jsonpath-subscribe" class="variable-jsonpath-subscribe w-full bg-gray-700 border-gray-600 rounded p-2 mt-1" placeholder="e.g., data.value">
+                                    <label
+                                        for="var-form-jsonpath-subscribe"
+                                        class="block font-medium text-gray-300"
+                                        >JSON Path (Opsional)</label
+                                    >
+                                    <input
+                                        type="text"
+                                        id="var-form-jsonpath-subscribe"
+                                        class="variable-jsonpath-subscribe w-full bg-gray-700 border-gray-600 rounded p-2 mt-1"
+                                        placeholder="e.g., data.value"
+                                    />
                                 </div>
                                 <div>
-                                    <label for="var-form-qos-subscribe" class="block font-medium text-gray-300">QoS Subscribe</label>
-                                    <select id="var-form-qos-subscribe" class="variable-qos-subscribe w-full bg-gray-700 border-gray-600 rounded p-2 mt-1">
+                                    <label
+                                        for="var-form-qos-subscribe"
+                                        class="block font-medium text-gray-300"
+                                        >QoS Subscribe</label
+                                    >
+                                    <select
+                                        id="var-form-qos-subscribe"
+                                        class="variable-qos-subscribe w-full bg-gray-700 border-gray-600 rounded p-2 mt-1"
+                                    >
                                         <option value="0">0</option>
                                         <option value="1">1</option>
                                         <option value="2">2</option>
@@ -636,120 +1086,319 @@
                         </div>
 
                         <div class="pt-2 border-t border-gray-700/50">
-                            <div class="flex items-center justify-start text-sm mt-1">
-                                <input type="checkbox" id="var-form-enable-publish" class="variable-enable-publish h-4 w-4 bg-gray-700 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600 mr-2">
-                                <label for="var-form-enable-publish" class="font-medium text-gray-200">Publish</label>
+                            <div
+                                class="flex items-center justify-start text-sm mt-1"
+                            >
+                                <input
+                                    type="checkbox"
+                                    id="var-form-enable-publish"
+                                    class="variable-enable-publish h-4 w-4 bg-gray-700 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600 mr-2"
+                                />
+                                <label
+                                    for="var-form-enable-publish"
+                                    class="font-medium text-gray-200"
+                                    >Publish</label
+                                >
                             </div>
-                            <div id="var-form-publish-options" class="pl-6 space-y-2 mt-1 text-sm" style="display: none;">
+                            <div
+                                id="var-form-publish-options"
+                                class="pl-6 space-y-2 mt-1 text-sm"
+                                style="display: none"
+                            >
                                 <div>
-                                    <label for="var-form-publish-topic" class="block font-medium text-gray-300">Topic Publish</label>
-                                    <input type="text" id="var-form-publish-topic" class="variable-publish-topic w-full bg-gray-700 border-gray-600 rounded p-2 mt-1" placeholder="topic/to/publish">
+                                    <label
+                                        for="var-form-publish-topic"
+                                        class="block font-medium text-gray-300"
+                                        >Topic Publish</label
+                                    >
+                                    <input
+                                        type="text"
+                                        id="var-form-publish-topic"
+                                        class="variable-publish-topic w-full bg-gray-700 border-gray-600 rounded p-2 mt-1"
+                                        placeholder="topic/to/publish"
+                                    />
                                 </div>
                                 <div>
-                                    <label for="var-form-qos-publish" class="block font-medium text-gray-300">QoS Publish</label>
-                                    <select id="var-form-qos-publish" class="variable-qos-publish w-full bg-gray-700 border-gray-600 rounded p-2 mt-1">
+                                    <label
+                                        for="var-form-qos-publish"
+                                        class="block font-medium text-gray-300"
+                                        >QoS Publish</label
+                                    >
+                                    <select
+                                        id="var-form-qos-publish"
+                                        class="variable-qos-publish w-full bg-gray-700 border-gray-600 rounded p-2 mt-1"
+                                    >
                                         <option value="0">0</option>
                                         <option value="1">1</option>
                                         <option value="2">2</option>
                                     </select>
                                 </div>
                                 <div class="flex items-center text-sm mt-1">
-                                     <input type="checkbox" id="var-form-retain-publish" class="variable-retain-publish h-4 w-4 bg-gray-700 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600 mr-1.5">
-                                     <label for="var-form-retain-publish" class="font-medium text-gray-300">Retain</label>
+                                    <input
+                                        type="checkbox"
+                                        id="var-form-retain-publish"
+                                        class="variable-retain-publish h-4 w-4 bg-gray-700 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600 mr-1.5"
+                                    />
+                                    <label
+                                        for="var-form-retain-publish"
+                                        class="font-medium text-gray-300"
+                                        >Retain</label
+                                    >
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <div class="flex justify-end space-x-3 mt-6 pt-4 border-t border-gray-700">
-                        <button type="button" id="cancel-variable-form" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Batal</button>
-                        <button type="submit" id="save-variable-form" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Simpan Variabel</button>
+                    <div
+                        class="flex justify-end space-x-3 mt-6 pt-4 border-t border-gray-700"
+                    >
+                        <button
+                            type="button"
+                            id="cancel-variable-form"
+                            class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm"
+                        >
+                            Batal
+                        </button>
+                        <button
+                            type="submit"
+                            id="save-variable-form"
+                            class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm"
+                        >
+                            Simpan Variabel
+                        </button>
                     </div>
                 </form>
             </div>
         </div>
 
         <!-- MQTT Topic Explorer Modal -->
-        <div id="mqtt-topic-explorer-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-80 z-[170] flex items-center justify-center p-4"> <!-- z-index dinaikkan dari 150 ke 170 -->
-            <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg max-h-[90vh] flex flex-col">
+        <div
+            id="mqtt-topic-explorer-modal"
+            class="hidden fixed inset-0 bg-gray-900 bg-opacity-80 z-[170] flex items-center justify-center p-4"
+        >
+            <!-- z-index dinaikkan dari 150 ke 170 -->
+            <div
+                class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg max-h-[90vh] flex flex-col"
+            >
                 <div class="flex justify-between items-center mb-4">
-                    <h2 id="topic-explorer-title" class="text-xl font-bold text-cyan-300">MQTT Topic Explorer</h2>
-                    <button id="close-topic-explorer-modal" class="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+                    <h2
+                        id="topic-explorer-title"
+                        class="text-xl font-bold text-cyan-300"
+                    >
+                        MQTT Topic Explorer
+                    </h2>
+                    <button
+                        id="close-topic-explorer-modal"
+                        class="text-gray-400 hover:text-white text-3xl leading-none"
+                    >
+                        &times;
+                    </button>
                 </div>
 
                 <div class="mb-3">
-                    <label for="explorer-topic-input" class="block text-sm font-medium text-gray-300">Topic to Explore (use # for wildcard)</label>
+                    <label
+                        for="explorer-topic-input"
+                        class="block text-sm font-medium text-gray-300"
+                        >Topic to Explore (use # for wildcard)</label
+                    >
                     <div class="flex space-x-2 mt-1">
-                        <input type="text" id="explorer-topic-input" class="flex-grow bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white" placeholder="e.g., device/+/data">
-                        <button id="explorer-subscribe-btn" class="bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-4 rounded-lg text-sm">Subscribe</button>
+                        <input
+                            type="text"
+                            id="explorer-topic-input"
+                            class="flex-grow bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white"
+                            placeholder="e.g., device/+/data"
+                        />
+                        <button
+                            id="explorer-subscribe-btn"
+                            class="bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-4 rounded-lg text-sm"
+                        >
+                            Subscribe
+                        </button>
                     </div>
                 </div>
 
-                <div class="mb-3 flex-grow min-h-0 overflow-y-auto border border-gray-700 rounded-md p-2 bg-gray-900/50">
-                    <h4 class="text-sm font-semibold text-cyan-200 mb-1">Received Messages:</h4>
-                    <pre id="explorer-message-log" class="text-xs text-gray-300 whitespace-pre-wrap break-all"></pre>
+                <div
+                    class="mb-3 flex-grow min-h-0 overflow-y-auto border border-gray-700 rounded-md p-2 bg-gray-900/50"
+                >
+                    <h4 class="text-sm font-semibold text-cyan-200 mb-1">
+                        Received Messages:
+                    </h4>
+                    <pre
+                        id="explorer-message-log"
+                        class="text-xs text-gray-300 whitespace-pre-wrap break-all"
+                    ></pre>
                 </div>
 
                 <div class="mb-4">
-                    <label for="explorer-json-path" class="block text-sm font-medium text-gray-300">Selected JSON Path (click in JSON above)</label>
-                    <input type="text" id="explorer-json-path" readonly class="w-full bg-gray-700 border-gray-600 rounded-lg p-2 text-sm text-gray-400 mt-1" placeholder="Click on a value in a JSON message...">
+                    <label
+                        for="explorer-json-path"
+                        class="block text-sm font-medium text-gray-300"
+                        >Selected JSON Path (click in JSON above)</label
+                    >
+                    <input
+                        type="text"
+                        id="explorer-json-path"
+                        readonly
+                        class="w-full bg-gray-700 border-gray-600 rounded-lg p-2 text-sm text-gray-400 mt-1"
+                        placeholder="Click on a value in a JSON message..."
+                    />
                 </div>
 
-                <div class="flex justify-end space-x-3 pt-3 border-t border-gray-700">
-                    <button type="button" id="explorer-use-topic-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Use Topic</button>
-                    <button type="button" id="explorer-use-topic-path-btn" class="bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Use Topic & Path</button>
+                <div
+                    class="flex justify-end space-x-3 pt-3 border-t border-gray-700"
+                >
+                    <button
+                        type="button"
+                        id="explorer-use-topic-btn"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm"
+                    >
+                        Use Topic
+                    </button>
+                    <button
+                        type="button"
+                        id="explorer-use-topic-path-btn"
+                        class="bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-lg text-sm"
+                    >
+                        Use Topic & Path
+                    </button>
                 </div>
             </div>
         </div>
 
         <!-- Toast Notification Container -->
-        <div id="toast-container" class="fixed bottom-5 right-5 space-y-2 z-[200]">
+        <div
+            id="toast-container"
+            class="fixed bottom-5 right-5 space-y-2 z-[200]"
+        >
             <!-- Toast messages will be appended here -->
         </div>
 
         <!-- Modal untuk Load Project -->
-        <div id="load-project-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-[150] flex items-center justify-center p-4">
+        <div
+            id="load-project-modal"
+            class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-[150] flex items-center justify-center p-4"
+        >
             <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md">
                 <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-xl font-bold text-cyan-300">Load Project</h2>
-                    <button id="close-load-project-modal-btn" class="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+                    <h2 class="text-xl font-bold text-cyan-300">
+                        Load Project
+                    </h2>
+                    <button
+                        id="close-load-project-modal-btn"
+                        class="text-gray-400 hover:text-white text-3xl leading-none"
+                    >
+                        &times;
+                    </button>
                 </div>
-                <div id="load-project-list-container" class="mb-4 max-h-60 overflow-y-auto">
+                <div
+                    id="load-project-list-container"
+                    class="mb-4 max-h-60 overflow-y-auto"
+                >
                     <!-- Daftar project akan diisi di sini oleh JavaScript -->
-                    <p class="text-gray-400 text-sm">Memuat daftar project...</p>
+                    <p class="text-gray-400 text-sm">
+                        Memuat daftar project...
+                    </p>
                 </div>
                 <div class="flex justify-end space-x-3">
-                    <button id="cancel-load-project-btn" type="button" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Batal</button>
-                    <button id="confirm-load-project-btn" type="button" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Load</button>
+                    <button
+                        id="cancel-load-project-btn"
+                        type="button"
+                        class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm"
+                    >
+                        Batal
+                    </button>
+                    <button
+                        id="confirm-load-project-btn"
+                        type="button"
+                        class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg text-sm"
+                    >
+                        Load
+                    </button>
                 </div>
             </div>
         </div>
 
         <!-- Modal untuk Save Project As -->
-        <div id="save-project-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-[150] flex items-center justify-center p-4">
+        <div
+            id="save-project-modal"
+            class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-[150] flex items-center justify-center p-4"
+        >
             <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md">
                 <div class="flex justify-between items-center mb-4">
-                    <h2 id="save-project-modal-title" class="text-xl font-bold text-cyan-300">Save Project</h2>
-                    <button id="close-save-project-modal-btn" class="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+                    <h2
+                        id="save-project-modal-title"
+                        class="text-xl font-bold text-cyan-300"
+                    >
+                        Save Project
+                    </h2>
+                    <button
+                        id="close-save-project-modal-btn"
+                        class="text-gray-400 hover:text-white text-3xl leading-none"
+                    >
+                        &times;
+                    </button>
                 </div>
                 <div class="mb-4">
-                    <label for="save-project-name-input" class="block text-sm font-medium text-gray-300 mb-1">Nama Project:</label>
-                    <input type="text" id="save-project-name-input" class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white" placeholder="Masukkan nama project...">
+                    <label
+                        for="save-project-name-input"
+                        class="block text-sm font-medium text-gray-300 mb-1"
+                        >Nama Project:</label
+                    >
+                    <input
+                        type="text"
+                        id="save-project-name-input"
+                        class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-white"
+                        placeholder="Masukkan nama project..."
+                    />
                 </div>
                 <div class="flex justify-end space-x-3">
-                    <button id="cancel-save-project-btn" type="button" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Batal</button>
-                    <button id="confirm-save-project-btn" type="button" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Simpan</button>
+                    <button
+                        id="cancel-save-project-btn"
+                        type="button"
+                        class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm"
+                    >
+                        Batal
+                    </button>
+                    <button
+                        id="confirm-save-project-btn"
+                        type="button"
+                        class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm"
+                    >
+                        Simpan
+                    </button>
                 </div>
             </div>
         </div>
 
         <!-- Modal Konfirmasi Umum -->
-        <div id="confirmation-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-[160] flex items-center justify-center p-4">
+        <div
+            id="confirmation-modal"
+            class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-[160] flex items-center justify-center p-4"
+        >
             <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm">
-                <h2 id="confirmation-modal-title" class="text-lg font-bold text-yellow-400 mb-4">Konfirmasi</h2>
-                <p id="confirmation-message" class="text-gray-300 mb-6">Apakah Anda yakin?</p>
+                <h2
+                    id="confirmation-modal-title"
+                    class="text-lg font-bold text-yellow-400 mb-4"
+                >
+                    Konfirmasi
+                </h2>
+                <p id="confirmation-message" class="text-gray-300 mb-6">
+                    Apakah Anda yakin?
+                </p>
                 <div class="flex justify-end space-x-3">
-                    <button id="confirm-cancel-btn" type="button" class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg text-sm">Batal</button>
-                    <button id="confirm-ok-btn" type="button" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg text-sm">OK</button>
+                    <button
+                        id="confirm-cancel-btn"
+                        type="button"
+                        class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg text-sm"
+                    >
+                        Batal
+                    </button>
+                    <button
+                        id="confirm-ok-btn"
+                        type="button"
+                        class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg text-sm"
+                    >
+                        OK
+                    </button>
                 </div>
             </div>
         </div>

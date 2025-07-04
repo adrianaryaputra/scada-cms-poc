@@ -1,5 +1,5 @@
-import { GRID_SIZE } from './config.js';
-import { saveState, getCurrentState } from './stateManager.js'; // Untuk context menu save
+import { GRID_SIZE } from "./config.js";
+import { saveState, getCurrentState } from "./stateManager.js"; // Untuk context menu save
 
 // Variabel-variabel ini akan dikelola dalam modul ini
 let stage, layer, tr, guideLayer, gridLayer;
@@ -19,7 +19,6 @@ let getUndoStackFunc; // Untuk akses undoStack di hideContextMenu
 let containerEl;
 let contextMenuEl;
 
-
 export function initKonvaManager(
     containerElementId,
     contextMenuElementId,
@@ -29,7 +28,7 @@ export function initKonvaManager(
     selectNodesFunc, // dari uiManager
     setContextMenuNode, // fungsi untuk set currentContextMenuNode di uiManager
     getContextMenuNode, // fungsi untuk get currentContextMenuNode dari uiManager
-    getUndoStack // dari stateManager
+    getUndoStack, // dari stateManager
 ) {
     containerEl = document.getElementById(containerElementId);
     contextMenuEl = document.getElementById(contextMenuElementId);
@@ -48,7 +47,6 @@ export function initKonvaManager(
     // Kita akan coba set langsung dulu.
 
     getUndoStackFunc = getUndoStack;
-
 
     stage = new Konva.Stage({
         container: containerElementId,
@@ -89,7 +87,7 @@ export function initKonvaManager(
         clearDragStartPositions,
         handleDragMove,
         getHmiLayoutAsJson, // Ditambahkan dari langkah sebelumnya
-        clearCanvas         // Ditambahkan sekarang
+        clearCanvas, // Ditambahkan sekarang
     };
 }
 
@@ -99,21 +97,35 @@ function drawGrid(dotted = false) {
     const height = stage.height();
 
     for (let i = 0; i < width / GRID_SIZE; i++) {
-        gridLayer.add(new Konva.Line({
-            points: [Math.round(i * GRID_SIZE) + 0.5, 0, Math.round(i * GRID_SIZE) + 0.5, height],
-            stroke: "rgba(255, 255, 255, 0.1)",
-            strokeWidth: 1,
-            dash: dotted ? [1, 19] : [],
-        }));
+        gridLayer.add(
+            new Konva.Line({
+                points: [
+                    Math.round(i * GRID_SIZE) + 0.5,
+                    0,
+                    Math.round(i * GRID_SIZE) + 0.5,
+                    height,
+                ],
+                stroke: "rgba(255, 255, 255, 0.1)",
+                strokeWidth: 1,
+                dash: dotted ? [1, 19] : [],
+            }),
+        );
     }
 
     for (let i = 0; i < height / GRID_SIZE; i++) {
-        gridLayer.add(new Konva.Line({
-            points: [0, Math.round(i * GRID_SIZE) + 0.5, width, Math.round(i * GRID_SIZE) + 0.5],
-            stroke: "rgba(255, 255, 255, 0.1)",
-            strokeWidth: 1,
-            dash: dotted ? [1, 19] : [],
-        }));
+        gridLayer.add(
+            new Konva.Line({
+                points: [
+                    0,
+                    Math.round(i * GRID_SIZE) + 0.5,
+                    width,
+                    Math.round(i * GRID_SIZE) + 0.5,
+                ],
+                stroke: "rgba(255, 255, 255, 0.1)",
+                strokeWidth: 1,
+                dash: dotted ? [1, 19] : [],
+            }),
+        );
     }
 }
 
@@ -127,7 +139,6 @@ function setDragStartPositions(positions) {
 function clearDragStartPositions() {
     dragStartPositions = null;
 }
-
 
 function getLineGuideStops(skipShape) {
     const vertical = [0, stage.width() / 2, stage.width()];
@@ -149,14 +160,38 @@ function getObjectSnappingEdges(node) {
     const absPos = node.absolutePosition();
     return {
         vertical: [
-            { guide: Math.round(box.x), offset: Math.round(absPos.x - box.x), snap: "start" },
-            { guide: Math.round(box.x + box.width / 2), offset: Math.round(absPos.x - box.x - box.width / 2), snap: "center" },
-            { guide: Math.round(box.x + box.width), offset: Math.round(absPos.x - box.x - box.width), snap: "end" },
+            {
+                guide: Math.round(box.x),
+                offset: Math.round(absPos.x - box.x),
+                snap: "start",
+            },
+            {
+                guide: Math.round(box.x + box.width / 2),
+                offset: Math.round(absPos.x - box.x - box.width / 2),
+                snap: "center",
+            },
+            {
+                guide: Math.round(box.x + box.width),
+                offset: Math.round(absPos.x - box.x - box.width),
+                snap: "end",
+            },
         ],
         horizontal: [
-            { guide: Math.round(box.y), offset: Math.round(absPos.y - box.y), snap: "start" },
-            { guide: Math.round(box.y + box.height / 2), offset: Math.round(absPos.y - box.y - box.height / 2), snap: "center" },
-            { guide: Math.round(box.y + box.height), offset: Math.round(absPos.y - box.y - box.height), snap: "end" },
+            {
+                guide: Math.round(box.y),
+                offset: Math.round(absPos.y - box.y),
+                snap: "start",
+            },
+            {
+                guide: Math.round(box.y + box.height / 2),
+                offset: Math.round(absPos.y - box.y - box.height / 2),
+                snap: "center",
+            },
+            {
+                guide: Math.round(box.y + box.height),
+                offset: Math.round(absPos.y - box.y - box.height),
+                snap: "end",
+            },
         ],
     };
 }
@@ -170,12 +205,13 @@ function drawGuides(guides) {
                 strokeWidth: 1,
                 name: "guide-line",
                 dash: [4, 6],
-            })
+            }),
         );
     });
 }
 
-export function handleDragMove(e) { // Dijadikan export agar bisa di-pass ke componentFactory
+export function handleDragMove(e) {
+    // Dijadikan export agar bisa di-pass ke componentFactory
     if (!dragStartPositions) {
         return;
     }
@@ -216,7 +252,9 @@ export function handleDragMove(e) { // Dijadikan export agar bisa di-pass ke com
         lineGuideStops.vertical.forEach((stop) => {
             const diff = Math.abs(guideLine.guide - stop);
             if (diff < GUIDELINE_OFFSET) {
-                activeNode.x(Math.round(activeNode.x() - guideLine.guide + stop));
+                activeNode.x(
+                    Math.round(activeNode.x() - guideLine.guide + stop),
+                );
                 guides.push({ points: [stop, 0, stop, stage.height()] });
             }
         });
@@ -225,7 +263,9 @@ export function handleDragMove(e) { // Dijadikan export agar bisa di-pass ke com
         lineGuideStops.horizontal.forEach((stop) => {
             const diff = Math.abs(guideLine.guide - stop);
             if (diff < GUIDELINE_OFFSET) {
-                activeNode.y(Math.round(activeNode.y() - guideLine.guide + stop));
+                activeNode.y(
+                    Math.round(activeNode.y() - guideLine.guide + stop),
+                );
                 guides.push({ points: [0, stop, stage.width(), stop] });
             }
         });
@@ -255,12 +295,12 @@ export function handleDragMove(e) { // Dijadikan export agar bisa di-pass ke com
     });
 }
 
-
 function setupEventListeners() {
     window.addEventListener("keydown", (e) => {
         if (e.key !== "Shift" || isSimulationModeFunc()) return;
         const activeEl = document.activeElement;
-        if (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA") return;
+        if (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")
+            return;
         drawGrid(true); // Draw dotted grid
     });
 
@@ -272,11 +312,12 @@ function setupEventListeners() {
 
     stage.on("click tap", (e) => {
         if (e.evt.button === 2) return; // Abaikan klik kanan
-        if (typeof uiHideContextMenuFunc === 'function') uiHideContextMenuFunc();
+        if (typeof uiHideContextMenuFunc === "function")
+            uiHideContextMenuFunc();
 
         if (e.evt.shiftKey) return;
         if (e.target === stage) {
-            if (typeof uiSelectNodesFunc === 'function') uiSelectNodesFunc([]);
+            if (typeof uiSelectNodesFunc === "function") uiSelectNodesFunc([]);
             return;
         }
         if (e.target.getParent().className === "Transformer") return;
@@ -313,8 +354,11 @@ function setupEventListeners() {
         selectionRectangle.visible(false);
         const shapes = stage.find(".hmi-component");
         const box = selectionRectangle.getClientRect();
-        const selected = shapes.filter((shape) => Konva.Util.haveIntersection(box, shape.getClientRect()));
-        if (typeof uiSelectNodesFunc === 'function') uiSelectNodesFunc(selected);
+        const selected = shapes.filter((shape) =>
+            Konva.Util.haveIntersection(box, shape.getClientRect()),
+        );
+        if (typeof uiSelectNodesFunc === "function")
+            uiSelectNodesFunc(selected);
         selectionRectangle.destroy();
         selectionRectangle = null;
     });
@@ -323,18 +367,27 @@ function setupEventListeners() {
         e.evt.preventDefault();
         const node = e.target.getParent();
         // Hanya tampilkan context menu jika satu node HMI dipilih dan bukan mode simulasi
-        if (tr.nodes().length === 1 && node && node.hasName("hmi-component") && !isSimulationModeFunc()) {
+        if (
+            tr.nodes().length === 1 &&
+            node &&
+            node.hasName("hmi-component") &&
+            !isSimulationModeFunc()
+        ) {
             currentContextMenuNodeRef.node = node; // Set node di sini
-            if (typeof uiPopulateContextMenuFunc === 'function') uiPopulateContextMenuFunc(node);
+            if (typeof uiPopulateContextMenuFunc === "function")
+                uiPopulateContextMenuFunc(node);
 
             const containerRect = stage.container().getBoundingClientRect();
             if (contextMenuEl) {
                 contextMenuEl.style.display = "block";
-                contextMenuEl.style.top = e.evt.clientY - containerRect.top + "px";
-                contextMenuEl.style.left = e.evt.clientX - containerRect.left + "px";
+                contextMenuEl.style.top =
+                    e.evt.clientY - containerRect.top + "px";
+                contextMenuEl.style.left =
+                    e.evt.clientX - containerRect.left + "px";
             }
         } else {
-            if (typeof uiHideContextMenuFunc === 'function') uiHideContextMenuFunc();
+            if (typeof uiHideContextMenuFunc === "function")
+                uiHideContextMenuFunc();
         }
     });
 }
@@ -343,7 +396,10 @@ function setupEventListeners() {
 export function handleContextMenuCloseForSaveState() {
     if (currentContextMenuNodeRef.node) {
         const undoStackContent = getUndoStackFunc ? getUndoStackFunc() : [];
-        const originalState = undoStackContent.length > 0 ? undoStackContent[undoStackContent.length - 1] : "{}";
+        const originalState =
+            undoStackContent.length > 0
+                ? undoStackContent[undoStackContent.length - 1]
+                : "{}";
         const currentState = getCurrentState(); // Dari stateManager
         if (originalState !== currentState) {
             saveState(); // Dari stateManager
@@ -353,14 +409,23 @@ export function handleContextMenuCloseForSaveState() {
 }
 
 // Getter untuk layer dan tr jika dibutuhkan oleh app.js atau modul lain
-export function getLayer() { return layer; }
-export function getTransformer() { return tr; }
-export function getGuideLayer() { return guideLayer; }
-export function getStage() { return stage; }
+export function getLayer() {
+    return layer;
+}
+export function getTransformer() {
+    return tr;
+}
+export function getGuideLayer() {
+    return guideLayer;
+}
+export function getStage() {
+    return stage;
+}
 
 // Fungsi untuk mendapatkan konfigurasi HMI sebagai JSON
 export function getHmiLayoutAsJson() {
-    if (!layer) { // Menggunakan 'layer' yang sudah didefinisikan di scope modul
+    if (!layer) {
+        // Menggunakan 'layer' yang sudah didefinisikan di scope modul
         console.error("Layer Konva belum diinisialisasi di konvaManager.");
         return [];
     }
@@ -368,9 +433,9 @@ export function getHmiLayoutAsJson() {
     const components = [];
     // Temukan semua node yang merupakan komponen HMI.
     // Asumsi semua komponen HMI memiliki nama 'hmi-component'.
-    const hmiNodes = layer.find('.hmi-component');
+    const hmiNodes = layer.find(".hmi-component");
 
-    hmiNodes.forEach(node => {
+    hmiNodes.forEach((node) => {
         // Buat salinan dari attrs untuk menghindari modifikasi objek asli secara tidak sengaja
         // dan untuk memastikan kita hanya menyimpan data yang relevan.
         const nodeAttrs = { ...node.attrs };
@@ -385,7 +450,7 @@ export function getHmiLayoutAsJson() {
 
         // Hapus atribut yang tidak perlu atau yang sudah diekstrak secara eksplisit
         delete nodeAttrs.draggable; // Diatur oleh mode/seleksi
-        delete nodeAttrs.name;      // 'hmi-component' hanya untuk seleksi
+        delete nodeAttrs.name; // 'hmi-component' hanya untuk seleksi
 
         // Gabungkan sisa atribut yang relevan
         // Ini akan mencakup hal-hal seperti label, deviceId, variableName, warna, teks, dll.
@@ -394,13 +459,18 @@ export function getHmiLayoutAsJson() {
             // Hindari menyalin atribut internal Konva atau yang sangat besar jika ada
             // Untuk saat ini, kita salin semua yang ada di attrs selain yang sudah dihapus.
             // Jika ada masalah dengan ukuran atau data yang tidak relevan, filter lebih lanjut bisa ditambahkan di sini.
-            if (Object.hasOwnProperty.call(nodeAttrs, key) && componentData[key] === undefined) {
+            if (
+                Object.hasOwnProperty.call(nodeAttrs, key) &&
+                componentData[key] === undefined
+            ) {
                 componentData[key] = nodeAttrs[key];
             }
         }
 
         if (!componentData.componentType) {
-            console.warn(`Node ${node.id()} tidak memiliki componentType di attrs. Komponen ini mungkin tidak bisa dimuat ulang dengan benar.`);
+            console.warn(
+                `Node ${node.id()} tidak memiliki componentType di attrs. Komponen ini mungkin tidak bisa dimuat ulang dengan benar.`,
+            );
             // Pertimbangkan untuk tidak memasukkan komponen ini jika componentType tidak ada
             // return; // Melewatkan node ini
         }
@@ -418,7 +488,7 @@ export function clearCanvas() {
         return;
     }
     // Hapus semua node yang merupakan hmi-component
-    layer.find('.hmi-component').forEach(node => {
+    layer.find(".hmi-component").forEach((node) => {
         node.destroy();
     });
     // Kosongkan transformer
