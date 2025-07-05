@@ -878,7 +878,7 @@ export function getHmiLayoutAsJson() {
 export function clearCanvas() {
     if (!layer || !tr) {
         console.error("[KonvaManager] Layer or Transformer not initialized for clearCanvas.");
-        return;
+        return; // Ensure it returns here
     }
 
     layer.find(".hmi-component").forEach((node) => {
@@ -889,4 +889,12 @@ export function clearCanvas() {
 
     layer.batchDraw(); // Redraw the layer to reflect the cleared components
     console.log("[KonvaManager] HMI canvas has been cleared.");
+}
+
+// FOR TESTING ONLY
+export function _setLayerForTesting(testLayer) {
+    layer = testLayer;
+}
+export function _setTrForTesting(testTr) {
+    tr = testTr;
 }

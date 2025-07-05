@@ -93,7 +93,7 @@ describe("ComponentFactory", () => {
         }
 
 
-        mockLayerRef = { add: jest.fn() };
+        mockLayerRef = { add: jest.fn(), batchDraw: jest.fn() }; // Added batchDraw mock
         mockTrRef = { nodes: jest.fn(() => []) }; // Default to no nodes selected
         mockGuideLayerRef = { show: jest.fn(), hide: jest.fn() };
         mockIsSimulationModeRef = jest.fn(() => false); // Default to design mode

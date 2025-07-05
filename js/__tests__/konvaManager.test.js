@@ -2,7 +2,7 @@
 
 import { GRID_SIZE } from "../config.js";
 import * as stateManager from "../stateManager.js";
-import { initKonvaManager, _konvaObjectsForTesting, handleDragMove, getHmiLayoutAsJson, clearCanvas, handleContextMenuCloseForSaveState } from "../konvaManager.js";
+import { initKonvaManager, _konvaObjectsForTesting, handleDragMove, getHmiLayoutAsJson, clearCanvas, handleContextMenuCloseForSaveState, _setLayerForTesting, _setTrForTesting } from "../konvaManager.js";
 
 // Mock Konva module and its classes
 const mockKonva = {
@@ -196,10 +196,13 @@ describe("KonvaManager", () => {
         });
 
         test("should handle missing container element gracefully", () => {
-            document.getElementById.mockImplementationOnce((id) => { if (id==='test-container') return null; return mockContextMenuEl; });
+            document.getElementById.mockImplementationOnce((id) => { if (id === 'bad-container') return null; return mockContextMenuEl; });
             const result = initKonvaManager('bad-container', 'test-context-menu', mockGetIsSimulationModeFunc, mockUiHideContextMenuFunc, mockUiPopulateContextMenuFunc, mockUiSelectNodesFunc, mockSetUiContextMenuNodeFunc, mockGetUiContextMenuNodeFunc, mockGetUndoStackFromState);
             expect(result).toEqual({});
-            expect(Konva.Stage).toHaveBeenCalledTimes(1); // From previous successful init
+            // Konva.Stage would not have been called again successfully if container is null
+            // The count check should be based on how many times it was expected to be called *before* this specific test case.
+            // Assuming it's called once in beforeEach:
+            expect(Konva.Stage).toHaveBeenCalledTimes(1);
         });
     });
 
@@ -341,12 +344,13 @@ describe("KonvaManager", () => {
             ]);
         });
         test("should return empty array if layer is not initialized", () => {
-            _konvaObjectsForTesting.layer = null;
-            const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(()=>{});
+            const originalLayer = _konvaObjectsForTesting.layer; // Save for restoration
+            _setLayerForTesting(null); // Explicitly set internal layer to null
+            const consoleErrorSpy = jest.spyOn(console, 'error');
             expect(getHmiLayoutAsJson()).toEqual([]);
             expect(consoleErrorSpy).toHaveBeenCalledWith("[KonvaManager] Main layer not initialized for getHmiLayoutAsJson.");
             consoleErrorSpy.mockRestore();
-            _konvaObjectsForTesting.layer = mainLayerInstance; // Restore for other tests
+            _setLayerForTesting(originalLayer); // Restore internal layer
         });
          test("should handle missing componentType by logging a warning", () => {
             const mockNodeNoType = { id: () => 'id-no-type', x: () => 0, y: () => 0, attrs: { label: 'NoTypeComp' }};
@@ -377,17 +381,22 @@ describe("KonvaManager", () => {
             expect(mainLayerInstance.batchDraw).toHaveBeenCalled();
         });
          test("should handle uninitialized layer or transformer gracefully", () => {
-            const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(()=>{});
-            _konvaObjectsForTesting.layer = null;
+            const originalLayer = _konvaObjectsForTesting.layer;
+            const originalTr = _konvaObjectsForTesting.tr;
+            const consoleErrorSpy = jest.spyOn(console, 'error');
+
+            _setLayerForTesting(null);
+            clearCanvas();
+            expect(consoleErrorSpy).toHaveBeenCalledWith("[KonvaManager] Layer or Transformer not initialized for clearCanvas.");
+            consoleErrorSpy.mockClear();
+
+            _setLayerForTesting(originalLayer); // Restore layer
+            _setTrForTesting(null); // Set internal tr to null
             clearCanvas();
             expect(consoleErrorSpy).toHaveBeenCalledWith("[KonvaManager] Layer or Transformer not initialized for clearCanvas.");
 
-            _konvaObjectsForTesting.layer = mainLayerInstance;
-            _konvaObjectsForTesting.tr = null;
-            clearCanvas();
-            expect(consoleErrorSpy).toHaveBeenCalledWith("[KonvaManager] Layer or Transformer not initialized for clearCanvas.");
             consoleErrorSpy.mockRestore();
-            _konvaObjectsForTesting.tr = transformerInstance; // Restore
+            _setTrForTesting(originalTr); // Restore tr
         });
     });
 });

@@ -343,11 +343,19 @@ const ProjectManager = {
 
             // Generic error listener for this operation
             errorListener = (serverError) => {
-                clearTimeout(timeoutId);
-                removeListeners();
-                const errorMsg = `Server error during save: ${serverError?.message || serverError || "Unknown error"}`;
-                console.error(`[ProjectManager] ${errorMsg}`);
-                reject(errorMsg);
+                const errorMessageText = serverError?.message || serverError || "Unknown error";
+                // Check for the specific benign error message
+                if (errorMessageText.includes("not found for deletion during project save")) {
+                    console.warn(`[ProjectManager] Benign server notice during save: ${errorMessageText}`);
+                    // Do not reject here; wait for project:saved_ack or a more critical error.
+                    // The main ackListener or timeout will handle the promise resolution/rejection.
+                } else {
+                    clearTimeout(timeoutId);
+                    removeListeners();
+                    const errorMsg = `Server error during save: ${errorMessageText}`;
+                    console.error(`[ProjectManager] ${errorMsg}`);
+                    reject(errorMsg);
+                }
             };
 
             socketRef.on("project:saved_ack", ackListener);
@@ -538,7 +546,14 @@ const ProjectManager = {
         }
 
         console.log(`[ProjectManager] Importing project from file: ${file.name}`);
-        // Confirmation for dirty project is assumed to be handled by the caller (e.g., uiManager)
+
+        if (this.isProjectDirty()) {
+            if (!confirm("You have unsaved changes. Are you sure you want to import and overwrite them?")) {
+                console.log("[ProjectManager] Import cancelled by user due to dirty project.");
+                this.setIsLoadingProject(false); // Ensure isLoadingProject is reset
+                return Promise.reject("Import cancelled by user.");
+            }
+        }
 
         this.setIsLoadingProject(true);
 

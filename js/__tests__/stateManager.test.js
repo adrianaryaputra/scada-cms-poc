@@ -1,23 +1,6 @@
 // js/__tests__/stateManager.test.js
 
-import {
-    initStateManager,
-    saveState,
-    restoreState,
-    handleUndo,
-    handleRedo,
-    getCurrentState,
-    updateUndoRedoButtons,
-    getTagDatabase,
-    getUndoStack,
-    getRedoStack,
-    getDeviceVariableValue,
-    setDeviceVariableValue,
-    deleteDeviceState,
-    deleteDeviceVariableState,
-    getComponentAddressValue,
-    setComponentAddressValue,
-} from "../stateManager.js";
+import * as stateManagerModule from "../stateManager.js";
 
 // Mock dependencies
 jest.mock("../deviceManager.js", () => ({
@@ -53,9 +36,6 @@ let mockUndoBtnRef;
 let mockRedoBtnRef;
 
 import ProjectManager from "../projectManager.js"; // Import the mocked ProjectManager at the top level
-// Helper to spy on restoreState as it's in the same module
-// We need to re-import and spy for specific tests.
-const stateManagerModule = require("../stateManager.js");
 
 describe("StateManager", () => {
     beforeEach(() => {
@@ -129,7 +109,7 @@ describe("StateManager", () => {
         mockUndoBtnRef = { disabled: false };
         mockRedoBtnRef = { disabled: false };
 
-        initStateManager(
+        stateManagerModule.initStateManager(
             mockComponentFactoryRef,
             mockLayerRef,
             mockTrRef,
@@ -153,7 +133,7 @@ describe("StateManager", () => {
             mockLayerRef._addMockComponent({ id: "comp1", attrs: { x: 10, y: 20, componentType: "lamp" } });
             stateManagerModule.getTagDatabase().dev1 = { var1: 100 };
 
-            saveState();
+            stateManagerModule.saveState();
 
             expect(stateManagerModule.getUndoStack().length).toBe(2); // Initial + this save
             const savedState = JSON.parse(stateManagerModule.getUndoStack()[1]);
@@ -166,14 +146,14 @@ describe("StateManager", () => {
 
         test("should clear redoStack", () => {
             stateManagerModule.getRedoStack().push(JSON.stringify({ components: [], tags: { oldRedo: true } }));
-            saveState();
+            stateManagerModule.saveState();
             expect(stateManagerModule.getRedoStack().length).toBe(0);
         });
 
         test("should handle missing componentType gracefully during saveState", () => {
             mockLayerRef._addMockComponent({ id: "comp-no-type", attrs: { x: 0, y: 0 } });
             const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-            saveState();
+            stateManagerModule.saveState();
             const savedState = JSON.parse(stateManagerModule.getUndoStack()[1]);
             expect(savedState.components[0].componentType).toBe("Unknown");
             expect(consoleWarnSpy).toHaveBeenCalledWith(
@@ -190,7 +170,7 @@ describe("StateManager", () => {
         });
 
         test("should recreate components and restore tagDatabase", () => {
-            restoreState(stateToRestoreStr);
+            stateManagerModule.restoreState(stateToRestoreStr);
 
             expect(mockComponentFactoryRef.create).toHaveBeenCalledWith("lamp", expect.objectContaining({ id: "comp1", label: "Test Lamp" }));
             expect(mockLayerRef.add).toHaveBeenCalled();
@@ -202,7 +182,7 @@ describe("StateManager", () => {
 
         test("should handle invalid JSON string gracefully", () => {
             const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-            restoreState("invalid json");
+            stateManagerModule.restoreState("invalid json");
             expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "[StateManager] Error parsing state string for restoreState:",
                 expect.any(SyntaxError),
@@ -214,7 +194,7 @@ describe("StateManager", () => {
 
         test("should handle incomplete state object gracefully", () => {
             const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-            restoreState(JSON.stringify({ components: [] }));
+            stateManagerModule.restoreState(JSON.stringify({ components: [] }));
             expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "[StateManager] Invalid state object structure provided to restoreState. State:",
                 { components: [] },
@@ -230,7 +210,7 @@ describe("StateManager", () => {
                 components: [{ id: "comp-no-type", x: 0, y: 0 }],
                 tags: {}
             });
-            restoreState(stateWithMissingType);
+            stateManagerModule.restoreState(stateWithMissingType);
             expect(mockComponentFactoryRef.create).not.toHaveBeenCalled();
             expect(consoleWarnSpy).toHaveBeenCalledWith(
                 "[StateManager] Skipping component in restoreState due to missing componentType:",
@@ -241,16 +221,25 @@ describe("StateManager", () => {
     });
 
     describe("handleUndo and handleRedo", () => {
-        let restoreStateSpy;
-        const initialStateJSON = stateManagerModule.getUndoStack()[0];
-        const state1JSON = JSON.stringify({ components: [{ id: "s1" }], tags: { t1: 1 } });
-        const state2JSON = JSON.stringify({ components: [{ id: "s2" }], tags: { t2: 2 } });
+        let restoreStateSpy; // Declare it here
+        const initialStateJSON = stateManagerModule.getUndoStack()[0]; // Assuming this is set correctly by global beforeEach
+        const state1JSON = JSON.stringify({ components: [{ id: "s1", componentType: "typeS1" }], tags: { t1: 1 } });
+        const state2JSON = JSON.stringify({ components: [{ id: "s2", componentType: "typeS2" }], tags: { t2: 2 } });
 
         beforeEach(() => {
-            restoreStateSpy = jest.spyOn(stateManagerModule, 'restoreState');
+            restoreStateSpy = jest.spyOn(stateManagerModule, 'restoreState'); // Initialize spy
+            // Ensure a clean state for each test in this block
             stateManagerModule.getUndoStack().length = 0;
-            stateManagerModule.getUndoStack().push(initialStateJSON, state1JSON, state2JSON);
+            // Get the truly initial state from the global setup if possible, or redefine
+            const initialFromGlobalSetup = JSON.stringify({ components: [], tags: {} }); // More robust way
+            stateManagerModule.getUndoStack().push(initialFromGlobalSetup, state1JSON, state2JSON);
             stateManagerModule.getRedoStack().length = 0;
+
+            // Clear mocks that might be checked for call counts
+            mockComponentFactoryRef.create.mockClear();
+            mockLayerRef.find.mockClear();
+            mockTrRef.nodes.mockClear();
+            mockLayerRef.batchDraw.mockClear();
         });
 
         afterEach(() => {
@@ -258,22 +247,58 @@ describe("StateManager", () => {
         });
 
         test("handleUndo should move state from undo to redo and restore previous", () => {
-            handleUndo();
+            stateManagerModule.handleUndo();
             expect(stateManagerModule.getUndoStack().length).toBe(2);
             expect(stateManagerModule.getUndoStack()[1]).toBe(state1JSON);
             expect(stateManagerModule.getRedoStack().length).toBe(1);
             expect(stateManagerModule.getRedoStack()[0]).toBe(state2JSON);
-            expect(restoreStateSpy).toHaveBeenCalledWith(state1JSON);
+
+            // Verify side effects of restoreState(state1JSON)
+            const expectedTagsState1 = JSON.parse(state1JSON).tags;
+            expect(stateManagerModule.getTagDatabase()).toEqual(expectedTagsState1);
+            const expectedComponentsState1 = JSON.parse(state1JSON).components;
+            if (expectedComponentsState1.length > 0) {
+                // Assuming restoreState clears and re-adds. Check factory calls.
+                // The number of times create is called would be total components in state1JSON.
+                // We also need to consider that restoreState clears previous components first.
+                // Let's check based on the components in state1JSON.
+                expect(mockComponentFactoryRef.create).toHaveBeenCalledTimes(expectedComponentsState1.length);
+                expectedComponentsState1.forEach(compData => {
+                    expect(mockComponentFactoryRef.create).toHaveBeenCalledWith(compData.componentType, expect.objectContaining({ id: compData.id }));
+                });
+            }
+            expect(mockLayerRef.find).toHaveBeenCalledWith(".hmi-component"); // For destroying old ones
+            expect(mockTrRef.nodes).toHaveBeenCalledWith([]);
+            expect(mockLayerRef.batchDraw).toHaveBeenCalled();
         });
 
         test("handleRedo should move state from redo to undo and restore", () => {
-            handleUndo(); // state2JSON -> redoStack, current is state1JSON
-            restoreStateSpy.mockClear();
+            stateManagerModule.handleUndo(); // state2JSON -> redoStack, current is state1JSON
 
-            handleRedo();
+            // Clear mocks that would have been called by the first restoreState in handleUndo
+            mockComponentFactoryRef.create.mockClear();
+            mockLayerRef.find.mockClear();
+            mockTrRef.nodes.mockClear();
+            mockLayerRef.batchDraw.mockClear();
+            // restoreStateSpy.mockClear(); // No longer using restoreStateSpy directly here
+
+            stateManagerModule.handleRedo();
             expect(stateManagerModule.getUndoStack().length).toBe(3);
             expect(stateManagerModule.getRedoStack().length).toBe(0);
-            expect(restoreStateSpy).toHaveBeenCalledWith(state2JSON);
+
+            // Verify side effects of restoreState(state2JSON)
+            const expectedTagsState2 = JSON.parse(state2JSON).tags;
+            expect(stateManagerModule.getTagDatabase()).toEqual(expectedTagsState2);
+            const expectedComponentsState2 = JSON.parse(state2JSON).components;
+            if (expectedComponentsState2.length > 0) {
+                expect(mockComponentFactoryRef.create).toHaveBeenCalledTimes(expectedComponentsState2.length);
+                expectedComponentsState2.forEach(compData => {
+                    expect(mockComponentFactoryRef.create).toHaveBeenCalledWith(compData.componentType, expect.objectContaining({ id: compData.id }));
+                });
+            }
+            expect(mockLayerRef.find).toHaveBeenCalledWith(".hmi-component");
+            expect(mockTrRef.nodes).toHaveBeenCalledWith([]);
+            expect(mockLayerRef.batchDraw).toHaveBeenCalled();
         });
 
         test("handleUndo should do nothing if only initial state exists", () => {
@@ -281,7 +306,7 @@ describe("StateManager", () => {
             stateManagerModule.getUndoStack().push(initialStateJSON);
             const originalUndoStack = [...stateManagerModule.getUndoStack()];
 
-            handleUndo();
+            stateManagerModule.handleUndo();
             expect(stateManagerModule.getUndoStack()).toEqual(originalUndoStack);
             expect(stateManagerModule.getRedoStack().length).toBe(0);
             expect(restoreStateSpy).not.toHaveBeenCalled();
@@ -289,7 +314,7 @@ describe("StateManager", () => {
 
         test("handleRedo should do nothing if redoStack is empty", () => {
             const originalUndoStack = [...stateManagerModule.getUndoStack()];
-            handleRedo();
+            stateManagerModule.handleRedo();
             expect(stateManagerModule.getUndoStack()).toEqual(originalUndoStack);
             expect(restoreStateSpy).not.toHaveBeenCalled();
         });
@@ -302,7 +327,7 @@ describe("StateManager", () => {
             const initialUndoLen = stateManagerModule.getUndoStack().length;
             const initialRedoLen = stateManagerModule.getRedoStack().length;
 
-            const currentStateStr = getCurrentState();
+            const currentStateStr = stateManagerModule.getCurrentState();
             const currentStateData = JSON.parse(currentStateStr);
 
             expect(currentStateData.components.length).toBe(1);
@@ -315,7 +340,7 @@ describe("StateManager", () => {
             mockLayerRef._addMockComponent({ id: "curr-no-type", attrs: { x: 0, y: 0 } });
             const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
-            const currentStateStr = getCurrentState();
+            const currentStateStr = stateManagerModule.getCurrentState();
             const currentStateData = JSON.parse(currentStateStr);
 
             expect(currentStateData.components[0].componentType).toBe("Unknown");
@@ -331,16 +356,16 @@ describe("StateManager", () => {
             stateManagerModule.getUndoStack().length = 0;
             stateManagerModule.getUndoStack().push("{}");
             stateManagerModule.getRedoStack().length = 0;
-            updateUndoRedoButtons();
+            stateManagerModule.updateUndoRedoButtons();
             expect(mockUndoBtnRef.disabled).toBe(true);
             expect(mockRedoBtnRef.disabled).toBe(true);
 
             stateManagerModule.getUndoStack().push("{c:1}");
-            updateUndoRedoButtons();
+            stateManagerModule.updateUndoRedoButtons();
             expect(mockUndoBtnRef.disabled).toBe(false);
 
             stateManagerModule.getRedoStack().push("{c:2}");
-            updateUndoRedoButtons();
+            stateManagerModule.updateUndoRedoButtons();
             expect(mockRedoBtnRef.disabled).toBe(false);
         });
     });
@@ -350,10 +375,10 @@ describe("StateManager", () => {
         const variableName = "temp";
 
         test("getDeviceVariableValue should retrieve correct value or undefined", () => {
-            expect(getDeviceVariableValue(deviceId, variableName)).toBeUndefined();
+            expect(stateManagerModule.getDeviceVariableValue(deviceId, variableName)).toBeUndefined();
             stateManagerModule.getTagDatabase()[deviceId] = { [variableName]: 42 };
-            expect(getDeviceVariableValue(deviceId, variableName)).toBe(42);
-            expect(getDeviceVariableValue("nonexistent", variableName)).toBeUndefined();
+            expect(stateManagerModule.getDeviceVariableValue(deviceId, variableName)).toBe(42);
+            expect(stateManagerModule.getDeviceVariableValue("nonexistent", variableName)).toBeUndefined();
         });
 
         test("setDeviceVariableValue should update tagDatabase and notify components and UI", () => {
@@ -364,7 +389,7 @@ describe("StateManager", () => {
             // To simulate find, we need to ensure our mockLayerRef returns this node
             mockLayerRef.find = jest.fn(() => [mockCompNode]);
 
-            setDeviceVariableValue(deviceId, variableName, 99);
+            stateManagerModule.setDeviceVariableValue(deviceId, variableName, 99);
 
             expect(stateManagerModule.getTagDatabase()[deviceId][variableName]).toBe(99);
             expect(mockCompNode.updateState).toHaveBeenCalled();
@@ -375,12 +400,12 @@ describe("StateManager", () => {
 
         test("setDeviceVariableValue should handle invalid deviceId or variableName gracefully", () => {
             const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-            setDeviceVariableValue(null, variableName, 10);
+            stateManagerModule.setDeviceVariableValue(null, variableName, 10);
             expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "[StateManager] Invalid deviceId or variableName for setDeviceVariableValue.",
                 { deviceId: null, variableName }
             );
-            setDeviceVariableValue(deviceId, undefined, 10);
+            stateManagerModule.setDeviceVariableValue(deviceId, undefined, 10);
              expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "[StateManager] Invalid deviceId or variableName for setDeviceVariableValue.",
                 { deviceId, variableName: undefined } // Corrected expectation
@@ -390,13 +415,13 @@ describe("StateManager", () => {
 
         test("deleteDeviceState should remove all variables for a device", () => {
             stateManagerModule.getTagDatabase()[deviceId] = { temp: 10, pressure: 20 };
-            deleteDeviceState(deviceId);
+            stateManagerModule.deleteDeviceState(deviceId);
             expect(stateManagerModule.getTagDatabase()[deviceId]).toBeUndefined();
         });
 
         test("deleteDeviceVariableState should remove a specific variable", () => {
             stateManagerModule.getTagDatabase()[deviceId] = { temp: 10, pressure: 20 };
-            deleteDeviceVariableState(deviceId, "temp");
+            stateManagerModule.deleteDeviceVariableState(deviceId, "temp");
             expect(stateManagerModule.getTagDatabase()[deviceId]["temp"]).toBeUndefined();
             expect(stateManagerModule.getTagDatabase()[deviceId]["pressure"]).toBe(20);
         });
@@ -426,24 +451,29 @@ describe("StateManager", () => {
 
         test("getComponentAddressValue should return value from root of tagDatabase and log warning", () => {
             stateManagerModule.getTagDatabase()[legacyAddress] = "legacy_value";
-            expect(getComponentAddressValue(legacyAddress)).toBe("legacy_value");
-            expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining("[StateManager DEPRECATED] getComponentAddressValue called"));
+            expect(stateManagerModule.getComponentAddressValue(legacyAddress)).toBe("legacy_value");
+            expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining("[DEPRECATED] getComponentAddressValue called. Please update to use getDeviceVariableValue(deviceId, variableName)."));
         });
 
         test("setComponentAddressValue without deviceId should write to root and log error/warning", () => {
-            setComponentAddressValue(legacyAddress, "new_legacy_val_root");
+            stateManagerModule.setComponentAddressValue(legacyAddress, "new_legacy_val_root");
             expect(stateManagerModule.getTagDatabase()[legacyAddress]).toBe("new_legacy_val_root");
-            expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining("[StateManager DEPRECATED] setComponentAddressValue called"));
-            expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("[StateManager DANGEROUS OPERATION]"));
+            expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining("[DEPRECATED] setComponentAddressValue called for address: PLC_Tag_001. Please update to use setDeviceVariableValue(deviceId, variableName)."));
+            expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("[DANGEROUS OPERATION] Legacy setComponentAddressValue is writing to tagDatabase['PLC_Tag_001']. This can corrupt device-specific data if 'PLC_Tag_001' matches a device ID. This functionality will be removed."));
         });
 
         test("setComponentAddressValue with deviceId should map to setDeviceVariableValue and log warnings", () => {
             const deviceId = "dev_abc_legacy";
-            setComponentAddressValue(legacyAddress, "mapped_val_legacy", deviceId);
+            // const setDeviceVariableValueSpy = jest.spyOn(stateManagerModule, 'setDeviceVariableValue'); // Removed spy
 
-            expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining("[StateManager DEPRECATED] setComponentAddressValue called"));
-            expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining(`[StateManager] Mapping legacy setComponentAddressValue(address="${legacyAddress}") to setDeviceVariableValue(deviceId="${deviceId}", variableName="${legacyAddress}")`));
-            expect(setDeviceVariableValueSpy).toHaveBeenCalledWith(deviceId, legacyAddress, "mapped_val_legacy");
+            stateManagerModule.setComponentAddressValue(legacyAddress, "mapped_val_legacy", deviceId);
+
+            expect(consoleWarnSpy).toHaveBeenNthCalledWith(1, expect.stringContaining("[DEPRECATED] setComponentAddressValue called for address: PLC_Tag_001. Please update to use setDeviceVariableValue(deviceId, variableName)."));
+            expect(consoleWarnSpy).toHaveBeenNthCalledWith(2, expect.stringContaining(`Attempting to map legacy setComponentAddressValue(address=\"${legacyAddress}\") to setDeviceVariableValue(deviceId=\"${deviceId}\", variableName=\"${legacyAddress}\")`));
+
+            // Verify the side-effect on tagDatabase directly
+            expect(stateManagerModule.getTagDatabase()[deviceId][legacyAddress]).toBe("mapped_val_legacy");
+            // setDeviceVariableValueSpy.mockRestore(); // No longer needed
         });
     });
 });

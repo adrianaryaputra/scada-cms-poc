@@ -738,13 +738,14 @@ function _setupProjectManagementListeners() {
             const dirty = projectManagerRef.isProjectDirty();
             console.log("[TEST_DEBUG] Project is dirty:", dirty);
             if (dirty) {
+                console.log("[DEBUG_UIMANAGER] Condition 'dirty' is true. Preparing to call showConfirmationModal."); // Log baru
                 console.log("[TEST_DEBUG] Calling showConfirmationModal...");
-                const confirmed = await self.showConfirmationModal("Unsaved changes will be lost. Create new project?", "Confirm New Project");
+                const confirmed = await showConfirmationModal("Unsaved changes will be lost. Create new project?", "Confirm New Project");
                 console.log("[TEST_DEBUG] Confirmation modal returned:", confirmed);
-                if (!confirmed) { self.showToast("New project creation cancelled.", "info"); return; }
+                if (!confirmed) { showToastImpl("New project creation cancelled.", "info"); return; }
             }
             projectManagerRef.newProject();
-            self.showToast("New project created.", "success");
+            showToastImpl("New project created.", "success");
         });
     }
 
@@ -757,9 +758,9 @@ function _setupProjectManagementListeners() {
                 saveProjectBtn.textContent = "Saving...";
                 try {
                     await projectManagerRef.saveProjectToServer(currentName);
-                    self.showToast(`Project '${currentName}' saved successfully.`, "success");
+                    showToastImpl(`Project '${currentName}' saved successfully.`, "success");
                 } catch (error) {
-                    self.showToast(`Failed to save project '${currentName}': ${error}`, "error");
+                    showToastImpl(`Failed to save project '${currentName}': ${error}`, "error");
                 } finally {
                     saveProjectBtn.disabled = false;
                     saveProjectBtn.textContent = originalText;
@@ -785,13 +786,13 @@ function _setupProjectManagementListeners() {
             if (file) {
                 if (projectManagerRef.isProjectDirty()) {
                     const confirmed = await showConfirmationModal("Unsaved changes will be lost. Import new project?", "Confirm Import");
-                    if (!confirmed) { showToast("Project import cancelled.", "info"); event.target.value = null; return; }
+                    if (!confirmed) { showToastImpl("Project import cancelled.", "info"); event.target.value = null; return; }
                 }
                 try {
                     await projectManagerRef.importProjectFromFile(file);
                     // Success message is handled within importProjectFromFile or by projectManagerRef itself
                 } catch (error) { // Catch errors from importProjectFromFile promise
-                    showToast(`Failed to import project: ${error}`, "error");
+                    showToastImpl(`Failed to import project: ${error}`, "error");
                 }
             }
             event.target.value = null; // Reset file input
@@ -804,7 +805,7 @@ function _setupProjectManagementListeners() {
                 projectManagerRef.exportProject();
                 // Assuming exportProject itself handles success/failure feedback or throws on error
             } catch (e) {
-                showToast("Failed to export project.", "error");
+                showToastImpl("Failed to export project.", "error");
                 console.error("[UIManager] Error during project export:", e);
             }
         });
@@ -825,7 +826,7 @@ function _setupModalListeners() {
         confirmSaveProjectBtnEl.addEventListener("click", async () => {
             const projectName = saveProjectNameInputEl.value.trim();
             if (projectName === "") {
-                showToast("Project name cannot be empty.", "warning");
+                showToastImpl("Project name cannot be empty.", "warning");
                 saveProjectNameInputEl.focus();
                 return;
             }
@@ -839,7 +840,7 @@ function _setupModalListeners() {
                     if (available.some(p => p.toLowerCase() === projectName.toLowerCase())) {
                         const confirmedOverwrite = await showConfirmationModal(`Project "${projectName}" already exists. Overwrite?`, "Confirm Overwrite");
                         if (!confirmedOverwrite) {
-                            showToast("Save cancelled.", "info");
+                            showToastImpl("Save cancelled.", "info");
                             confirmSaveProjectBtnEl.disabled = false;
                             confirmSaveProjectBtnEl.textContent = originalConfirmText;
                             return;
@@ -847,10 +848,10 @@ function _setupModalListeners() {
                     }
                 }
                 await projectManagerRef.saveProjectToServer(projectName);
-                showToast(`Project '${projectName}' saved successfully to server.`, "success");
+                showToastImpl(`Project '${projectName}' saved successfully to server.`, "success");
                 hideSaveProjectModal();
             } catch (error) {
-                showToast(`Failed to save project: ${error}`, "error");
+                showToastImpl(`Failed to save project: ${error}`, "error");
             } finally {
                 confirmSaveProjectBtnEl.disabled = false;
                 confirmSaveProjectBtnEl.textContent = originalConfirmText;
@@ -867,16 +868,16 @@ function _setupModalListeners() {
             if (selectedProjectToLoad) {
                 if (projectManagerRef.isProjectDirty()) {
                     const confirmed = await showConfirmationModal("Unsaved changes will be lost. Load selected project?", "Confirm Load");
-                    if (!confirmed) { showToast("Load project cancelled.", "info"); return; }
+                    if (!confirmed) { showToastImpl("Load project cancelled.", "info"); return; }
                 }
                 confirmLoadProjectBtnEl.disabled = true;
                 confirmLoadProjectBtnEl.textContent = "Loading...";
                 try {
                     await projectManagerRef.loadProjectFromServer(selectedProjectToLoad);
-                    showToast(`Project '${selectedProjectToLoad}' loaded successfully.`, "success");
+                    showToastImpl(`Project '${selectedProjectToLoad}' loaded successfully.`, "success");
                     hideLoadProjectModal();
                 } catch (error) {
-                    showToast(`Failed to load project '${selectedProjectToLoad}': ${error}`, "error");
+                    showToastImpl(`Failed to load project '${selectedProjectToLoad}': ${error}`, "error");
                 } finally {
                     // Ensure button is re-enabled only if modal is still visible (e.g. error occurred)
                     if (confirmLoadProjectBtnEl && loadProjectModalEl && !loadProjectModalEl.classList.contains("hidden")) {
@@ -885,7 +886,7 @@ function _setupModalListeners() {
                     }
                 }
             } else {
-                showToast("Please select a project to load.", "warning");
+                showToastImpl("Please select a project to load.", "warning");
             }
         });
     }
@@ -1009,12 +1010,16 @@ export function showConfirmationModal(message, title = "Confirm", okText = "OK",
         return Promise.resolve(window.confirm(message)); // Fallback
     }
 
+    console.log("[DEBUG_UIMANAGER_MODAL] showConfirmationModal called with message:", message, "title:", title);
+    console.log("[DEBUG_UIMANAGER_MODAL] confirmationMessageEl ID:", confirmationMessageEl ? confirmationMessageEl.id : "null");
     confirmationModalTitleEl.textContent = title;
     confirmationMessageEl.textContent = message;
     confirmOkBtnEl.textContent = okText;
     confirmCancelBtnEl.textContent = cancelText;
 
-    confirmationModalEl.classList.remove("hidden");
+    console.log("[DEBUG_UIMANAGER_MODAL] confirmationModalEl classList BEFORE remove:", confirmationModalEl ? confirmationModalEl.classList.toString() : "null");
+    if (confirmationModalEl) confirmationModalEl.classList.remove("hidden");
+    console.log("[DEBUG_UIMANAGER_MODAL] confirmationModalEl classList AFTER remove:", confirmationModalEl ? confirmationModalEl.classList.toString() : "null");
 
     return new Promise((resolve) => {
         // Remove any old listeners to prevent multiple resolutions
@@ -1056,7 +1061,7 @@ function _createToastElement(message, type) {
  * @param {'info' | 'success' | 'error' | 'warning'} [type='info'] - The type of notification, influencing its appearance.
  * @param {number} [duration=3000] - Duration in milliseconds for the toast to be visible.
  */
-function showToastImpl(message, type = "info", duration = 3000) {
+export function showToastImpl(message, type = "info", duration = 3000) { // Added export
     if (!toastContainerEl) {
         console.error("[UIManager] Toast container element not found. Cannot display toast.");
         alert(`${type.toUpperCase()}: ${message}`); // Fallback to alert

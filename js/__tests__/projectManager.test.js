@@ -162,7 +162,7 @@ describe("ProjectManager", () => {
             mockKonvaManagerRef.getHmiLayoutAsJson.mockReturnValueOnce([]);
             deviceManager.getAllDeviceConfigsForExport.mockReturnValueOnce([]);
             ProjectManager.exportProject();
-            expect(global.alert).toHaveBeenCalledWith(expect.stringContaining("Tidak ada data HMI atau konfigurasi device"));
+            expect(global.alert).toHaveBeenCalledWith("Nothing to export: The project is empty (no HMI components or device configurations).");
             expect(URL.createObjectURL).not.toHaveBeenCalled();
         });
     });
@@ -193,7 +193,7 @@ describe("ProjectManager", () => {
             const savePromise = ProjectManager.saveProjectToServer(projectName);
             mockSocketRef.triggerEvent('project:saved_ack', serverResponse); // Simulate server failure ack
 
-            await expect(savePromise).rejects.toBe("Server save failed");
+            await expect(savePromise).rejects.toBe("Failed to save project on server: Server save failed");
         });
 
         test("should handle operation_error from socket", async () => {
@@ -201,20 +201,24 @@ describe("ProjectManager", () => {
             const savePromise = ProjectManager.saveProjectToServer(projectName);
             mockSocketRef.triggerEvent('operation_error', { message: errorMsg });
 
-            await expect(savePromise).rejects.toBe(errorMsg);
+            await expect(savePromise).rejects.toBe("Server error during save: Socket operation error during save");
         });
 
          test("should handle benign 'device not found for deletion' error without failing", async () => {
             const benignError = { message: "Device xyz not found for deletion during project save." };
             const successResponse = { success: true, name: projectName };
+            const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {}); // Spy on console.warn
 
             const savePromise = ProjectManager.saveProjectToServer(projectName);
-            // Simulate benign error first, then success
+
+            // Simulate benign error first
             mockSocketRef.triggerEvent('operation_error', benignError);
+            // Then simulate success ack
             mockSocketRef.triggerEvent('project:saved_ack', successResponse);
 
             await expect(savePromise).resolves.toEqual(successResponse);
-            expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("Benign server notice"));
+            expect(consoleWarnSpy).toHaveBeenCalledWith("[ProjectManager] Benign server notice during save: Device xyz not found for deletion during project save.");
+            consoleWarnSpy.mockRestore();
         });
 
 
@@ -222,12 +226,12 @@ describe("ProjectManager", () => {
             jest.useFakeTimers();
             const savePromise = ProjectManager.saveProjectToServer(projectName);
             jest.advanceTimersByTime(15000); // Trigger timeout
-            await expect(savePromise).rejects.toMatch("Timeout menyimpan project");
+            await expect(savePromise).rejects.toBe("Timeout saving project: No response from server.");
             jest.useRealTimers();
         });
 
         test("should reject if project name is empty", async () => {
-            await expect(ProjectManager.saveProjectToServer("")).rejects.toBe("Nama project kosong");
+            await expect(ProjectManager.saveProjectToServer("")).rejects.toBe("Project name is empty.");
         });
         test("should reject if socket is not connected", async () => {
             mockSocketRef.connected = false;
@@ -311,15 +315,20 @@ describe("ProjectManager", () => {
             mockFileReaderInstance.result = "invalid json";
             mockFileReaderInstance.onload({ target: { result: mockFileReaderInstance.result } });
 
-            await expect(importPromise).rejects.toMatch("Invalid project file format");
+            await expect(importPromise).rejects.toMatch("Unexpected token 'i', \"invalid json\" is not valid JSON");
         });
 
         test("should ask for confirmation if project is dirty", async () => {
             ProjectManager.setDirty(true);
             global.confirm.mockReturnValueOnce(false); // User cancels
 
-            await expect(ProjectManager.importProjectFromFile(mockFile)).rejects.toBe("Impor dibatalkan oleh pengguna.");
-            expect(global.confirm).toHaveBeenCalled();
+            // Panggil importProjectFromFile dengan file dummy karena tidak akan sampai ke pembacaan file jika dibatalkan
+            const dummyFile = new Blob([""], { type: 'application/json' });
+            dummyFile.name = "dummy.json";
+
+            await expect(ProjectManager.importProjectFromFile(dummyFile)).rejects.toBe("Import cancelled by user.");
+            expect(global.confirm).toHaveBeenCalledWith("You have unsaved changes. Are you sure you want to import and overwrite them?");
+            expect(ProjectManager.getIsLoadingProject()).toBe(false); // Pastikan isLoading direset
         });
     });
 
