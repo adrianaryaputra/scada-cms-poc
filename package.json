@@ -1,17 +1,29 @@
 {
-  "name": "scada-cms-poc",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
-    "start": "node server/main.js"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
-  "dependencies": {
-    "express": "^5.1.0",
-    "socket.io": "^4.7.4",
-    "mqtt": "^5.3.4"
-  }
+    "name": "scada-cms-poc",
+    "version": "1.0.0",
+    "main": "index.js",
+    "scripts": {
+        "start": "node server/main.js",
+        "format": "prettier --write \"**/*.{js,json,html,css,md}\"",
+        "check-format": "prettier --check \"**/*.{js,json,html,css,md}\"",
+        "test": "jest"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "description": "",
+    "dependencies": {
+        "express": "^5.1.0",
+        "modbus-serial": "^8.0.21-no-serial-port",
+        "mqtt": "^5.3.4",
+        "socket.io": "^4.7.4"
+    },
+    "devDependencies": {
+        "@babel/core": "^7.28.0",
+        "@babel/preset-env": "^7.28.0",
+        "babel-jest": "^30.0.4",
+        "jest": "^30.0.4",
+        "jest-environment-jsdom": "^30.0.4",
+        "prettier": "^3.6.2"
+    }
 }

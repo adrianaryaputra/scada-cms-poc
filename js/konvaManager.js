@@ -1,25 +1,80 @@
-import { GRID_SIZE } from './config.js';
-import { saveState, getCurrentState } from './stateManager.js'; // Untuk context menu save
+/**
+ * @file Manages the Konva.js stage, layers, shapes, and interactions for the HMI canvas.
+ * This includes grid drawing, snapping logic, selection handling, context menu integration,
+ * and drag-and-drop functionality for HMI components.
+ * @module js/konvaManager
+ */
+import { GRID_SIZE } from "./config.js";
+import { saveState, getCurrentState } from "./stateManager.js";
 
-// Variabel-variabel ini akan dikelola dalam modul ini
-let stage, layer, tr, guideLayer, gridLayer;
+// --- Module-level Konva Objects ---
+/** @type {Konva.Stage} Main stage for the HMI canvas. */
+let stage;
+/** @type {Konva.Layer} Layer for HMI components. */
+let layer;
+/** @type {Konva.Transformer} Transformer for resizing/rotating selected components. */
+let tr;
+/** @type {Konva.Layer} Layer for drawing guidelines during drag/resize. */
+let guideLayer;
+/** @type {Konva.Layer} Layer for drawing the background grid. */
+let gridLayer;
+
+// --- Selection and Dragging State ---
+/** @type {Konva.Rect} Rectangle used for marquee selection. */
 let selectionRectangle;
-let x1, y1;
-let dragStartPositions = null; // Dikelola di sini
+/** @type {number} Starting X coordinate for marquee selection. */
+let x1;
+/** @type {number} Starting Y coordinate for marquee selection. */
+let y1;
+/** @type {object|null} Stores the starting positions of nodes during a drag operation. */
+let dragStartPositions = null;
 
-// Referensi ke fungsi/variabel dari modul lain atau elemen UI
+// --- FOR TESTING PURPOSES ONLY ---
+/** @private For testing */
+export let _konvaObjectsForTesting = {};
+// --- END FOR TESTING PURPOSES ONLY ---
+
+// --- External Module References & Callbacks ---
+/** @type {function} Callback to uiManager to hide the context menu. */
 let uiHideContextMenuFunc;
+/** @type {function} Callback to uiManager to populate the context menu. */
 let uiPopulateContextMenuFunc;
-let uiSelectNodesFunc; // Fungsi selectNodes dari uiManager akan di-pass ke sini
-let isSimulationModeFunc; // Fungsi untuk mendapatkan status mode simulasi
-let currentContextMenuNodeRef; // Objek untuk menyimpan node context menu saat ini
-let getUndoStackFunc; // Untuk akses undoStack di hideContextMenu
+/** @type {function} Callback to uiManager to handle node selection changes. */
+let uiSelectNodesFunc;
+/** @type {function(): boolean} Function from app.js to get current simulation mode state. */
+let isSimulationModeFunc;
+/**
+ * @type {{node: Konva.Node|null}}
+ * Reference object (passed from uiManager or app.js) to hold the Konva node
+ * currently targeted by the context menu. Allows konvaManager to update it.
+ */
+let currentContextMenuNodeRef;
+/** @type {function(): Array<string>} Function from stateManager to get the undo stack. */
+let getUndoStackFunc;
 
-// Elemen DOM yang dibutuhkan
+// --- DOM Element References ---
+/** @type {HTMLElement} The main container element for the Konva stage. */
 let containerEl;
+/** @type {HTMLElement} The DOM element for the context menu. */
 let contextMenuEl;
 
-
+/**
+ * Initializes the KonvaManager with necessary DOM element IDs, and callbacks from other modules.
+ * Sets up the Konva Stage, layers (grid, main, guide), transformer, and event listeners.
+ *
+ * @export
+ * @param {string} containerElementId - The ID of the HTML div element that will contain the Konva stage.
+ * @param {string} contextMenuElementId - The ID of the HTML div element for the context menu.
+ * @param {function(): boolean} getIsSimulationModeFunc - Function to get the current simulation mode state.
+ * @param {function} hideContextMenuFunc - Callback function from uiManager to hide the context menu.
+ * @param {function} populateContextMenuFunc - Callback function from uiManager to populate the context menu.
+ * @param {function} selectNodesFunc - Callback function from uiManager to handle node selection.
+ * @param {object} setContextMenuNode - (DEPRECATED/REPLACED by currentContextMenuNodeRef) Original function to set context menu node.
+ * @param {object} getContextMenuNode - (DEPRECATED/REPLACED by currentContextMenuNodeRef) Original function to get context menu node.
+ * @param {function} getUndoStack - Function from stateManager to get the undo stack (for context menu save logic).
+ * @returns {object} An object containing references to key Konva objects and manager functions
+ *                   (e.g., stage, layer, tr, getHmiLayoutAsJson, clearCanvas).
+ */
 export function initKonvaManager(
     containerElementId,
     contextMenuElementId,
@@ -29,7 +84,7 @@ export function initKonvaManager(
     selectNodesFunc, // dari uiManager
     setContextMenuNode, // fungsi untuk set currentContextMenuNode di uiManager
     getContextMenuNode, // fungsi untuk get currentContextMenuNode dari uiManager
-    getUndoStack // dari stateManager
+    getUndoStack, // dari stateManager
 ) {
     containerEl = document.getElementById(containerElementId);
     contextMenuEl = document.getElementById(contextMenuElementId);
@@ -49,7 +104,6 @@ export function initKonvaManager(
 
     getUndoStackFunc = getUndoStack;
 
-
     stage = new Konva.Stage({
         container: containerElementId,
         width: containerEl.clientWidth,
@@ -67,6 +121,14 @@ export function initKonvaManager(
         ignoreStroke: true,
     });
     layer.add(tr);
+
+    // --- FOR TESTING PURPOSES ONLY ---
+    _konvaObjectsForTesting.stage = stage;
+    _konvaObjectsForTesting.layer = layer;
+    _konvaObjectsForTesting.gridLayer = gridLayer;
+    _konvaObjectsForTesting.guideLayer = guideLayer;
+    _konvaObjectsForTesting.tr = tr;
+    // --- END FOR TESTING PURPOSES ONLY ---
 
     new ResizeObserver(() => {
         if (stage && containerEl) {
@@ -89,47 +151,88 @@ export function initKonvaManager(
         clearDragStartPositions,
         handleDragMove,
         getHmiLayoutAsJson, // Ditambahkan dari langkah sebelumnya
-        clearCanvas         // Ditambahkan sekarang
+        clearCanvas, // Ditambahkan sekarang
     };
 }
 
+/**
+ * Draws the background grid on the `gridLayer`.
+ * The grid can be solid or dotted. The grid color and line width are fixed.
+ * This function is called during initialization and on stage resize.
+ * @param {boolean} [dotted=false] - If true, draws a dotted grid; otherwise, a solid grid.
+ * @private
+ */
 function drawGrid(dotted = false) {
+    if (!gridLayer || !stage) return; // Guard clause if called before full initialization
     gridLayer.destroyChildren();
     const width = stage.width();
     const height = stage.height();
 
     for (let i = 0; i < width / GRID_SIZE; i++) {
-        gridLayer.add(new Konva.Line({
-            points: [Math.round(i * GRID_SIZE) + 0.5, 0, Math.round(i * GRID_SIZE) + 0.5, height],
-            stroke: "rgba(255, 255, 255, 0.1)",
-            strokeWidth: 1,
-            dash: dotted ? [1, 19] : [],
-        }));
+        gridLayer.add(
+            new Konva.Line({
+                points: [
+                    Math.round(i * GRID_SIZE) + 0.5,
+                    0,
+                    Math.round(i * GRID_SIZE) + 0.5,
+                    height,
+                ],
+                stroke: "rgba(255, 255, 255, 0.1)",
+                strokeWidth: 1,
+                dash: dotted ? [1, 19] : [],
+            }),
+        );
     }
 
     for (let i = 0; i < height / GRID_SIZE; i++) {
-        gridLayer.add(new Konva.Line({
-            points: [0, Math.round(i * GRID_SIZE) + 0.5, width, Math.round(i * GRID_SIZE) + 0.5],
-            stroke: "rgba(255, 255, 255, 0.1)",
-            strokeWidth: 1,
-            dash: dotted ? [1, 19] : [],
-        }));
+        gridLayer.add(
+            new Konva.Line({
+                points: [
+                    0,
+                    Math.round(i * GRID_SIZE) + 0.5,
+                    width,
+                    Math.round(i * GRID_SIZE) + 0.5,
+                ],
+                stroke: "rgba(255, 255, 255, 0.1)",
+                strokeWidth: 1,
+                dash: dotted ? [1, 19] : [],
+            }),
+        );
     }
 }
 
+/**
+ * Gets the stored starting positions of nodes during a drag operation.
+ * @returns {object|null} The drag start positions object, or null if not dragging.
+ */
 function getDragStartPositions() {
     return dragStartPositions;
 }
 
+/**
+ * Sets the starting positions of nodes for a drag operation.
+ * @param {object} positions - An object containing pointer position and node positions.
+ */
 function setDragStartPositions(positions) {
     dragStartPositions = positions;
 }
+
+/**
+ * Clears the stored drag start positions, typically called on dragend.
+ */
 function clearDragStartPositions() {
     dragStartPositions = null;
 }
 
-
+/**
+ * Calculates potential snapping line positions from existing HMI components and stage boundaries/center.
+ * These are used to draw visual guidelines and assist in snapping.
+ * @param {Konva.Node} skipShape - The shape currently being dragged, to be excluded from guide calculation.
+ * @returns {{vertical: Array<number>, horizontal: Array<number>}} Object containing arrays of vertical and horizontal guide stop coordinates.
+ * @private
+ */
 function getLineGuideStops(skipShape) {
+    if (!stage) return { vertical: [], horizontal: [] };
     const vertical = [0, stage.width() / 2, stage.width()];
     const horizontal = [0, stage.height() / 2, stage.height()];
     stage.find(".hmi-component").forEach((guideItem) => {
@@ -144,24 +247,68 @@ function getLineGuideStops(skipShape) {
     };
 }
 
+/**
+ * Determines the snapping edges (start, center, end for both vertical and horizontal) of a given Konva node.
+ * These edges are used to check for alignment with `getLineGuideStops`.
+ * @param {Konva.Node} node - The Konva node for which to calculate snapping edges.
+ * @returns {{vertical: Array<object>, horizontal: Array<object>}}
+ *          An object containing arrays of vertical and horizontal edge definitions.
+ *          Each edge object has `guide` (coordinate), `offset`, and `snap` ('start', 'center', 'end') properties.
+ * @private
+ */
 function getObjectSnappingEdges(node) {
-    const box = node.getClientRect();
+    if (!node) return { vertical: [], horizontal: [] };
+    const box = node.getClientRect(); // Requires node to be on a layer to have a clientRect
     const absPos = node.absolutePosition();
+    // If node is not on a layer, absPos might be {x:0, y:0} and box might be all zeros.
+    // This can happen if a component is created but not yet added, though typically this function
+    // is called during drag of an already added component.
+    if (!absPos) return { vertical: [], horizontal: []}; // Should not happen for a node being dragged
     return {
         vertical: [
-            { guide: Math.round(box.x), offset: Math.round(absPos.x - box.x), snap: "start" },
-            { guide: Math.round(box.x + box.width / 2), offset: Math.round(absPos.x - box.x - box.width / 2), snap: "center" },
-            { guide: Math.round(box.x + box.width), offset: Math.round(absPos.x - box.x - box.width), snap: "end" },
+            {
+                guide: Math.round(box.x),
+                offset: Math.round(absPos.x - box.x),
+                snap: "start",
+            },
+            {
+                guide: Math.round(box.x + box.width / 2),
+                offset: Math.round(absPos.x - box.x - box.width / 2),
+                snap: "center",
+            },
+            {
+                guide: Math.round(box.x + box.width),
+                offset: Math.round(absPos.x - box.x - box.width),
+                snap: "end",
+            },
         ],
         horizontal: [
-            { guide: Math.round(box.y), offset: Math.round(absPos.y - box.y), snap: "start" },
-            { guide: Math.round(box.y + box.height / 2), offset: Math.round(absPos.y - box.y - box.height / 2), snap: "center" },
-            { guide: Math.round(box.y + box.height), offset: Math.round(absPos.y - box.y - box.height), snap: "end" },
+            {
+                guide: Math.round(box.y),
+                offset: Math.round(absPos.y - box.y),
+                snap: "start",
+            },
+            {
+                guide: Math.round(box.y + box.height / 2),
+                offset: Math.round(absPos.y - box.y - box.height / 2),
+                snap: "center",
+            },
+            {
+                guide: Math.round(box.y + box.height),
+                offset: Math.round(absPos.y - box.y - box.height),
+                snap: "end",
+            },
         ],
     };
 }
 
+/**
+ * Draws visual guideline (red dashed lines) on the `guideLayer`.
+ * @param {Array<object>} guides - An array of guide objects, each with a `points` property (e.g., `[x1, y1, x2, y2]`).
+ * @private
+ */
 function drawGuides(guides) {
+    if (!guideLayer) return;
     guides.forEach((lg) => {
         guideLayer.add(
             new Konva.Line({
@@ -170,20 +317,41 @@ function drawGuides(guides) {
                 strokeWidth: 1,
                 name: "guide-line",
                 dash: [4, 6],
-            })
+            }),
         );
     });
 }
 
-export function handleDragMove(e) { // Dijadikan export agar bisa di-pass ke componentFactory
-    if (!dragStartPositions) {
+/**
+ * Handles the drag move event for HMI components.
+ * Implements snapping to grid and to other components' edges/centers.
+ * Draws visual guidelines during dragging.
+ * If Alt key is pressed, constrains movement to horizontal or vertical axis.
+ * If Shift key is NOT pressed, snaps to the main grid.
+ * Updates positions of all selected nodes in the transformer.
+ *
+ * @export
+ * @param {Konva.KonvaEventObject<DragEvent>} e - The Konva dragmove event object.
+ */
+export function handleDragMove(e) {
+    if (!dragStartPositions || !stage || !guideLayer || !tr) { // Add guard clauses for critical refs
         return;
     }
 
     const activeNode = e.target;
+    // Ensure dragStartPositions and its nested properties are valid
+    if (!dragStartPositions.nodes || !dragStartPositions.nodes[activeNode.id()] || !dragStartPositions.pointer) {
+        console.warn("[KonvaManager] Missing drag start data for node:", activeNode.id());
+        return;
+    }
     const initialNodePos = dragStartPositions.nodes[activeNode.id()];
     const initialPointerPos = dragStartPositions.pointer;
+
     const currentPointerPos = stage.getPointerPosition();
+    if (!currentPointerPos) { // Stage might not be fully ready or pointer is outside
+        console.warn("[KonvaManager] Could not get current pointer position from stage.");
+        return;
+    }
 
     let pointerDisplacement = {
         x: currentPointerPos.x - initialPointerPos.x,
@@ -216,7 +384,9 @@ export function handleDragMove(e) { // Dijadikan export agar bisa di-pass ke com
         lineGuideStops.vertical.forEach((stop) => {
             const diff = Math.abs(guideLine.guide - stop);
             if (diff < GUIDELINE_OFFSET) {
-                activeNode.x(Math.round(activeNode.x() - guideLine.guide + stop));
+                activeNode.x(
+                    Math.round(activeNode.x() - guideLine.guide + stop),
+                );
                 guides.push({ points: [stop, 0, stop, stage.height()] });
             }
         });
@@ -225,7 +395,9 @@ export function handleDragMove(e) { // Dijadikan export agar bisa di-pass ke com
         lineGuideStops.horizontal.forEach((stop) => {
             const diff = Math.abs(guideLine.guide - stop);
             if (diff < GUIDELINE_OFFSET) {
-                activeNode.y(Math.round(activeNode.y() - guideLine.guide + stop));
+                activeNode.y(
+                    Math.round(activeNode.y() - guideLine.guide + stop),
+                );
                 guides.push({ points: [0, stop, stage.width(), stop] });
             }
         });
@@ -255,12 +427,22 @@ export function handleDragMove(e) { // Dijadikan export agar bisa di-pass ke com
     });
 }
 
-
+/**
+ * Sets up global and Konva stage event listeners.
+ * Handles:
+ * - Shift key for dotted grid.
+ * - Stage click/tap for deselecting components or hiding context menu.
+ * - Stage mousedown, mousemove, mouseup for marquee selection.
+ * - Stage contextmenu for showing custom context menu.
+ * @private
+ */
 function setupEventListeners() {
+    // Listener for Shift key to toggle dotted grid
     window.addEventListener("keydown", (e) => {
-        if (e.key !== "Shift" || isSimulationModeFunc()) return;
+        if (e.key !== "Shift" || (isSimulationModeFunc && isSimulationModeFunc())) return;
         const activeEl = document.activeElement;
-        if (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA") return;
+        if (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")
+            return;
         drawGrid(true); // Draw dotted grid
     });
 
@@ -272,11 +454,12 @@ function setupEventListeners() {
 
     stage.on("click tap", (e) => {
         if (e.evt.button === 2) return; // Abaikan klik kanan
-        if (typeof uiHideContextMenuFunc === 'function') uiHideContextMenuFunc();
+        if (typeof uiHideContextMenuFunc === "function")
+            uiHideContextMenuFunc();
 
         if (e.evt.shiftKey) return;
         if (e.target === stage) {
-            if (typeof uiSelectNodesFunc === 'function') uiSelectNodesFunc([]);
+            if (typeof uiSelectNodesFunc === "function") uiSelectNodesFunc([]);
             return;
         }
         if (e.target.getParent().className === "Transformer") return;
@@ -313,8 +496,11 @@ function setupEventListeners() {
         selectionRectangle.visible(false);
         const shapes = stage.find(".hmi-component");
         const box = selectionRectangle.getClientRect();
-        const selected = shapes.filter((shape) => Konva.Util.haveIntersection(box, shape.getClientRect()));
-        if (typeof uiSelectNodesFunc === 'function') uiSelectNodesFunc(selected);
+        const selected = shapes.filter((shape) =>
+            Konva.Util.haveIntersection(box, shape.getClientRect()),
+        );
+        if (typeof uiSelectNodesFunc === "function")
+            uiSelectNodesFunc(selected);
         selectionRectangle.destroy();
         selectionRectangle = null;
     });
@@ -323,18 +509,27 @@ function setupEventListeners() {
         e.evt.preventDefault();
         const node = e.target.getParent();
         // Hanya tampilkan context menu jika satu node HMI dipilih dan bukan mode simulasi
-        if (tr.nodes().length === 1 && node && node.hasName("hmi-component") && !isSimulationModeFunc()) {
+        if (
+            tr.nodes().length === 1 &&
+            node &&
+            node.hasName("hmi-component") &&
+            !isSimulationModeFunc()
+        ) {
             currentContextMenuNodeRef.node = node; // Set node di sini
-            if (typeof uiPopulateContextMenuFunc === 'function') uiPopulateContextMenuFunc(node);
+            if (typeof uiPopulateContextMenuFunc === "function")
+                uiPopulateContextMenuFunc(node);
 
             const containerRect = stage.container().getBoundingClientRect();
             if (contextMenuEl) {
                 contextMenuEl.style.display = "block";
-                contextMenuEl.style.top = e.evt.clientY - containerRect.top + "px";
-                contextMenuEl.style.left = e.evt.clientX - containerRect.left + "px";
+                contextMenuEl.style.top =
+                    e.evt.clientY - containerRect.top + "px";
+                contextMenuEl.style.left =
+                    e.evt.clientX - containerRect.left + "px";
             }
         } else {
-            if (typeof uiHideContextMenuFunc === 'function') uiHideContextMenuFunc();
+            if (typeof uiHideContextMenuFunc === "function")
+                uiHideContextMenuFunc();
         }
     });
 }
@@ -343,24 +538,62 @@ function setupEventListeners() {
 export function handleContextMenuCloseForSaveState() {
     if (currentContextMenuNodeRef.node) {
         const undoStackContent = getUndoStackFunc ? getUndoStackFunc() : [];
-        const originalState = undoStackContent.length > 0 ? undoStackContent[undoStackContent.length - 1] : "{}";
+        const originalState =
+            undoStackContent.length > 0
+                ? undoStackContent[undoStackContent.length - 1]
+                : "{}";
         const currentState = getCurrentState(); // Dari stateManager
         if (originalState !== currentState) {
             saveState(); // Dari stateManager
         }
     }
-    currentContextMenuNodeRef.node = null; // Reset setelah ditutup
+    currentContextMenuNodeRef.node = null; // Reset after closing
 }
 
-// Getter untuk layer dan tr jika dibutuhkan oleh app.js atau modul lain
-export function getLayer() { return layer; }
-export function getTransformer() { return tr; }
-export function getGuideLayer() { return guideLayer; }
-export function getStage() { return stage; }
+/**
+ * Gets the main Konva layer where HMI components are added.
+ * @export
+ * @returns {Konva.Layer|undefined} The main Konva layer, or undefined if not initialized.
+ */
+export function getLayer() {
+    return layer;
+}
 
-// Fungsi untuk mendapatkan konfigurasi HMI sebagai JSON
+/**
+ * Gets the Konva Transformer used for HMI components.
+ * @export
+ * @returns {Konva.Transformer|undefined} The Konva Transformer, or undefined if not initialized.
+ */
+export function getTransformer() {
+    return tr;
+}
+
+/**
+ * Gets the Konva layer used for drawing guidelines.
+ * @export
+ * @returns {Konva.Layer|undefined} The guide layer, or undefined if not initialized.
+ */
+export function getGuideLayer() {
+    return guideLayer;
+}
+
+/**
+ * Gets the main Konva Stage.
+ * @export
+ * @returns {Konva.Stage|undefined} The Konva Stage, or undefined if not initialized.
+ */
+export function getStage() {
+    return stage;
+}
+
+/**
+ * Serializes the current HMI layout (all components on the main layer) into a JSON-compatible array.
+ * Each component's data includes its id, x, y, componentType, and other relevant attributes.
+ * @export
+ * @returns {Array<object>} An array of HMI component data objects. Returns an empty array if the layer is not initialized.
+ */
 export function getHmiLayoutAsJson() {
-    if (!layer) { // Menggunakan 'layer' yang sudah didefinisikan di scope modul
+    if (!layer) {
         console.error("Layer Konva belum diinisialisasi di konvaManager.");
         return [];
     }
@@ -368,9 +601,9 @@ export function getHmiLayoutAsJson() {
     const components = [];
     // Temukan semua node yang merupakan komponen HMI.
     // Asumsi semua komponen HMI memiliki nama 'hmi-component'.
-    const hmiNodes = layer.find('.hmi-component');
+    const hmiNodes = layer.find(".hmi-component");
 
-    hmiNodes.forEach(node => {
+    hmiNodes.forEach((node) => {
         // Buat salinan dari attrs untuk menghindari modifikasi objek asli secara tidak sengaja
         // dan untuk memastikan kita hanya menyimpan data yang relevan.
         const nodeAttrs = { ...node.attrs };
@@ -385,7 +618,7 @@ export function getHmiLayoutAsJson() {
 
         // Hapus atribut yang tidak perlu atau yang sudah diekstrak secara eksplisit
         delete nodeAttrs.draggable; // Diatur oleh mode/seleksi
-        delete nodeAttrs.name;      // 'hmi-component' hanya untuk seleksi
+        delete nodeAttrs.name; // 'hmi-component' hanya untuk seleksi
 
         // Gabungkan sisa atribut yang relevan
         // Ini akan mencakup hal-hal seperti label, deviceId, variableName, warna, teks, dll.
@@ -394,13 +627,18 @@ export function getHmiLayoutAsJson() {
             // Hindari menyalin atribut internal Konva atau yang sangat besar jika ada
             // Untuk saat ini, kita salin semua yang ada di attrs selain yang sudah dihapus.
             // Jika ada masalah dengan ukuran atau data yang tidak relevan, filter lebih lanjut bisa ditambahkan di sini.
-            if (Object.hasOwnProperty.call(nodeAttrs, key) && componentData[key] === undefined) {
+            if (
+                Object.hasOwnProperty.call(nodeAttrs, key) &&
+                componentData[key] === undefined
+            ) {
                 componentData[key] = nodeAttrs[key];
             }
         }
 
         if (!componentData.componentType) {
-            console.warn(`Node ${node.id()} tidak memiliki componentType di attrs. Komponen ini mungkin tidak bisa dimuat ulang dengan benar.`);
+            console.warn(
+                `Node ${node.id()} tidak memiliki componentType di attrs. Komponen ini mungkin tidak bisa dimuat ulang dengan benar.`,
+            );
             // Pertimbangkan untuk tidak memasukkan komponen ini jika componentType tidak ada
             // return; // Melewatkan node ini
         }
@@ -411,14 +649,18 @@ export function getHmiLayoutAsJson() {
     return components;
 }
 
-// Fungsi untuk membersihkan semua komponen HMI dari canvas
+/**
+ * Clears all HMI components from the main Konva layer and resets the transformer.
+ * This is used when creating a new project or loading a project.
+ * @export
+ */
 export function clearCanvas() {
     if (!layer || !tr) {
-        console.error("Layer atau Transformer Konva belum diinisialisasi.");
+        console.error("Layer atau Transformer Konva belum diinisialisasi untuk clearCanvas.");
         return;
     }
     // Hapus semua node yang merupakan hmi-component
-    layer.find('.hmi-component').forEach(node => {
+    layer.find(".hmi-component").forEach((node) => {
         node.destroy();
     });
     // Kosongkan transformer

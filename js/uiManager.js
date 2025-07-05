@@ -1,22 +1,35 @@
 /**
- * uiManager.js - Manages UI elements, interactions, context menus, and mode toggling.
+ * @file Manages UI elements, interactions, context menus, mode toggling,
+ * project management modals, and notifications.
+ * @module js/uiManager
  */
 import {
     saveState,
     // getCurrentState, // Not directly used by uiManager, but kept for context
     handleUndo,
     handleRedo,
-    deleteDeviceVariableState
-} from './stateManager.js';
-import { componentFactory } from './componentFactory.js';
-import { getDevices } from './deviceManager.js';
-import { GRID_SIZE } from './config.js'; // Used for paste offset
+    deleteDeviceVariableState,
+} from "./stateManager.js";
+import { componentFactory } from "./componentFactory.js";
+import { getDevices } from "./deviceManager.js";
+import { GRID_SIZE } from "./config.js"; // Used for paste offset
 
 // Module-level variables for DOM elements and state
-let modeToggleEl, modeLabelEl, deleteBtnEl, addComponentPanelEl, contextMenuEl,
-    contextMenuTitleEl, contextMenuContentEl, closeContextMenuBtnEl,
-    aiPopupChatEl, aiFabEl, closeAiPopupBtnEl, aiSettingsBtnEl, aiSettingsPanelEl,
-    closeAiSettingsBtnEl, geminiApiKeyInputEl;
+let modeToggleEl,
+    modeLabelEl,
+    deleteBtnEl,
+    addComponentPanelEl,
+    contextMenuEl,
+    contextMenuTitleEl,
+    contextMenuContentEl,
+    closeContextMenuBtnEl,
+    aiPopupChatEl,
+    aiFabEl,
+    closeAiPopupBtnEl,
+    aiSettingsBtnEl,
+    aiSettingsPanelEl,
+    closeAiSettingsBtnEl,
+    geminiApiKeyInputEl;
 
 let konvaRefsForUi = {}; // References to Konva stage, layers, transformer
 let isSimulationModeState = false; // Local cache of simulation mode
@@ -34,20 +47,30 @@ let setIsSimulationModeFunc;
 let projectManagerRef = null; // Referensi ke ProjectManager
 
 // Variabel untuk Modal Load Project
-let loadProjectModalEl, loadProjectListContainerEl, closeLoadProjectModalBtnEl,
-    cancelLoadProjectBtnEl, confirmLoadProjectBtnEl;
+let loadProjectModalEl,
+    loadProjectListContainerEl,
+    closeLoadProjectModalBtnEl,
+    cancelLoadProjectBtnEl,
+    confirmLoadProjectBtnEl;
 let selectedProjectToLoad = null; // Menyimpan nama project yang dipilih di modal
 
 // Variabel untuk Toast Notification
 let toastContainerEl = null;
 
 // Variabel untuk Modal Save Project
-let saveProjectModalEl, saveProjectModalTitleEl, saveProjectNameInputEl,
-    closeSaveProjectModalBtnEl, cancelSaveProjectBtnEl, confirmSaveProjectBtnEl;
+let saveProjectModalEl,
+    saveProjectModalTitleEl,
+    saveProjectNameInputEl,
+    closeSaveProjectModalBtnEl,
+    cancelSaveProjectBtnEl,
+    confirmSaveProjectBtnEl;
 
 // Variabel untuk Modal Konfirmasi Umum
-let confirmationModalEl, confirmationModalTitleEl, confirmationMessageEl,
-    confirmOkBtnEl, confirmCancelBtnEl;
+let confirmationModalEl,
+    confirmationModalTitleEl,
+    confirmationMessageEl,
+    confirmOkBtnEl,
+    confirmCancelBtnEl;
 
 /**
  * Sets the Konva node currently targeted by the context menu.
@@ -56,6 +79,64 @@ let confirmationModalEl, confirmationModalTitleEl, confirmationMessageEl,
  */
 export function setCurrentContextMenuNode(node) {
     currentContextMenuNode = node;
+}
+
+/**
+ * Caches all relevant DOM elements used by the UI manager.
+ * This function is called once during initialization.
+ * @private
+ */
+function _cacheDomElements() {
+    modeToggleEl = document.getElementById("mode-toggle");
+    modeLabelEl = document.getElementById("mode-label");
+    deleteBtnEl = document.getElementById("delete-btn");
+    addComponentPanelEl = document.getElementById("add-component-panel");
+    contextMenuEl = document.getElementById("context-menu");
+    contextMenuTitleEl = document.getElementById("context-menu-title");
+    contextMenuContentEl = document.getElementById("context-menu-content");
+    closeContextMenuBtnEl = document.getElementById("close-context-menu");
+    aiPopupChatEl = document.getElementById("ai-popup-chat");
+    aiFabEl = document.getElementById("ai-fab");
+    closeAiPopupBtnEl = document.getElementById("close-ai-popup");
+    aiSettingsBtnEl = document.getElementById("ai-settings-btn");
+    aiSettingsPanelEl = document.getElementById("ai-settings-panel");
+    closeAiSettingsBtnEl = document.getElementById("close-ai-settings");
+    geminiApiKeyInputEl = document.getElementById("gemini-api-key");
+
+    loadProjectModalEl = document.getElementById("load-project-modal");
+    loadProjectListContainerEl = document.getElementById(
+        "load-project-list-container",
+    );
+    closeLoadProjectModalBtnEl = document.getElementById(
+        "close-load-project-modal-btn",
+    );
+    cancelLoadProjectBtnEl = document.getElementById("cancel-load-project-btn");
+    confirmLoadProjectBtnEl = document.getElementById(
+        "confirm-load-project-btn",
+    );
+
+    toastContainerEl = document.getElementById("toast-container");
+
+    saveProjectModalEl = document.getElementById("save-project-modal");
+    saveProjectModalTitleEl = document.getElementById(
+        "save-project-modal-title",
+    );
+    saveProjectNameInputEl = document.getElementById("save-project-name-input");
+    closeSaveProjectModalBtnEl = document.getElementById(
+        "close-save-project-modal-btn",
+    );
+    cancelSaveProjectBtnEl = document.getElementById("cancel-save-project-btn");
+    confirmSaveProjectBtnEl = document.getElementById(
+        "confirm-save-project-btn",
+    );
+
+    confirmationModalEl = document.getElementById("confirmation-modal");
+    confirmationModalTitleEl = document.getElementById(
+        "confirmation-modal-title",
+    );
+    confirmationMessageEl = document.getElementById("confirmation-message");
+    confirmOkBtnEl = document.getElementById("confirm-ok-btn");
+    confirmCancelBtnEl = document.getElementById("confirm-cancel-btn");
 }
 
 /**
@@ -77,7 +158,8 @@ export function setKonvaRefs(konvaRefs) {
     if (konvaRefs && konvaRefs.handleContextMenuCloseForSaveState) {
         // Used to notify konvaManager to save state when context menu is hidden,
         // ensuring changes made in the menu are part of the undo stack.
-        konvaHandleContextMenuClose = konvaRefs.handleContextMenuCloseForSaveState;
+        konvaHandleContextMenuClose =
+            konvaRefs.handleContextMenuCloseForSaveState;
     }
 }
 
@@ -95,72 +177,28 @@ export function initUiManager(
     getSimModeFunc,
     setSimModeFunc,
     getDeviceByIdFunc, // Currently unused directly in setupEventListeners, but available
-    projectManager // Tambahkan projectManager sebagai parameter
+    projectManager,
 ) {
-    konvaRefsForUi = kr; // Store initial (likely empty) konvaRefs
+    konvaRefsForUi = kr; // Store initial (potentially empty) konvaRefs
     getIsSimulationModeFunc = getSimModeFunc;
     setIsSimulationModeFunc = setSimModeFunc;
-    projectManagerRef = projectManager; // Simpan referensi ke ProjectManager
-    // konvaHandleContextMenuClose and konvaSelectNodes will be set later if konvaRefs has them.
+    projectManagerRef = projectManager; // Store reference to ProjectManager
+    // konvaHandleContextMenuClose and konvaSelectNodes will be set later if konvaRefs provides them.
 
-    // Cache all relevant DOM elements for performance and cleaner access
-    modeToggleEl = document.getElementById("mode-toggle");
-    modeLabelEl = document.getElementById("mode-label");
-    deleteBtnEl = document.getElementById("delete-btn");
-    addComponentPanelEl = document.getElementById("add-component-panel");
-    contextMenuEl = document.getElementById("context-menu");
-    contextMenuTitleEl = document.getElementById("context-menu-title");
-    contextMenuContentEl = document.getElementById("context-menu-content");
-    closeContextMenuBtnEl = document.getElementById("close-context-menu");
-    aiPopupChatEl = document.getElementById("ai-popup-chat");
-    aiFabEl = document.getElementById("ai-fab");
-    closeAiPopupBtnEl = document.getElementById("close-ai-popup");
-    aiSettingsBtnEl = document.getElementById("ai-settings-btn");
-    aiSettingsPanelEl = document.getElementById("ai-settings-panel");
-    closeAiSettingsBtnEl = document.getElementById("close-ai-settings");
-    geminiApiKeyInputEl = document.getElementById("gemini-api-key");
+    _cacheDomElements(); // Cache all relevant DOM elements.
 
-    // Cache elemen Modal Load Project
-    loadProjectModalEl = document.getElementById('load-project-modal');
-    loadProjectListContainerEl = document.getElementById('load-project-list-container');
-    closeLoadProjectModalBtnEl = document.getElementById('close-load-project-modal-btn');
-    cancelLoadProjectBtnEl = document.getElementById('cancel-load-project-btn');
-    confirmLoadProjectBtnEl = document.getElementById('confirm-load-project-btn');
+    isSimulationModeState = getIsSimulationModeFunc(); // Get initial simulation mode.
 
-    // Cache elemen Toast Container
-    toastContainerEl = document.getElementById('toast-container');
+    _setupAllEventListeners(); // Setup all event listeners for UI elements.
 
-    // Cache elemen Modal Save Project
-    saveProjectModalEl = document.getElementById('save-project-modal');
-    saveProjectModalTitleEl = document.getElementById('save-project-modal-title');
-    saveProjectNameInputEl = document.getElementById('save-project-name-input');
-    closeSaveProjectModalBtnEl = document.getElementById('close-save-project-modal-btn');
-    cancelSaveProjectBtnEl = document.getElementById('cancel-save-project-btn');
-    confirmSaveProjectBtnEl = document.getElementById('confirm-save-project-btn');
-
-    // Cache elemen Modal Konfirmasi Umum
-    confirmationModalEl = document.getElementById('confirmation-modal');
-    confirmationModalTitleEl = document.getElementById('confirmation-modal-title');
-    confirmationMessageEl = document.getElementById('confirmation-message');
-    confirmOkBtnEl = document.getElementById('confirm-ok-btn');
-    confirmCancelBtnEl = document.getElementById('confirm-cancel-btn');
-
-    // Cache tombol Save Project As
-    // (Akan ditambahkan di setupEventListeners jika belum ada variabelnya)
-    // let saveProjectAsBtnEl = document.getElementById('save-project-as-btn');
-
-    isSimulationModeState = getIsSimulationModeFunc(); // Get initial simulation mode
-
-    setupEventListeners(); // Setup all event listeners for UI elements
-
-    // Initialize delete button state
+    // Initialize delete button state based on current selection (likely none at init).
     if (deleteBtnEl) {
         deleteBtnEl.disabled = true;
         deleteBtnEl.classList.add("btn-disabled");
     }
 
-    // Return the public interface for uiManager
-    return {
+    // Return the public interface for uiManager.
+    const publicInterface = {
         hideContextMenu,
         populateContextMenu,
         selectNodes, // This will be the uiManager's own selectNodes function
@@ -168,6 +206,20 @@ export function initUiManager(
         getCurrentContextMenuNode,
         setKonvaRefs, // Allow other modules (konvaManager) to provide konvaRefs
     };
+
+    // Export additional functions specifically for testing purposes if in a test environment
+    if (process.env.NODE_ENV === "test") {
+        publicInterface.handleCopyForTest = handleCopy;
+        publicInterface.handlePasteForTest = handlePaste;
+        publicInterface.getClipboardForTest = () => clipboard;
+        publicInterface.getPasteOffsetForTest = () => pasteOffset;
+        publicInterface.resetClipboardForTest = () => {
+            clipboard = null;
+            pasteOffset = 0;
+        };
+    }
+
+    return publicInterface;
 }
 
 /**
@@ -176,23 +228,29 @@ export function initUiManager(
  * @param {boolean} isSimulation - True for simulation mode, false for design mode.
  */
 function setMode(isSimulation) {
-    setIsSimulationModeFunc(isSimulation); // Update central simulation mode state
-    isSimulationModeState = isSimulation;  // Update local cache
+    setIsSimulationModeFunc(isSimulation); // Update central simulation mode state.
+    isSimulationModeState = isSimulation; // Update local cache.
 
-    if (konvaRefsForUi.tr) konvaRefsForUi.tr.nodes([]); // Clear transformer selection
-    hideContextMenu(); // Hide context menu when mode changes
+    if (konvaRefsForUi.tr) konvaRefsForUi.tr.nodes([]); // Clear transformer selection.
+    hideContextMenu(); // Hide context menu when mode changes.
 
-    // Update Konva layer components' draggability and transformer visibility
+    // Update Konva layer components' draggability and transformer visibility.
     if (konvaRefsForUi.layer) {
-        konvaRefsForUi.layer.find(".hmi-component").forEach((node) => node.draggable(!isSimulation));
+        konvaRefsForUi.layer
+            .find(".hmi-component")
+            .forEach((node) => node.draggable(!isSimulation));
         if (konvaRefsForUi.tr) konvaRefsForUi.tr.visible(!isSimulation);
     }
 
     // Toggle visibility of UI panels based on mode
-    if (addComponentPanelEl) addComponentPanelEl.style.display = isSimulation ? "none" : "block";
+    if (addComponentPanelEl)
+        addComponentPanelEl.style.display = isSimulation ? "none" : "block";
     if (aiPopupChatEl) aiPopupChatEl.classList.add("hidden"); // Hide AI chat in sim mode
     if (aiFabEl) aiFabEl.style.display = isSimulation ? "none" : "block"; // Hide AI FAB in sim mode
-    if (modeLabelEl) modeLabelEl.textContent = isSimulation ? "Mode Simulasi" : "Mode Desain";
+    if (modeLabelEl)
+        modeLabelEl.textContent = isSimulation
+            ? "Mode Simulasi"
+            : "Mode Desain";
 }
 
 /**
@@ -205,7 +263,10 @@ export function selectNodes(nodesToSelect = []) {
     if (!konvaRefsForUi.tr || !konvaRefsForUi.layer) return; // Ensure Konva refs are available
 
     // Adjust transformer aspect ratio based on selected node type (e.g., for labels)
-    if (nodesToSelect.length === 1 && nodesToSelect[0].attrs.componentType === "label") {
+    if (
+        nodesToSelect.length === 1 &&
+        nodesToSelect[0].attrs.componentType === "label"
+    ) {
         konvaRefsForUi.tr.keepRatio(false);
     } else {
         konvaRefsForUi.tr.keepRatio(true);
@@ -216,7 +277,10 @@ export function selectNodes(nodesToSelect = []) {
     // Update delete button state
     if (deleteBtnEl) {
         deleteBtnEl.disabled = nodesToSelect.length === 0;
-        deleteBtnEl.classList.toggle("btn-disabled", nodesToSelect.length === 0);
+        deleteBtnEl.classList.toggle(
+            "btn-disabled",
+            nodesToSelect.length === 0,
+        );
     }
 
     // Make only selected nodes draggable (in design mode)
@@ -260,12 +324,26 @@ function handleCopy() {
  * Creates new components from clipboard data and adds them to the Konva layer.
  */
 function handlePaste() {
-    // console.debug("handlePaste triggered");
-    if (!clipboard || clipboard.length === 0 || !konvaRefsForUi.layer || isSimulationModeState) return;
+    // console.log('[TEST_DEBUG] handlePaste called');
+    // console.log('[TEST_DEBUG] isSimulationModeState:', isSimulationModeState);
+    // console.log('[TEST_DEBUG] clipboard:', JSON.stringify(clipboard));
+    // console.log('[TEST_DEBUG] konvaRefsForUi.layer exists:', !!konvaRefsForUi.layer);
 
-    pasteOffset += GRID_SIZE; // Increment offset for subsequent pastes
+    if (
+        !clipboard ||
+        clipboard.length === 0 ||
+        !konvaRefsForUi.layer ||
+        isSimulationModeState
+    ) {
+        // console.log('[TEST_DEBUG] handlePaste returning early');
+        return;
+    }
+
+    pasteOffset += GRID_SIZE;
+    // console.log('[TEST_DEBUG] pasteOffset:', pasteOffset);
     const newNodes = [];
     clipboard.forEach((item) => {
+        // console.log('[TEST_DEBUG] Pasting item:', JSON.stringify(item));
         const newProps = { ...item.properties };
         newProps.x = (newProps.x || 0) + pasteOffset;
         newProps.y = (newProps.y || 0) + pasteOffset;
@@ -274,7 +352,10 @@ function handlePaste() {
         delete newProps.variableName;
         delete newProps.address; // Also clear legacy address
 
-        const newComponent = componentFactory.create(item.componentType, newProps);
+        const newComponent = componentFactory.create(
+            item.componentType,
+            newProps,
+        );
         if (newComponent) {
             konvaRefsForUi.layer.add(newComponent);
             newNodes.push(newComponent);
@@ -293,7 +374,10 @@ function handlePaste() {
  * Notifies konvaManager if a save state is needed (e.g., changes were made in the menu).
  */
 export function hideContextMenu() {
-    if (currentContextMenuNode && typeof konvaHandleContextMenuClose === 'function') {
+    if (
+        currentContextMenuNode &&
+        typeof konvaHandleContextMenuClose === "function"
+    ) {
         // This callback might be set by konvaManager to trigger a saveState
         // if the context menu was used to modify a node.
         konvaHandleContextMenuClose();
@@ -302,24 +386,29 @@ export function hideContextMenu() {
     currentContextMenuNode = null;
 }
 
-
 // --- Helper functions for populateContextMenu ---
 function _createDeviceVariableBindingsHTML(attrs) {
-    if (attrs.componentType === 'label') return ''; // Labels don't bind to device data
+    if (attrs.componentType === "label") return ""; // Labels don't bind to device data
 
     const devices = getDevices(); // Array of device config objects from deviceManager
     let deviceOptionsHtml = '<option value="">-- Select Device --</option>';
-    deviceOptionsHtml += devices.map(d =>
-        `<option value="${d.id}" ${attrs.deviceId === d.id ? 'selected' : ''}>${d.name} (ID: ${d.id.substring(0,8)})</option>`
-    ).join('');
+    deviceOptionsHtml += devices
+        .map(
+            (d) =>
+                `<option value="${d.id}" ${attrs.deviceId === d.id ? "selected" : ""}>${d.name} (ID: ${d.id.substring(0, 8)})</option>`,
+        )
+        .join("");
 
     let variableOptionsHtml = '<option value="">-- Select Variable --</option>';
     if (attrs.deviceId) {
-        const selectedDevice = devices.find(d => d.id === attrs.deviceId);
+        const selectedDevice = devices.find((d) => d.id === attrs.deviceId);
         if (selectedDevice && Array.isArray(selectedDevice.variables)) {
             variableOptionsHtml += selectedDevice.variables
-                .map(v => `<option value="${v.name}" ${attrs.variableName === v.name ? 'selected' : ''}>${v.name}</option>`)
-                .join('');
+                .map(
+                    (v) =>
+                        `<option value="${v.name}" ${attrs.variableName === v.name ? "selected" : ""}>${v.name}</option>`,
+                )
+                .join("");
         }
     }
 
@@ -332,7 +421,7 @@ function _createDeviceVariableBindingsHTML(attrs) {
         </div>
         <div class="mb-2">
             <label class="font-bold text-cyan-200">Variable</label>
-            <select data-prop="variableName" id="context-menu-variable-select" class="w-full bg-gray-600 p-1 rounded mt-1 text-xs" ${!attrs.deviceId ? 'disabled' : ''}>
+            <select data-prop="variableName" id="context-menu-variable-select" class="w-full bg-gray-600 p-1 rounded mt-1 text-xs" ${!attrs.deviceId ? "disabled" : ""}>
                 ${variableOptionsHtml}
             </select>
         </div>`;
@@ -357,11 +446,11 @@ function _createBitLampPropertiesHTML(attrs) {
         </div>
         <div class="mb-1">
             <label class="font-bold">ON Color</label>
-            <input type="color" data-prop="onColor" value="${attrs.onColor || '#00FF00'}" class="w-full h-8 bg-gray-600 p-0 rounded mt-1">
+            <input type="color" data-prop="onColor" value="${attrs.onColor || "#00FF00"}" class="w-full h-8 bg-gray-600 p-0 rounded mt-1">
         </div>
         <div class="mb-1">
             <label class="font-bold">OFF Color</label>
-            <input type="color" data-prop="offColor" value="${attrs.offColor || '#FF0000'}" class="w-full h-8 bg-gray-600 p-0 rounded mt-1">
+            <input type="color" data-prop="offColor" value="${attrs.offColor || "#FF0000"}" class="w-full h-8 bg-gray-600 p-0 rounded mt-1">
         </div>`;
 }
 
@@ -369,7 +458,7 @@ function _createNumericDisplayPropertiesHTML(attrs) {
     return `
         <div class="mb-1">
             <label class="font-bold">Units</label>
-            <input type="text" data-prop="units" value="${attrs.units || ''}" class="w-full bg-gray-600 p-1 rounded mt-1 text-xs">
+            <input type="text" data-prop="units" value="${attrs.units || ""}" class="w-full bg-gray-600 p-1 rounded mt-1 text-xs">
         </div>
         <div class="mb-1">
             <label class="font-bold">Decimal Places</label>
@@ -389,11 +478,11 @@ function _createBitSwitchPropertiesHTML(attrs) {
         </div>
         <div class="mb-1">
             <label class="font-bold">ON Color</label>
-            <input type="color" data-prop="onColor" value="${attrs.onColor || '#00FF00'}" class="w-full h-8 bg-gray-600 p-0 rounded mt-1">
+            <input type="color" data-prop="onColor" value="${attrs.onColor || "#00FF00"}" class="w-full h-8 bg-gray-600 p-0 rounded mt-1">
         </div>
         <div class="mb-1">
             <label class="font-bold">OFF Color</label>
-            <input type="color" data-prop="offColor" value="${attrs.offColor || '#CCCCCC'}" class="w-full h-8 bg-gray-600 p-0 rounded mt-1">
+            <input type="color" data-prop="offColor" value="${attrs.offColor || "#CCCCCC"}" class="w-full h-8 bg-gray-600 p-0 rounded mt-1">
         </div>`;
 }
 
@@ -401,7 +490,10 @@ function _createWordLampPropertiesHTML(attrs) {
     // For WordLamp, 'states' is an array of objects. For simplicity, we might only allow editing predefined sets or a JSON representation.
     // Current implementation shows a default, not editable via simple fields here.
     // A more complex editor would be needed for `attrs.states`.
-    const defaultStates = JSON.stringify([{ value: 0, text: "STOPPED", color: "#d9534f" },{ value: 1, text: "RUNNING", color: "#5cb85c" }]);
+    const defaultStates = JSON.stringify([
+        { value: 0, text: "STOPPED", color: "#d9534f" },
+        { value: 1, text: "RUNNING", color: "#5cb85c" },
+    ]);
     const isDefaultSelected = JSON.stringify(attrs.states) === defaultStates;
     return `
         <div class="mb-1">
@@ -426,7 +518,7 @@ function _createLabelPropertiesHTML(attrs) {
         </div>
         <div class="mb-1">
             <label class="font-bold">Text Color</label>
-            <input type="color" data-prop="fill" value="${attrs.fill || '#FFFFFF'}" class="w-full h-8 bg-gray-600 p-0 rounded mt-1">
+            <input type="color" data-prop="fill" value="${attrs.fill || "#FFFFFF"}" class="w-full h-8 bg-gray-600 p-0 rounded mt-1">
         </div>
         <div class="mb-1">
             <label class="font-bold">Width (auto if 0)</label>
@@ -450,7 +542,7 @@ export function populateContextMenu(node) {
     if (!node || !contextMenuTitleEl || !contextMenuContentEl) return;
     currentContextMenuNode = node; // Set the currently active node for the context menu
     const attrs = node.attrs;
-    contextMenuTitleEl.textContent = `Edit ${attrs.componentType || 'Component'}`;
+    contextMenuTitleEl.textContent = `Edit ${attrs.componentType || "Component"}`;
 
     let html = _createDeviceVariableBindingsHTML(attrs);
     html += _createCommonPropertiesHTML(attrs);
@@ -480,55 +572,72 @@ export function populateContextMenu(node) {
     if (contextMenuEl) contextMenuEl.style.display = "block"; // Show the context menu
 }
 
+/**
+ * Main function to set up all event listeners.
+ * This function calls individual setup functions for different UI areas.
+ * @private
+ */
+function _setupAllEventListeners() {
+    _setupModeToggleListeners();
+    _setupContextMenuListeners();
+    _setupComponentPanelListeners();
+    _setupDeleteButtonListeners();
+    _setupKeyboardShortcutListeners();
+    _setupAIPopupListeners();
+    _setupProjectManagementListeners();
+    _setupModalListeners();
+    _setupGeminiApiKeyListener();
+}
 
 /**
- * Sets up all event listeners for UI elements.
- * Called once during initialization.
+ * Sets up event listeners for the mode toggle (Design/Simulation).
+ * @private
  */
-function setupEventListeners() {
-    // Mode Toggle (Design/Simulation)
+function _setupModeToggleListeners() {
     if (modeToggleEl) {
-        modeToggleEl.addEventListener("change", (e) => setMode(e.target.checked));
+        modeToggleEl.addEventListener("change", (e) =>
+            setMode(e.target.checked),
+        );
     }
+}
 
-    // Context Menu Interactions
+/**
+ * Sets up event listeners for the context menu.
+ * @private
+ */
+function _setupContextMenuListeners() {
     if (contextMenuEl) {
-        // Handle input changes within the context menu
         contextMenuEl.addEventListener("input", (e) => {
             if (!currentContextMenuNode) return;
             const target = e.target;
             const prop = target.dataset.prop;
             if (!prop) return;
 
-            let value = target.type === "number" ? parseFloat(target.value) : target.value;
+            let value =
+                target.type === "number"
+                    ? parseFloat(target.value)
+                    : target.value;
             if (target.type === "checkbox") value = target.checked;
 
-            // Special handling if deviceId changes: re-populate to update variable dropdown
-            if (prop === 'deviceId') {
-                currentContextMenuNode.setAttr('variableName', ''); // Clear selected variable
-                currentContextMenuNode.setAttr(prop, value);       // Set new deviceId
-                populateContextMenu(currentContextMenuNode); // Re-populate the entire menu
+            if (prop === "deviceId") {
+                currentContextMenuNode.setAttr("variableName", "");
+                currentContextMenuNode.setAttr(prop, value);
+                populateContextMenu(currentContextMenuNode);
             } else {
                 currentContextMenuNode.setAttr(prop, value);
             }
-            currentContextMenuNode.updateState?.(); // Trigger visual update of the component
-            // saveState(); // Consider if state should be saved on every input or on menu close
+            currentContextMenuNode.updateState?.();
         });
 
-        // Handle 'change' for select elements more reliably (deviceId, variableName)
-        contextMenuContentEl.addEventListener('change', (e) => {
+        contextMenuContentEl.addEventListener("change", (e) => {
             if (!currentContextMenuNode) return;
             const target = e.target;
             const prop = target.dataset.prop;
 
-            if (prop === 'deviceId') { // Already handled by 'input' listener's re-population
-                // currentContextMenuNode.setAttr('deviceId', target.value);
-                // currentContextMenuNode.setAttr('variableName', '');
-                // populateContextMenu(currentContextMenuNode); // This would be redundant if input also fires
-            } else if (prop === 'variableName') {
-                currentContextMenuNode.setAttr('variableName', target.value);
-            } else if (target.tagName === 'SELECT' && prop) { // Catch other selects if any
-                 currentContextMenuNode.setAttr(prop, target.value);
+            if (prop === "variableName") {
+                currentContextMenuNode.setAttr("variableName", target.value);
+            } else if (target.tagName === "SELECT" && prop) {
+                currentContextMenuNode.setAttr(prop, target.value);
             }
             currentContextMenuNode.updateState?.();
         });
@@ -536,96 +645,155 @@ function setupEventListeners() {
     if (closeContextMenuBtnEl) {
         closeContextMenuBtnEl.addEventListener("click", hideContextMenu);
     }
+}
 
-    // Add Component Panel
+/**
+ * Sets up event listeners for the "Add Component" panel.
+ * @private
+ */
+function _setupComponentPanelListeners() {
     if (addComponentPanelEl) {
         addComponentPanelEl.addEventListener("click", (e) => {
             if (e.target.matches("button[data-component]")) {
                 const type = e.target.dataset.component;
-                const component = componentFactory.create(type); // Default position, etc.
+                const component = componentFactory.create(type);
                 if (component && konvaRefsForUi.layer) {
                     konvaRefsForUi.layer.add(component);
-                    saveState(); // Save state after adding a new component
+                    saveState();
                 }
             }
         });
     }
+}
 
-    // Delete Button
+/**
+ * Sets up event listeners for the delete button.
+ * @private
+ */
+function _setupDeleteButtonListeners() {
     if (deleteBtnEl) {
         deleteBtnEl.addEventListener("click", () => {
             if (!konvaRefsForUi.tr || isSimulationModeState) return;
             const nodesToDelete = konvaRefsForUi.tr.nodes();
             if (nodesToDelete.length > 0) {
-                saveState(); // Save state before destroying nodes for undo
+                saveState();
                 nodesToDelete.forEach((node) => {
                     const deviceId = node.attrs.deviceId;
                     const variableName = node.attrs.variableName;
-                    // If the component was bound to a device variable, clear that variable's state
                     if (deviceId && variableName) {
                         deleteDeviceVariableState(deviceId, variableName);
                     }
-                    node.destroy(); // Remove node from Konva layer
+                    node.destroy();
                 });
-                konvaRefsForUi.tr.nodes([]); // Clear transformer
-                selectNodes([]); // Update selection state (which also updates delete button)
+                konvaRefsForUi.tr.nodes([]);
+                selectNodes([]);
             }
         });
     }
+}
 
-    // Global Keyboard Shortcuts
+/**
+ * Sets up global keyboard shortcut listeners.
+ * @private
+ */
+function _setupKeyboardShortcutListeners() {
     window.addEventListener("keydown", (e) => {
         const activeEl = document.activeElement;
-        // Ignore keyboard shortcuts if an input field or textarea is focused
-        if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA" || activeEl.isContentEditable)) return;
+        if (
+            activeEl &&
+            (activeEl.tagName === "INPUT" ||
+                activeEl.tagName === "TEXTAREA" ||
+                activeEl.isContentEditable)
+        )
+            return;
 
-        if ((e.ctrlKey || e.metaKey) && !isSimulationModeState) { // Shortcuts for design mode
+        if ((e.ctrlKey || e.metaKey) && !isSimulationModeState) {
             switch (e.key.toLowerCase()) {
-                case "c": e.preventDefault(); handleCopy(); break;
-                case "v": e.preventDefault(); handlePaste(); break;
+                case "c":
+                    e.preventDefault();
+                    handleCopy();
+                    break;
+                case "v":
+                    e.preventDefault();
+                    handlePaste();
+                    break;
                 case "z":
                     e.preventDefault();
-                    if (e.shiftKey) handleRedo(); else handleUndo();
+                    if (e.shiftKey) handleRedo();
+                    else handleUndo();
                     break;
             }
         }
 
         if (e.key === "Escape") {
             hideContextMenu();
-            // Optionally, could also clear selection: if (konvaRefsForUi.tr) selectNodes([]);
         }
-        if ((e.key === "Delete" || e.key === "Backspace") &&
-            konvaRefsForUi.tr && konvaRefsForUi.tr.nodes().length > 0 &&
-            !isSimulationModeState) {
-             if (deleteBtnEl && !deleteBtnEl.disabled) deleteBtnEl.click();
+        if (
+            (e.key === "Delete" || e.key === "Backspace") &&
+            konvaRefsForUi.tr &&
+            konvaRefsForUi.tr.nodes().length > 0 &&
+            !isSimulationModeState
+        ) {
+            if (deleteBtnEl && !deleteBtnEl.disabled) deleteBtnEl.click();
         }
     });
+}
 
-    // AI Popup Listeners
-    if (aiFabEl) aiFabEl.addEventListener("click", () => aiPopupChatEl?.classList.toggle("hidden"));
-    if (closeAiPopupBtnEl) closeAiPopupBtnEl.addEventListener("click", () => aiPopupChatEl?.classList.add("hidden"));
-    if (aiSettingsBtnEl) aiSettingsBtnEl.addEventListener("click", () => aiSettingsPanelEl?.classList.remove("hidden"));
-    if (closeAiSettingsBtnEl) closeAiSettingsBtnEl.addEventListener("click", () => aiSettingsPanelEl?.classList.add("hidden"));
+/**
+ * Sets up event listeners for the AI popup and settings.
+ * @private
+ */
+function _setupAIPopupListeners() {
+    if (aiFabEl)
+        aiFabEl.addEventListener("click", () =>
+            aiPopupChatEl?.classList.toggle("hidden"),
+        );
+    if (closeAiPopupBtnEl)
+        closeAiPopupBtnEl.addEventListener("click", () =>
+            aiPopupChatEl?.classList.add("hidden"),
+        );
+    if (aiSettingsBtnEl)
+        aiSettingsBtnEl.addEventListener("click", () =>
+            aiSettingsPanelEl?.classList.remove("hidden"),
+        );
+    if (closeAiSettingsBtnEl)
+        closeAiSettingsBtnEl.addEventListener("click", () =>
+            aiSettingsPanelEl?.classList.add("hidden"),
+        );
+}
 
-    // Gemini API Key Persistence
+/**
+ * Sets up event listener for the Gemini API Key input for persistence.
+ * @private
+ */
+function _setupGeminiApiKeyListener() {
     if (geminiApiKeyInputEl) {
         geminiApiKeyInputEl.value = localStorage.getItem("geminiApiKey") || "";
-        geminiApiKeyInputEl.addEventListener("change", (e) => localStorage.setItem("geminiApiKey", e.target.value));
+        geminiApiKeyInputEl.addEventListener("change", (e) =>
+            localStorage.setItem("geminiApiKey", e.target.value),
+        );
     }
+}
 
-    // --- Project Manager UI Event Listeners ---
-    const newProjectBtn = document.getElementById('new-project-btn');
-    const saveProjectBtn = document.getElementById('save-project-btn');
-    const saveProjectAsBtnEl = document.getElementById('save-project-as-btn'); // Tombol baru
-    const loadProjectBtn = document.getElementById('load-project-btn');
-    const importProjectInput = document.getElementById('import-project-input');
-    const importProjectBtn = document.getElementById('import-project-btn');
-    const exportProjectBtn = document.getElementById('export-project-btn');
+/**
+ * Sets up event listeners for project management buttons (New, Save, Load, Import, Export).
+ * @private
+ */
+function _setupProjectManagementListeners() {
+    const newProjectBtn = document.getElementById("new-project-btn");
+    const saveProjectBtn = document.getElementById("save-project-btn");
+    const saveProjectAsBtnEl = document.getElementById("save-project-as-btn");
+    const loadProjectBtn = document.getElementById("load-project-btn");
+    const importProjectInput = document.getElementById("import-project-input");
+    const importProjectBtn = document.getElementById("import-project-btn");
+    const exportProjectBtn = document.getElementById("export-project-btn");
 
     if (newProjectBtn && projectManagerRef) {
-        newProjectBtn.addEventListener('click', async () => { // Jadikan async
+        newProjectBtn.addEventListener("click", async () => {
             if (projectManagerRef.isProjectDirty()) {
-                const confirmed = await showConfirmationModal("Ada perubahan yang belum disimpan. Apakah Anda yakin ingin membuat project baru? Perubahan akan hilang.");
+                const confirmed = await showConfirmationModal(
+                    "Ada perubahan yang belum disimpan. Apakah Anda yakin ingin membuat project baru? Perubahan akan hilang.",
+                );
                 if (!confirmed) {
                     showToast("Pembuatan project baru dibatalkan.", "info");
                     return;
@@ -636,130 +804,72 @@ function setupEventListeners() {
     }
 
     if (saveProjectBtn && projectManagerRef) {
-        saveProjectBtn.addEventListener('click', async () => {
-            const currentProjectName = projectManagerRef.getCurrentProjectName();
-            if (currentProjectName) { // Jika project sudah punya nama, simpan langsung
-                // Tambahkan loading state di sini juga untuk konsistensi
+        saveProjectBtn.addEventListener("click", async () => {
+            const currentProjectName =
+                projectManagerRef.getCurrentProjectName();
+            if (currentProjectName) {
                 saveProjectBtn.disabled = true;
                 const originalText = saveProjectBtn.textContent;
                 saveProjectBtn.textContent = "Menyimpan...";
                 try {
-                    await projectManagerRef.saveProjectToServer(currentProjectName);
-                    showToast(`Project '${currentProjectName}' berhasil disimpan.`, 'success');
+                    await projectManagerRef.saveProjectToServer(
+                        currentProjectName,
+                    );
+                    showToast(
+                        `Project '${currentProjectName}' berhasil disimpan.`,
+                        "success",
+                    );
                 } catch (error) {
-                    showToast(`Gagal menyimpan project '${currentProjectName}': ${error}`, 'error');
+                    showToast(
+                        `Gagal menyimpan project '${currentProjectName}': ${error}`,
+                        "error",
+                    );
                 } finally {
                     saveProjectBtn.disabled = false;
                     saveProjectBtn.textContent = originalText;
                 }
-            } else { // Jika project baru, buka modal
-                openSaveProjectModal('', false); // false untuk isSaveAs
+            } else {
+                openSaveProjectModal("", false);
             }
         });
     }
 
     if (saveProjectAsBtnEl && projectManagerRef) {
-        saveProjectAsBtnEl.addEventListener('click', () => {
-            openSaveProjectModal(projectManagerRef.getCurrentProjectName(), true); // true untuk isSaveAs
+        saveProjectAsBtnEl.addEventListener("click", () => {
+            openSaveProjectModal(
+                projectManagerRef.getCurrentProjectName(),
+                true,
+            );
         });
     }
-
-    // Event listener untuk tombol-tombol modal Save Project
-    if (closeSaveProjectModalBtnEl) {
-        closeSaveProjectModalBtnEl.addEventListener('click', hideSaveProjectModal);
-    }
-    if (cancelSaveProjectBtnEl) {
-        cancelSaveProjectBtnEl.addEventListener('click', hideSaveProjectModal);
-    }
-    if (confirmSaveProjectBtnEl && projectManagerRef && saveProjectNameInputEl) {
-        const originalConfirmSaveBtnText = confirmSaveProjectBtnEl.textContent; // Teks asli tombol modal
-        confirmSaveProjectBtnEl.addEventListener('click', async () => {
-            const projectNameFromModal = saveProjectNameInputEl.value.trim();
-
-            if (projectNameFromModal === '') {
-                showToast("Nama project tidak boleh kosong.", 'warning');
-                saveProjectNameInputEl.focus();
-                return;
-            }
-
-            confirmSaveProjectBtnEl.disabled = true;
-            confirmSaveProjectBtnEl.textContent = "Menyimpan...";
-
-            try {
-                const availableProjects = await projectManagerRef.getAvailableProjectsFromServer();
-                // Cek apakah nama dari modal ada, dan apakah itu BEDA dari nama project saat ini (jika ada)
-                // Ini penting untuk "Save As" yang menimpa project lain.
-                // Untuk "Save" pertama kali, currentProjectName akan null.
-                const currentProjectName = projectManagerRef.getCurrentProjectName();
-                const projectExists = availableProjects.some(pName => pName.toLowerCase() === projectNameFromModal.toLowerCase());
-                let proceedToSave = true;
-
-                // Hanya tampilkan konfirmasi timpa jika:
-                // 1. Nama project yang diinput sudah ada DAN
-                // 2. Ini adalah 'Save As' ke nama yang sudah ada (projectNameFromModal !== currentProjectName), ATAU
-                // 3. Ini adalah save pertama kali (currentProjectName == null) ke nama yang sudah ada.
-                if (projectExists &&
-                    ( (currentProjectName && currentProjectName.toLowerCase() !== projectNameFromModal.toLowerCase()) || !currentProjectName )
-                ) {
-                    const confirmedOverwrite = await showConfirmationModal(`Project dengan nama '${projectNameFromModal}' sudah ada. Apakah Anda ingin menimpanya?`, "Konfirmasi Timpa");
-                    if (!confirmedOverwrite) {
-                        showToast("Penyimpanan dibatalkan.", 'info');
-                        proceedToSave = false;
-                    }
-                }
-
-                if (proceedToSave) {
-                    await projectManagerRef.saveProjectToServer(projectNameFromModal);
-                    showToast(`Project '${projectNameFromModal}' berhasil disimpan ke server.`, 'success');
-                    hideSaveProjectModal(); // Pindahkan hide ke sini agar hanya saat sukses
-                } else {
-                    // Jika tidak jadi save (karena batal timpa), biarkan modal terbuka atau reset tombolnya
-                    confirmSaveProjectBtnEl.disabled = false;
-                    confirmSaveProjectBtnEl.textContent = originalConfirmSaveBtnText;
-                    return; // Jangan hide modal
-                }
-                // hideSaveProjectModal(); // Dihapus dari sini, dipindah ke atas
-                hideSaveProjectModal();
-            } catch (error) {
-                showToast(`Gagal menyimpan project: ${error}`, 'error');
-            } finally {
-                confirmSaveProjectBtnEl.disabled = false;
-                confirmSaveProjectBtnEl.textContent = originalConfirmSaveBtnText;
-            }
-        });
-    }
-
 
     if (loadProjectBtn && projectManagerRef) {
-        loadProjectBtn.addEventListener('click', () => {
+        loadProjectBtn.addEventListener("click", () => {
             openLoadProjectModal();
         });
     }
 
     if (importProjectBtn && importProjectInput && projectManagerRef) {
-        importProjectBtn.addEventListener('click', () => {
+        importProjectBtn.addEventListener("click", () => {
             importProjectInput.click();
         });
-        importProjectInput.addEventListener('change', async (event) => { // Jadikan async
+        importProjectInput.addEventListener("change", async (event) => {
             const file = event.target.files[0];
             if (file) {
                 if (projectManagerRef.isProjectDirty()) {
-                    const confirmed = await showConfirmationModal("Ada perubahan yang belum disimpan pada project saat ini. Apakah Anda yakin ingin mengimpor project baru? Perubahan akan hilang.");
+                    const confirmed = await showConfirmationModal(
+                        "Ada perubahan yang belum disimpan pada project saat ini. Apakah Anda yakin ingin mengimpor project baru? Perubahan akan hilang.",
+                    );
                     if (!confirmed) {
                         showToast("Impor project dibatalkan.", "info");
-                        event.target.value = null; // Reset input file
+                        event.target.value = null;
                         return;
                     }
                 }
-
                 try {
-                    // importProjectFromFile di ProjectManager masih pakai alert untuk sukses/errornya sendiri.
-                    // Idealnya, itu me-resolve/reject dengan pesan, lalu uiManager tampilkan toast.
                     await projectManagerRef.importProjectFromFile(file);
-                    // Jika importProjectFromFile diubah untuk tidak alert dan hanya resolve/reject:
-                    // showToast(`Project dari file '${file.name}' berhasil diimpor. Anda mungkin ingin menyimpannya ke server.`, 'success');
                 } catch (error) {
-                    showToast(`Gagal mengimpor project: ${error}`, 'error');
+                    showToast(`Gagal mengimpor project: ${error}`, "error");
                 }
             }
             event.target.value = null;
@@ -767,31 +877,120 @@ function setupEventListeners() {
     }
 
     if (exportProjectBtn && projectManagerRef) {
-        exportProjectBtn.addEventListener('click', () => {
+        exportProjectBtn.addEventListener("click", () => {
             try {
                 projectManagerRef.exportProject();
-                // Export biasanya tidak butuh toast sukses karena ada dialog download.
-                // Tapi bisa ditambahkan jika dirasa perlu.
-                // showToast("Project berhasil diekspor.", "success");
             } catch (e) {
                 showToast("Gagal mengekspor project.", "error");
             }
         });
     }
+}
 
-    // Event listener untuk tombol-tombol modal Load Project
+/**
+ * Sets up event listeners for all modals (Load Project, Save Project, Confirmation).
+ * @private
+ */
+function _setupModalListeners() {
+    // Save Project Modal Listeners
+    if (closeSaveProjectModalBtnEl) {
+        closeSaveProjectModalBtnEl.addEventListener(
+            "click",
+            hideSaveProjectModal,
+        );
+    }
+    if (cancelSaveProjectBtnEl) {
+        cancelSaveProjectBtnEl.addEventListener("click", hideSaveProjectModal);
+    }
+    if (
+        confirmSaveProjectBtnEl &&
+        projectManagerRef &&
+        saveProjectNameInputEl
+    ) {
+        const originalConfirmSaveBtnText = confirmSaveProjectBtnEl.textContent;
+        confirmSaveProjectBtnEl.addEventListener("click", async () => {
+            const projectNameFromModal = saveProjectNameInputEl.value.trim();
+            if (projectNameFromModal === "") {
+                showToast("Nama project tidak boleh kosong.", "warning");
+                saveProjectNameInputEl.focus();
+                return;
+            }
+
+            confirmSaveProjectBtnEl.disabled = true;
+            confirmSaveProjectBtnEl.textContent = "Menyimpan...";
+            try {
+                const availableProjects =
+                    await projectManagerRef.getAvailableProjectsFromServer();
+                const currentProjectName =
+                    projectManagerRef.getCurrentProjectName();
+                const projectExists = availableProjects.some(
+                    (pName) =>
+                        pName.toLowerCase() ===
+                        projectNameFromModal.toLowerCase(),
+                );
+                let proceedToSave = true;
+
+                if (
+                    projectExists &&
+                    ((currentProjectName &&
+                        currentProjectName.toLowerCase() !==
+                            projectNameFromModal.toLowerCase()) ||
+                        !currentProjectName)
+                ) {
+                    const confirmedOverwrite = await showConfirmationModal(
+                        `Project dengan nama '${projectNameFromModal}' sudah ada. Apakah Anda ingin menimpanya?`,
+                        "Konfirmasi Timpa",
+                    );
+                    if (!confirmedOverwrite) {
+                        showToast("Penyimpanan dibatalkan.", "info");
+                        proceedToSave = false;
+                    }
+                }
+
+                if (proceedToSave) {
+                    await projectManagerRef.saveProjectToServer(
+                        projectNameFromModal,
+                    );
+                    showToast(
+                        `Project '${projectNameFromModal}' berhasil disimpan ke server.`,
+                        "success",
+                    );
+                    hideSaveProjectModal();
+                } else {
+                    confirmSaveProjectBtnEl.disabled = false;
+                    confirmSaveProjectBtnEl.textContent =
+                        originalConfirmSaveBtnText;
+                    return;
+                }
+                hideSaveProjectModal();
+            } catch (error) {
+                showToast(`Gagal menyimpan project: ${error}`, "error");
+            } finally {
+                confirmSaveProjectBtnEl.disabled = false;
+                confirmSaveProjectBtnEl.textContent =
+                    originalConfirmSaveBtnText;
+            }
+        });
+    }
+
+    // Load Project Modal Listeners
     if (closeLoadProjectModalBtnEl) {
-        closeLoadProjectModalBtnEl.addEventListener('click', hideLoadProjectModal);
+        closeLoadProjectModalBtnEl.addEventListener(
+            "click",
+            hideLoadProjectModal,
+        );
     }
     if (cancelLoadProjectBtnEl) {
-        cancelLoadProjectBtnEl.addEventListener('click', hideLoadProjectModal);
+        cancelLoadProjectBtnEl.addEventListener("click", hideLoadProjectModal);
     }
     if (confirmLoadProjectBtnEl && projectManagerRef) {
         const originalLoadBtnText = confirmLoadProjectBtnEl.textContent;
-        confirmLoadProjectBtnEl.addEventListener('click', async () => {
+        confirmLoadProjectBtnEl.addEventListener("click", async () => {
             if (selectedProjectToLoad) {
                 if (projectManagerRef.isProjectDirty()) {
-                    const confirmed = await showConfirmationModal("Ada perubahan yang belum disimpan pada project saat ini. Apakah Anda yakin ingin memuat project lain? Perubahan akan hilang.");
+                    const confirmed = await showConfirmationModal(
+                        "Ada perubahan yang belum disimpan pada project saat ini. Apakah Anda yakin ingin memuat project lain? Perubahan akan hilang.",
+                    );
                     if (!confirmed) {
                         showToast("Pemuatan project dibatalkan.", "info");
                         return;
@@ -800,52 +999,72 @@ function setupEventListeners() {
 
                 confirmLoadProjectBtnEl.disabled = true;
                 confirmLoadProjectBtnEl.textContent = "Memuat...";
-
                 try {
-                    await projectManagerRef.loadProjectFromServer(selectedProjectToLoad);
-                    showToast(`Project '${selectedProjectToLoad}' berhasil dimuat.`, 'success');
+                    await projectManagerRef.loadProjectFromServer(
+                        selectedProjectToLoad,
+                    );
+                    showToast(
+                        `Project '${selectedProjectToLoad}' berhasil dimuat.`,
+                        "success",
+                    );
                     hideLoadProjectModal();
                 } catch (error) {
-                    showToast(`Gagal memuat project '${selectedProjectToLoad}': ${error}`, 'error');
+                    showToast(
+                        `Gagal memuat project '${selectedProjectToLoad}': ${error}`,
+                        "error",
+                    );
                 } finally {
-                    if (confirmLoadProjectBtnEl && loadProjectModalEl && !loadProjectModalEl.classList.contains('hidden')) {
+                    if (
+                        confirmLoadProjectBtnEl &&
+                        loadProjectModalEl &&
+                        !loadProjectModalEl.classList.contains("hidden")
+                    ) {
                         confirmLoadProjectBtnEl.disabled = false;
-                        confirmLoadProjectBtnEl.textContent = originalLoadBtnText;
+                        confirmLoadProjectBtnEl.textContent =
+                            originalLoadBtnText;
                     }
                 }
             } else {
-                showToast("Silakan pilih project untuk dimuat.", 'warning');
+                showToast("Silakan pilih project untuk dimuat.", "warning");
             }
         });
     }
+    // Note: Confirmation modal listeners are set dynamically in showConfirmationModal.
 }
 
 function hideLoadProjectModal() {
     if (loadProjectModalEl) {
-        loadProjectModalEl.classList.add('hidden');
+        loadProjectModalEl.classList.add("hidden");
     }
     selectedProjectToLoad = null; // Reset pilihan
 }
 
 async function openLoadProjectModal() {
-    if (!loadProjectModalEl || !loadProjectListContainerEl || !projectManagerRef) {
-        console.error("Elemen modal load project atau ProjectManager tidak tersedia.");
-        showToast("Tidak bisa membuka dialog Load Project saat ini.", 'error');
+    if (
+        !loadProjectModalEl ||
+        !loadProjectListContainerEl ||
+        !projectManagerRef
+    ) {
+        console.error(
+            "Elemen modal load project atau ProjectManager tidak tersedia.",
+        );
+        showToast("Tidak bisa membuka dialog Load Project saat ini.", "error");
         return;
     }
 
-    loadProjectListContainerEl.innerHTML = '<p class="text-gray-400 text-sm">Memuat daftar project...</p>';
+    loadProjectListContainerEl.innerHTML =
+        '<p class="text-gray-400 text-sm">Memuat daftar project...</p>';
     if (confirmLoadProjectBtnEl) confirmLoadProjectBtnEl.disabled = true;
     // Tombol utama "Load Project" juga bisa di-disable di sini jika perlu, tapi modal akan menutupinya.
     // const loadProjectBtn = document.getElementById('load-project-btn');
     // if (loadProjectBtn) loadProjectBtn.disabled = true;
 
-
     try {
-        const availableProjects = await projectManagerRef.getAvailableProjectsFromServer();
+        const availableProjects =
+            await projectManagerRef.getAvailableProjectsFromServer();
         if (availableProjects && availableProjects.length > 0) {
             let listHtml = '<ul class="space-y-1">';
-            availableProjects.forEach(projectName => {
+            availableProjects.forEach((projectName) => {
                 listHtml += `
                     <li>
                         <label class="block p-2 rounded-md hover:bg-gray-700 cursor-pointer">
@@ -854,59 +1073,66 @@ async function openLoadProjectModal() {
                         </label>
                     </li>`;
             });
-            listHtml += '</ul>';
+            listHtml += "</ul>";
             loadProjectListContainerEl.innerHTML = listHtml;
 
             // Tambahkan event listener ke radio buttons yang baru dibuat
-            const radioButtons = loadProjectListContainerEl.querySelectorAll('.project-load-radio');
-            radioButtons.forEach(radio => {
-                radio.addEventListener('change', (event) => {
+            const radioButtons = loadProjectListContainerEl.querySelectorAll(
+                ".project-load-radio",
+            );
+            radioButtons.forEach((radio) => {
+                radio.addEventListener("change", (event) => {
                     if (event.target.checked) {
                         selectedProjectToLoad = event.target.value;
-                        if (confirmLoadProjectBtnEl) confirmLoadProjectBtnEl.disabled = false;
+                        if (confirmLoadProjectBtnEl)
+                            confirmLoadProjectBtnEl.disabled = false;
                         // console.log("Project dipilih:", selectedProjectToLoad);
                     }
                 });
             });
-
         } else {
-            loadProjectListContainerEl.innerHTML = '<p class="text-gray-400 text-sm">Tidak ada project yang tersimpan di server.</p>';
+            loadProjectListContainerEl.innerHTML =
+                '<p class="text-gray-400 text-sm">Tidak ada project yang tersimpan di server.</p>';
         }
     } catch (error) {
         console.error("Gagal mendapatkan daftar project:", error);
         loadProjectListContainerEl.innerHTML = `<p class="text-red-400 text-sm">Gagal mendapatkan daftar project: ${error}</p>`;
     }
 
-    loadProjectModalEl.classList.remove('hidden');
+    loadProjectModalEl.classList.remove("hidden");
 }
 
 // --- Save Project Modal Functions ---
 function hideSaveProjectModal() {
     if (saveProjectModalEl) {
-        saveProjectModalEl.classList.add('hidden');
+        saveProjectModalEl.classList.add("hidden");
     }
     if (saveProjectNameInputEl) {
-        saveProjectNameInputEl.value = ''; // Kosongkan input field
+        saveProjectNameInputEl.value = ""; // Kosongkan input field
     }
 }
 
-function openSaveProjectModal(currentName = '', isSaveAs = false) {
+function openSaveProjectModal(currentName = "", isSaveAs = false) {
     if (!saveProjectModalEl || !saveProjectNameInputEl || !projectManagerRef) {
-        console.error("Elemen modal save project atau ProjectManager tidak tersedia.");
-        showToast("Tidak bisa membuka dialog Save Project saat ini.", 'error');
+        console.error(
+            "Elemen modal save project atau ProjectManager tidak tersedia.",
+        );
+        showToast("Tidak bisa membuka dialog Save Project saat ini.", "error");
         return;
     }
-    saveProjectNameInputEl.value = currentName || ''; // currentName dari argumen, atau kosong jika save new
+    saveProjectNameInputEl.value = currentName || ""; // currentName dari argumen, atau kosong jika save new
     if (saveProjectModalTitleEl) {
         if (isSaveAs && currentName) {
             saveProjectModalTitleEl.textContent = `Save Project As (Current: ${currentName})`;
-        } else if (isSaveAs) { // Save As tapi belum ada nama sebelumnya
+        } else if (isSaveAs) {
+            // Save As tapi belum ada nama sebelumnya
             saveProjectModalTitleEl.textContent = "Save Project As...";
-        } else { // Bukan Save As (berarti Save untuk project baru)
+        } else {
+            // Bukan Save As (berarti Save untuk project baru)
             saveProjectModalTitleEl.textContent = "Save New Project";
         }
     }
-    saveProjectModalEl.classList.remove('hidden');
+    saveProjectModalEl.classList.remove("hidden");
     saveProjectNameInputEl.focus();
     saveProjectNameInputEl.select();
 }
@@ -917,15 +1143,21 @@ let currentConfirmationReject = null; // Jarang dipakai untuk konfirmasi sederha
 
 function hideConfirmationModal() {
     if (confirmationModalEl) {
-        confirmationModalEl.classList.add('hidden');
+        confirmationModalEl.classList.add("hidden");
     }
     // Hapus listener spesifik untuk promise ini agar tidak tumpang tindih
     if (confirmOkBtnEl && confirmOkBtnEl.currentClickListener) {
-        confirmOkBtnEl.removeEventListener('click', confirmOkBtnEl.currentClickListener);
+        confirmOkBtnEl.removeEventListener(
+            "click",
+            confirmOkBtnEl.currentClickListener,
+        );
         delete confirmOkBtnEl.currentClickListener;
     }
     if (confirmCancelBtnEl && confirmCancelBtnEl.currentClickListener) {
-        confirmCancelBtnEl.removeEventListener('click', confirmCancelBtnEl.currentClickListener);
+        confirmCancelBtnEl.removeEventListener(
+            "click",
+            confirmCancelBtnEl.currentClickListener,
+        );
         delete confirmCancelBtnEl.currentClickListener;
     }
 }
@@ -938,8 +1170,18 @@ function hideConfirmationModal() {
  * @param {string} [cancelText='Batal'] - Teks untuk tombol batal.
  * @returns {Promise<boolean>} Promise yang resolve true jika dikonfirmasi, false jika dibatalkan.
  */
-export function showConfirmationModal(message, title = 'Konfirmasi', okText = 'OK', cancelText = 'Batal') {
-    if (!confirmationModalEl || !confirmationMessageEl || !confirmOkBtnEl || !confirmCancelBtnEl) {
+export function showConfirmationModal(
+    message,
+    title = "Konfirmasi",
+    okText = "OK",
+    cancelText = "Batal",
+) {
+    if (
+        !confirmationModalEl ||
+        !confirmationMessageEl ||
+        !confirmOkBtnEl ||
+        !confirmCancelBtnEl
+    ) {
         console.error("Elemen modal konfirmasi tidak lengkap.");
         return Promise.resolve(window.confirm(message)); // Fallback ke window.confirm
     }
@@ -949,15 +1191,21 @@ export function showConfirmationModal(message, title = 'Konfirmasi', okText = 'O
     confirmOkBtnEl.textContent = okText;
     confirmCancelBtnEl.textContent = cancelText;
 
-    confirmationModalEl.classList.remove('hidden');
+    confirmationModalEl.classList.remove("hidden");
 
     return new Promise((resolve) => {
         // Hapus listener lama jika ada untuk menghindari duplikasi
         if (confirmOkBtnEl.currentClickListener) {
-            confirmOkBtnEl.removeEventListener('click', confirmOkBtnEl.currentClickListener);
+            confirmOkBtnEl.removeEventListener(
+                "click",
+                confirmOkBtnEl.currentClickListener,
+            );
         }
         if (confirmCancelBtnEl.currentClickListener) {
-            confirmCancelBtnEl.removeEventListener('click', confirmCancelBtnEl.currentClickListener);
+            confirmCancelBtnEl.removeEventListener(
+                "click",
+                confirmCancelBtnEl.currentClickListener,
+            );
         }
 
         // Simpan listener baru agar bisa dihapus
@@ -970,17 +1218,24 @@ export function showConfirmationModal(message, title = 'Konfirmasi', okText = 'O
             resolve(false);
         };
 
-        confirmOkBtnEl.addEventListener('click', confirmOkBtnEl.currentClickListener, { once: true });
-        confirmCancelBtnEl.addEventListener('click', confirmCancelBtnEl.currentClickListener, { once: true });
+        confirmOkBtnEl.addEventListener(
+            "click",
+            confirmOkBtnEl.currentClickListener,
+            { once: true },
+        );
+        confirmCancelBtnEl.addEventListener(
+            "click",
+            confirmCancelBtnEl.currentClickListener,
+            { once: true },
+        );
         // Jika ada tombol close 'x' di modal konfirmasi, tambahkan listener juga:
         // closeConfirmationModalBtn.addEventListener('click', () => { hideConfirmationModal(); resolve(false); }, { once: true });
     });
 }
 
-
 // --- Toast Notification Functions ---
 function _createToastElement(message, type) {
-    const toast = document.createElement('div');
+    const toast = document.createElement("div");
     toast.className = `toast toast-${type}`; // Kelas dasar dan tipe (info, success, error, warning)
     toast.textContent = message;
     return toast;
@@ -992,9 +1247,11 @@ function _createToastElement(message, type) {
  * @param {'info' | 'success' | 'error' | 'warning'} [type='info'] - Tipe notifikasi.
  * @param {number} [duration=3000] - Durasi tampilan toast dalam milidetik.
  */
-export function showToast(message, type = 'info', duration = 3000) {
+export function showToast(message, type = "info", duration = 3000) {
     if (!toastContainerEl) {
-        console.error("Toast container tidak ditemukan. Tidak dapat menampilkan toast.");
+        console.error(
+            "Toast container tidak ditemukan. Tidak dapat menampilkan toast.",
+        );
         // Fallback ke alert jika toast container tidak ada (seharusnya tidak terjadi)
         alert(`${type.toUpperCase()}: ${message}`);
         return;
@@ -1008,22 +1265,27 @@ export function showToast(message, type = 'info', duration = 3000) {
 
     // Tampilkan toast dengan animasi
     setTimeout(() => {
-        toast.classList.add('show');
+        toast.classList.add("show");
     }, 10); // Sedikit delay untuk memastikan transisi CSS berjalan
 
     // Sembunyikan dan hapus toast setelah durasi tertentu
     setTimeout(() => {
-        toast.classList.remove('show');
+        toast.classList.remove("show");
         // Tunggu animasi hide selesai sebelum menghapus elemen dari DOM
-        toast.addEventListener('transitionend', () => {
-            if (toast.parentNode === toastContainerEl) { // Pastikan masih child sebelum remove
-                toastContainerEl.removeChild(toast);
-            }
-        }, { once: true }); // Hapus listener setelah dijalankan sekali
-         // Fallback jika transisi tidak ada atau tidak terpicu (misalnya, display:none langsung)
+        toast.addEventListener(
+            "transitionend",
+            () => {
+                if (toast.parentNode === toastContainerEl) {
+                    // Pastikan masih child sebelum remove
+                    toastContainerEl.removeChild(toast);
+                }
+            },
+            { once: true },
+        ); // Hapus listener setelah dijalankan sekali
+        // Fallback jika transisi tidak ada atau tidak terpicu (misalnya, display:none langsung)
         setTimeout(() => {
             if (toast.parentNode === toastContainerEl) {
-                 toastContainerEl.removeChild(toast);
+                toastContainerEl.removeChild(toast);
             }
         }, duration + 500); // Beri waktu lebih untuk transisi selesai + sedikit buffer
     }, duration);
