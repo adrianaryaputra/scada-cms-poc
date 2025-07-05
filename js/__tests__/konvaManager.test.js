@@ -1,295 +1,393 @@
 // js/__tests__/konvaManager.test.js
 
-// --- Global Mocks ---
-// IMPORTANT: Mock global Konva BEFORE importing konvaManager
-// This ensures that when konvaManager's module scope is evaluated,
-// it sees our mock Konva.
+import { GRID_SIZE } from "../config.js";
+import * as stateManager from "../stateManager.js";
+import { initKonvaManager, _konvaObjectsForTesting, handleDragMove, getHmiLayoutAsJson, clearCanvas, handleContextMenuCloseForSaveState } from "../konvaManager.js";
 
-const createMockKonvaInstance = (initialConfig = {}) => {
-    const instanceAttrs = { ...initialConfig }; // Store initial attributes
-    const instanceChildren = [];
-
-    // Base instance structure with jest.fn() for methods we want to track or mock behavior for
-    const instance = {
-        attrs: instanceAttrs,
-        _children: instanceChildren,
-        on: jest.fn(),
-        setAttrs: jest.fn(function(newAttrs) { Object.assign(this.attrs, newAttrs); return this; }),
-        add: jest.fn(function(child) {
-            if (!this._children.includes(child)) {
-                this._children.push(child);
-            }
-            if (child) child.parent = this;
-            return this;
-        }),
-        findOne: jest.fn(function(selector) {
-            // Simplified findOne for testing
-            if (selector.startsWith(".")) {
-                const nameToFind = selector.substring(1);
-                return this._children.find(c => c.attrs && c.attrs.name === nameToFind);
-            } else if (selector.startsWith("#")) {
-                const idToFind = selector.substring(1);
-                return this._children.find(c => c.id && c.id() === idToFind);
-            }
-            return this._children.find(c => c.attrs && (c.attrs.name === selector || (c.id && c.id() === selector)));
-        }),
-        find: jest.fn(function(selector) {
-            if (selector === ".hmi-component") {
-                return this._children.filter(c => c.hasName && c.hasName("hmi-component"));
-            }
-            // Basic find for testing, can be expanded
-            return this._children.filter(c => c.attrs && (c.attrs.name === selector || (c.id && c.id() === selector)));
-        }),
-        destroy: jest.fn(function() {
-            if (this.parent && this.parent._children) {
-                const index = this.parent._children.indexOf(this);
-                if (index > -1) {
-                    this.parent._children.splice(index, 1);
-                }
-            }
-            this._children.forEach(child => child.destroy && child.destroy());
-            this._children.length = 0;
-        }),
-        destroyChildren: jest.fn(function() {
-            this._children.forEach(child => {
-                if (child && typeof child.destroy === 'function') {
-                    child.destroy();
-                }
-            });
-            this._children.length = 0;
-        }),
-        moveToBottom: jest.fn(),
-        id: jest.fn(function(idVal) { if(idVal !== undefined) this.attrs.id = idVal; return this.attrs.id; }),
-        x: jest.fn(function(xVal) { if(xVal !== undefined) this.attrs.x = xVal; return this.attrs.x !== undefined ? this.attrs.x : 0; }),
-        y: jest.fn(function(yVal) { if(yVal !== undefined) this.attrs.y = yVal; return this.attrs.y !== undefined ? this.attrs.y : 0; }),
-        width: jest.fn(function(val) { if (val !== undefined) this.attrs.width = val; return this.attrs.width || 0; }),
-        height: jest.fn(function(val) { if (val !== undefined) this.attrs.height = val; return this.attrs.height || 0; }),
-        scaleX: jest.fn(function(val) { if (val !== undefined) this.attrs.scaleX = val; return this.attrs.scaleX === undefined ? 1 : this.attrs.scaleX; }),
-        scaleY: jest.fn(function(val) { if (val !== undefined) this.attrs.scaleY = val; return this.attrs.scaleY === undefined ? 1 : this.attrs.scaleY; }),
-        name: jest.fn(function(nameVal) { if (nameVal !== undefined) this.attrs.name = nameVal; return this.attrs.name; }),
-        hasName: jest.fn(function(nameVal) { return this.attrs.name === nameVal; }),
-        getClientRect: jest.fn(function() { // Allow dynamic calculation based on current attrs
-            return { x: this.x(), y: this.y(), width: this.width(), height: this.height() };
-        }),
-        absolutePosition: jest.fn(function() { return { x: this.x(), y: this.y() }; }),
-        position: jest.fn(function(pos) { if(pos) {this.x(pos.x); this.y(pos.y);} return {x: this.x(), y: this.y()}; }),
-        visible: jest.fn(function(val) { if (val !== undefined) this.attrs.visible = val; return this.attrs.visible !== undefined ? this.attrs.visible : true; }),
-        batchDraw: jest.fn(),
-        getPointerPosition: jest.fn(() => ({ x: 0, y: 0 })), // Default, can be overridden in tests
-        container: jest.fn(function() { // Ensure it refers to its own container attr
-            return document.getElementById(this.attrs.container) || { getBoundingClientRect: () => ({ top: 0, left: 0 }) };
-        }),
-
-        // Transformer specific methods
-        nodes: jest.fn().mockReturnValue([]), // Default for transformer
-        keepRatio: jest.fn(),
-        ignoreStroke: jest.fn(),
-
-        // Shape specific methods (like Line, Rect)
-        points: jest.fn(),
-        stroke: jest.fn(),
-        strokeWidth: jest.fn(),
-        dash: jest.fn(),
-        fill: jest.fn(),
-        radius: jest.fn(), // For Circle, etc.
-        setAttr: jest.fn(function(attr, val) { this.attrs[attr] = val; }), // Generic setAttr
-    };
-
-    // Initialize common attrs if provided in initialConfig
-    if (initialConfig && initialConfig.id !== undefined) instance.id(initialConfig.id);
-    if (initialConfig && initialConfig.x !== undefined) instance.x(initialConfig.x);
-    if (initialConfig && initialConfig.y !== undefined) instance.y(initialConfig.y);
-    if (initialConfig && initialConfig.name !== undefined) instance.name(initialConfig.name);
-    if (initialConfig && initialConfig.width !== undefined) instance.width(initialConfig.width);
-    if (initialConfig && initialConfig.height !== undefined) instance.height(initialConfig.height);
-
-    return instance;
-};
-
-// Constructor mocks now correctly pass their config to createMockKonvaInstance
-const MockKonvaStage = jest.fn().mockImplementation((cfg) => createMockKonvaInstance(cfg));
-const MockKonvaLayer = jest.fn().mockImplementation((cfg) => createMockKonvaInstance(cfg));
-const MockKonvaTransformer = jest.fn().mockImplementation((cfg) => createMockKonvaInstance(cfg));
-const MockKonvaRect = jest.fn().mockImplementation((cfg) => createMockKonvaInstance(cfg));
-const MockKonvaLine = jest.fn().mockImplementation((cfg) => createMockKonvaInstance(cfg));
-
-global.Konva = {
-    Stage: MockKonvaStage,
-    Layer: MockKonvaLayer,
-    Transformer: MockKonvaTransformer,
-    Rect: MockKonvaRect,
-    Line: MockKonvaLine,
-    Util: {
-        haveIntersection: jest.fn(() => true)
-    }
-};
-
-global.ResizeObserver = jest.fn().mockImplementation(callback => ({
-    observe: jest.fn(() => {
-        // Simulate a resize event by calling the callback.
-        // Get the container element that Konva.Stage would use.
-        // The Stage mock's container() method needs to be robust enough.
-        const stageInstance = global.Konva.Stage.mock.results[0]?.value;
-        if (stageInstance && stageInstance.attrs.container) {
-             const containerElement = document.getElementById(stageInstance.attrs.container);
-             if (containerElement) {
-                // In a real scenario, clientWidth/Height would be from the element.
-                // For the test, we can assume they are set or use defaults.
-                stageInstance.width(containerElement.clientWidth || 800);
-                stageInstance.height(containerElement.clientHeight || 600);
-             }
-        }
-        callback();
+// Mock Konva module and its classes
+const mockKonva = {
+    Stage: jest.fn().mockImplementation(function (config) {
+        this.config = config;
+        this.width = jest.fn(() => config.width || 0);
+        this.height = jest.fn(() => config.height || 0);
+        this.container = jest.fn(() => ({ getBoundingClientRect: () => ({ top: 0, left: 0 }) }));
+        this.getPointerPosition = jest.fn(() => ({ x: 0, y: 0 }));
+        this.on = jest.fn();
+        this.off = jest.fn();
+        this.add = jest.fn();
+        this.find = jest.fn(() => []);
+        this._getMockLayers = () => this.config._mockLayers || [];
+        return this;
     }),
-    unobserve: jest.fn(),
-    disconnect: jest.fn(),
-}));
+    Layer: jest.fn().mockImplementation(function (config = {}) {
+        this.name = jest.fn(() => config.name || '');
+        this.add = jest.fn();
+        this.destroyChildren = jest.fn();
+        this.batchDraw = jest.fn();
+        this.find = jest.fn((selector) => {
+            if (selector === '.hmi-component' && this._mockHmiNodes) {
+                return this._mockHmiNodes;
+            }
+            return [];
+        });
+        this._mockHmiNodes = []; // Helper for tests
+        this.children = []; // Simulate children for find
+        this.findOne = jest.fn();
+        return this;
+    }),
+    Transformer: jest.fn().mockImplementation(function (config) {
+        this._nodes = [];
+        this.nodes = jest.fn((newNodes) => {
+            if (newNodes !== undefined) this._nodes = newNodes;
+            return this._nodes;
+        });
+        this.keepRatio = jest.fn();
+        this.ignoreStroke = jest.fn();
+        return this;
+    }),
+    Rect: jest.fn().mockImplementation(function (config) {
+        this.attrs = { ...config };
+        this.visible = jest.fn();
+        this.width = jest.fn((val) => { if(val) this.attrs.width = val; return this.attrs.width || 0; });
+        this.height = jest.fn((val) => { if(val) this.attrs.height = val; return this.attrs.height || 0; });
+        this.x = jest.fn((val) => { if(val) this.attrs.x = val; return this.attrs.x || 0; });
+        this.y = jest.fn((val) => { if(val) this.attrs.y = val; return this.attrs.y || 0; });
+        this.getClientRect = jest.fn(() => ({
+            x: this.attrs.x || 0,
+            y: this.attrs.y || 0,
+            width: this.attrs.width || 0,
+            height: this.attrs.height || 0
+        }));
+        this.destroy = jest.fn();
+        this.setAttrs = jest.fn(newAttrs => { this.attrs = {...this.attrs, ...newAttrs }});
+        return this;
+    }),
+    Line: jest.fn().mockImplementation(function (config) {
+        return this;
+    }),
+    Util: {
+        haveIntersection: jest.fn(() => false),
+    },
+};
 
-jest.resetModules(); // Make sure this is before KonvaManager is required
+// Replace global Konva, or use jest.mock if Konva is imported as a module
+global.Konva = mockKonva;
 
-// Import KonvaManager and the testing exports
-const KonvaManager = require("../konvaManager.js");
-const { _konvaObjectsForTesting } = require("../konvaManager.js"); // Import for direct access
-const { GRID_SIZE: ConfigGridSize } = require("../config.js"); // Use alias to avoid conflict
 
-jest.mock("../config.js", () => ({ GRID_SIZE: 20 }));
-jest.mock("../stateManager.js", () => ({
+// Mock individual stateManager functions
+jest.mock('../stateManager.js', () => ({
     saveState: jest.fn(),
-    getCurrentState: jest.fn(() => "{}"),
-    getUndoStack: jest.fn(() => []),
+    getCurrentState: jest.fn(() => "{}"), // Default to empty state
 }));
+
+// Mock DOM elements and ResizeObserver
+let mockContainerEl, mockContextMenuEl;
+global.ResizeObserver = jest.fn(function (callback) {
+    this.observe = jest.fn();
+    this.unobserve = jest.fn();
+    this.disconnect = jest.fn();
+    this._trigger = () => callback([], this); // Helper to trigger resize
+});
+
 
 describe("KonvaManager", () => {
-    let containerElementId = "test-konva-container";
-    let contextMenuElementId = "test-context-menu";
     let mockGetIsSimulationModeFunc;
     let mockUiHideContextMenuFunc;
     let mockUiPopulateContextMenuFunc;
     let mockUiSelectNodesFunc;
-    let mockGetUndoStackFunc;
-    let konvaInterface; // To store the returned interface from initKonvaManager
+    let mockSetUiContextMenuNodeFunc;
+    let mockGetUiContextMenuNodeFunc;
+    let mockGetUndoStackFromState;
+    let konvaManagerInterface;
+    let stageInstance, mainLayerInstance, gridLayerInstance, guideLayerInstance, transformerInstance;
+
 
     beforeEach(() => {
         jest.clearAllMocks();
 
-        // Re-assign mock implementations for Konva classes to ensure fresh mocks for each test
-        global.Konva.Stage.mockImplementation((config) => createMockKonvaInstance(config));
-        global.Konva.Layer.mockImplementation((config) => createMockKonvaInstance(config));
-        global.Konva.Transformer.mockImplementation((config) => createMockKonvaInstance(config));
-        global.Konva.Rect.mockImplementation((config) => createMockKonvaInstance(config));
-        global.Konva.Line.mockImplementation((config) => createMockKonvaInstance(config));
-        global.Konva.Util.haveIntersection.mockReturnValue(true);
+        // Setup mock DOM elements
+        mockContainerEl = { clientWidth: 800, clientHeight: 600, getBoundingClientRect: () => ({ top: 0, left: 0 }) };
+        mockContextMenuEl = { style: { display: '', top: '', left: '' } };
+        document.getElementById = jest.fn((id) => {
+            if (id === 'test-container') return mockContainerEl;
+            if (id === 'test-context-menu') return mockContextMenuEl;
+            return null;
+        });
 
-
-        document.body.innerHTML = `
-            <div id="${containerElementId}" style="width:800px; height:600px;"></div>
-            <div id="${contextMenuElementId}"></div>
-        `;
-
+        // Mock callback functions
         mockGetIsSimulationModeFunc = jest.fn(() => false);
         mockUiHideContextMenuFunc = jest.fn();
         mockUiPopulateContextMenuFunc = jest.fn();
         mockUiSelectNodesFunc = jest.fn();
-        mockGetUndoStackFunc = jest.fn(() => []);
+        mockSetUiContextMenuNodeFunc = jest.fn();
+        mockGetUiContextMenuNodeFunc = jest.fn(() => null);
+        mockGetUndoStackFromState = jest.fn(() => []);
 
-        konvaInterface = KonvaManager.initKonvaManager(
-            containerElementId, contextMenuElementId, mockGetIsSimulationModeFunc,
-            mockUiHideContextMenuFunc, mockUiPopulateContextMenuFunc, mockUiSelectNodesFunc,
-            jest.fn(), jest.fn(), // Deprecated set/getContextMenuNode
-            mockGetUndoStackFunc
+
+        // Initialize KonvaManager
+        konvaManagerInterface = initKonvaManager(
+            'test-container',
+            'test-context-menu',
+            mockGetIsSimulationModeFunc,
+            mockUiHideContextMenuFunc,
+            mockUiPopulateContextMenuFunc,
+            mockUiSelectNodesFunc,
+            mockSetUiContextMenuNodeFunc,
+            mockGetUiContextMenuNodeFunc,
+            mockGetUndoStackFromState
         );
+        stageInstance = _konvaObjectsForTesting.stage;
+        mainLayerInstance = _konvaObjectsForTesting.layer;
+        gridLayerInstance = _konvaObjectsForTesting.gridLayer;
+        guideLayerInstance = _konvaObjectsForTesting.guideLayer;
+        transformerInstance = _konvaObjectsForTesting.tr;
     });
 
     describe("initKonvaManager", () => {
-        test("should initialize Konva Stage, Layers, and Transformer", () => {
-            expect(global.Konva.Stage).toHaveBeenCalledTimes(1);
-            const stageInstance = global.Konva.Stage.mock.results[0].value;
-            expect(stageInstance.attrs.container).toBe(containerElementId);
-
-            expect(global.Konva.Layer).toHaveBeenCalledTimes(3); // grid, main, guide
-            expect(global.Konva.Transformer).toHaveBeenCalledTimes(1);
-
-            expect(global.Konva.Stage).toHaveBeenCalledTimes(1);
-            // Memastikan bahwa stage yang dibuat menggunakan containerId yang benar.
-            // global.Konva.Stage.mock.calls[0][0] adalah argumen config yang diberikan ke konstruktor Stage.
-            expect(global.Konva.Stage.mock.calls[0][0].container).toBe(containerElementId);
-
-            expect(global.Konva.Layer).toHaveBeenCalledTimes(3); // grid, main, guide
-            expect(global.Konva.Transformer).toHaveBeenCalledTimes(1);
-
-            const internalGridLayer = _konvaObjectsForTesting.gridLayer;
-            // --- DEBUGGING ---
-            // console.log('internalGridLayer in test (init):', internalGridLayer);
-            // console.log('internalGridLayer.add is mock (init):', jest.isMockFunction(internalGridLayer.add));
-            // console.log('internalGridLayer.destroyChildren is mock (init):', jest.isMockFunction(internalGridLayer.destroyChildren));
-            // console.log('Calls to internalGridLayer.add (init):', internalGridLayer.add.mock.calls.length);
-            // console.log('Calls to internalGridLayer.destroyChildren (init):', internalGridLayer.destroyChildren.mock.calls.length);
-            // --- END DEBUGGING ---
-
-            expect(internalGridLayer.destroyChildren).toHaveBeenCalled();
-            expect(internalGridLayer.add).toHaveBeenCalled();
+        test("should initialize Stage, Layers, and Transformer", () => {
+            expect(Konva.Stage).toHaveBeenCalledWith({
+                container: 'test-container',
+                width: mockContainerEl.clientWidth,
+                height: mockContainerEl.clientHeight,
+            });
+            expect(Konva.Layer).toHaveBeenCalledTimes(3);
+            expect(Konva.Transformer).toHaveBeenCalled();
+            expect(stageInstance).toBeDefined();
+            expect(mainLayerInstance).toBeDefined();
+            expect(gridLayerInstance).toBeDefined();
+            expect(guideLayerInstance).toBeDefined();
+            expect(transformerInstance).toBeDefined();
         });
 
-        test("should return an interface with core Konva elements and functions", () => {
-            expect(konvaInterface).toHaveProperty("stage");
-            expect(konvaInterface).toHaveProperty("layer");
-            expect(konvaInterface).toHaveProperty("tr");
-            expect(konvaInterface).toHaveProperty("guideLayer");
-            expect(konvaInterface).toHaveProperty("getHmiLayoutAsJson");
-            expect(konvaInterface).toHaveProperty("clearCanvas");
-            expect(konvaInterface).toHaveProperty("handleDragMove");
+        test("should add layers to the stage and transformer to main layer", () => {
+            expect(stageInstance.add).toHaveBeenCalledWith(
+                gridLayerInstance,
+                mainLayerInstance,
+                guideLayerInstance
+            );
+            expect(mainLayerInstance.add).toHaveBeenCalledWith(transformerInstance);
         });
 
-        test("ResizeObserver should re-draw grid", () => {
-            // initKonvaManager already called in beforeEach, which triggers ResizeObserver's callback once
-            const internalGridLayer = _konvaObjectsForTesting.gridLayer;
-            // destroyChildren is called once in the first drawGrid (init), and once in the ResizeObserver callback.
-            expect(internalGridLayer.destroyChildren).toHaveBeenCalledTimes(2);
-            expect(internalGridLayer.add.mock.calls.length).toBeGreaterThanOrEqual(1); // Lines are added
+        test("should call drawGrid during initialization", () => {
+            expect(gridLayerInstance.add).toHaveBeenCalledWith(expect.any(Konva.Line));
+        });
+
+        test("should set up event listeners on the stage", () => {
+            expect(stageInstance.on).toHaveBeenCalledWith("click tap", expect.any(Function));
+            expect(stageInstance.on).toHaveBeenCalledWith("mousedown", expect.any(Function));
+            expect(stageInstance.on).toHaveBeenCalledWith("mousemove", expect.any(Function));
+            expect(stageInstance.on).toHaveBeenCalledWith("mouseup", expect.any(Function));
+            expect(stageInstance.on).toHaveBeenCalledWith("contextmenu", expect.any(Function));
+        });
+
+        test("should return the correct interface object", () => {
+            expect(konvaManagerInterface).toEqual(expect.objectContaining({
+                stage: expect.any(Konva.Stage),
+                layer: expect.any(Konva.Layer),
+                tr: expect.any(Konva.Transformer),
+                guideLayer: expect.any(Konva.Layer),
+                getDragStartPositions: expect.any(Function),
+                setDragStartPositions: expect.any(Function),
+                clearDragStartPositions: expect.any(Function),
+                handleDragMove: expect.any(Function),
+                getHmiLayoutAsJson: expect.any(Function),
+                clearCanvas: expect.any(Function),
+            }));
+        });
+
+        test("should handle missing container element gracefully", () => {
+            document.getElementById.mockImplementationOnce((id) => { if (id==='test-container') return null; return mockContextMenuEl; });
+            const result = initKonvaManager('bad-container', 'test-context-menu', mockGetIsSimulationModeFunc, mockUiHideContextMenuFunc, mockUiPopulateContextMenuFunc, mockUiSelectNodesFunc, mockSetUiContextMenuNodeFunc, mockGetUiContextMenuNodeFunc, mockGetUndoStackFromState);
+            expect(result).toEqual({});
+            expect(Konva.Stage).toHaveBeenCalledTimes(1); // From previous successful init
+        });
+    });
+
+    describe("drawGrid", () => {
+        beforeEach(() => {
+            gridLayerInstance.destroyChildren.mockClear();
+            gridLayerInstance.add.mockClear();
+            Konva.Line.mockClear();
+        });
+
+        test("should clear previous grid and draw new lines for solid grid", () => {
+            stageInstance.width = jest.fn(() => 800);
+            stageInstance.height = jest.fn(() => 600);
+
+            const resizeCb = global.ResizeObserver.mock.calls[0][0];
+            resizeCb(); // Trigger resize which calls drawGrid
+
+            expect(gridLayerInstance.destroyChildren).toHaveBeenCalled();
+            const expectedLinesCount = (800 / GRID_SIZE) + (600 / GRID_SIZE);
+            expect(Konva.Line).toHaveBeenCalledTimes(expectedLinesCount);
+            expect(Konva.Line).toHaveBeenCalledWith(expect.objectContaining({ dash: [] }));
+        });
+
+        test("should draw dotted lines if dotted = true via Shift key", () => {
+            stageInstance.width = jest.fn(() => 20);
+            stageInstance.height = jest.fn(() => 20);
+
+            const keydownEvent = new KeyboardEvent('keydown', { key: 'Shift' });
+            window.dispatchEvent(keydownEvent); // This calls drawGrid(true)
+
+            expect(gridLayerInstance.destroyChildren).toHaveBeenCalled();
+            expect(Konva.Line).toHaveBeenCalledWith(expect.objectContaining({ dash: [1, 19] }));
+
+            const keyupEvent = new KeyboardEvent('keyup', { key: 'Shift' });
+            window.dispatchEvent(keyupEvent); // This calls drawGrid(false)
+             expect(Konva.Line).toHaveBeenLastCalledWith(expect.objectContaining({ dash: [] }));
+        });
+    });
+
+    describe("Event Handling - Marquee Selection", () => {
+        let mousedownCb, mousemoveCb, mouseupCb;
+
+        beforeEach(() => {
+            // Find the event callbacks attached in setupEventListeners
+            const stageOnCalls = stageInstance.on.mock.calls;
+            mousedownCb = stageOnCalls.find(call => call[0] === 'mousedown')[1];
+            mousemoveCb = stageOnCalls.find(call => call[0] === 'mousemove')[1];
+            mouseupCb = stageOnCalls.find(call => call[0] === 'mouseup')[1];
+            Konva.Rect.mockClear();
+            mainLayerInstance.add.mockClear();
+        });
+
+        test("mousedown on stage should create selectionRectangle", () => {
+            stageInstance.getPointerPosition.mockReturnValueOnce({ x: 50, y: 50 });
+            mousedownCb({ target: stageInstance, evt: { preventDefault: jest.fn() } });
+
+            expect(Konva.Rect).toHaveBeenCalledWith({
+                fill: "rgba(0,161,255,0.3)",
+                visible: false,
+                name: 'selectionRectangle',
+            });
+            expect(mainLayerInstance.add).toHaveBeenCalledWith(expect.any(Konva.Rect));
+        });
+
+        test("mousemove should update selectionRectangle if active", () => {
+            // Simulate mousedown first
+            stageInstance.getPointerPosition.mockReturnValueOnce({ x: 50, y: 50 });
+            mousedownCb({ target: stageInstance, evt: { preventDefault: jest.fn() } });
+            const selectionRectInstance = Konva.Rect.mock.results[0].value;
+
+            stageInstance.getPointerPosition.mockReturnValueOnce({ x: 150, y: 120 });
+            mousemoveCb({ evt: { preventDefault: jest.fn() } });
+
+            expect(selectionRectInstance.visible).toHaveBeenCalledWith(true);
+            expect(selectionRectInstance.setAttrs).toHaveBeenCalledWith({
+                x: 50, y: 50, width: 100, height: 70
+            });
+        });
+
+        test("mouseup should finalize selection and call uiSelectNodesFunc", () => {
+            // Simulate mousedown
+            stageInstance.getPointerPosition.mockReturnValueOnce({ x: 10, y: 10 });
+            mousedownCb({ target: stageInstance, evt: { preventDefault: jest.fn() } });
+            const selectionRectInstance = Konva.Rect.mock.results[0].value;
+            selectionRectInstance.getClientRect.mockReturnValueOnce({ x: 10, y: 10, width: 90, height: 90 }); // Area of selection
+
+            const mockNodeInside = { getClientRect: jest.fn(() => ({ x: 20, y: 20, width: 30, height: 30 })) };
+            const mockNodeOutside = { getClientRect: jest.fn(() => ({ x: 200, y: 200, width: 10, height: 10 })) };
+            mainLayerInstance._mockHmiNodes = [mockNodeInside, mockNodeOutside]; // Populate mock nodes
+            Konva.Util.haveIntersection.mockImplementation((box1, box2) => {
+                // Simple intersection logic for test based on typical clientRect structure
+                return box1.x < box2.x + box2.width && box1.x + box1.width > box2.x &&
+                       box1.y < box2.y + box2.height && box1.y + box1.height > box2.y;
+            });
+             Konva.Util.haveIntersection.mockReturnValueOnce(true).mockReturnValueOnce(false);
+
+
+            mouseupCb({ evt: { preventDefault: jest.fn() } });
+
+            expect(selectionRectInstance.visible).toHaveBeenCalledWith(false);
+            expect(selectionRectInstance.destroy).toHaveBeenCalled();
+            expect(mockUiSelectNodesFunc).toHaveBeenCalledWith([mockNodeInside]);
+        });
+    });
+
+
+    describe("handleContextMenuCloseForSaveState", () => {
+        test("should call saveState if current state differs from last undo state", () => {
+            stateManager.getCurrentState.mockReturnValueOnce("{ \"changed\": true }");
+            mockGetUndoStackFromState.mockReturnValueOnce(["{ \"changed\": false }"]);
+            handleContextMenuCloseForSaveState();
+            expect(stateManager.saveState).toHaveBeenCalled();
+        });
+
+        test("should not call saveState if states are the same", () => {
+            stateManager.getCurrentState.mockReturnValueOnce("{\"changed\":false}");
+            mockGetUndoStackFromState.mockReturnValueOnce(["{\"changed\":false}"]);
+            handleContextMenuCloseForSaveState();
+            expect(stateManager.saveState).not.toHaveBeenCalled();
+        });
+         test("should handle empty undo stack gracefully", () => {
+            stateManager.getCurrentState.mockReturnValueOnce("{\"changed\":true}");
+            mockGetUndoStackFromState.mockReturnValueOnce([]);
+            handleContextMenuCloseForSaveState();
+            expect(stateManager.saveState).toHaveBeenCalled();
         });
     });
 
     describe("getHmiLayoutAsJson", () => {
-        test("should return an empty array if layer has no HMI components", () => {
-            // Use the layer from the exported testing objects for consistency
-            _konvaObjectsForTesting.layer.find = jest.fn().mockReturnValueOnce([]);
-            const layout = KonvaManager.getHmiLayoutAsJson();
-            expect(layout).toEqual([]);
+        test("should serialize components correctly", () => {
+            const mockNode1 = { id: () => 'id1', x: () => 10, y: () => 20, attrs: { componentType: 'lamp', label: 'L1' }};
+            const mockNode2 = { id: () => 'id2', x: () => 30, y: () => 40, attrs: { componentType: 'switch', deviceId: 'd1' }};
+            mainLayerInstance._mockHmiNodes = [mockNode1, mockNode2];
+
+            const jsonLayout = getHmiLayoutAsJson();
+            expect(jsonLayout).toEqual([
+                { id: 'id1', x: 10, y: 20, componentType: 'lamp', label: 'L1' },
+                { id: 'id2', x: 30, y: 40, componentType: 'switch', deviceId: 'd1' },
+            ]);
         });
+        test("should return empty array if layer is not initialized", () => {
+            _konvaObjectsForTesting.layer = null;
+            const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(()=>{});
+            expect(getHmiLayoutAsJson()).toEqual([]);
+            expect(consoleErrorSpy).toHaveBeenCalledWith("[KonvaManager] Main layer not initialized for getHmiLayoutAsJson.");
+            consoleErrorSpy.mockRestore();
+            _konvaObjectsForTesting.layer = mainLayerInstance; // Restore for other tests
+        });
+         test("should handle missing componentType by logging a warning", () => {
+            const mockNodeNoType = { id: () => 'id-no-type', x: () => 0, y: () => 0, attrs: { label: 'NoTypeComp' }};
+            mainLayerInstance._mockHmiNodes = [mockNodeNoType];
+            const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(()=>{});
 
-        test("should serialize HMI components correctly", () => {
-            const mockNode1Attrs = { id: 'node1', x: 10, y: 20, componentType: 'bit-lamp', label: 'Lamp 1', deviceId: 'd1', variableName: 'v1' };
-            const mockNode1 = createMockKonvaInstance(mockNode1Attrs);
-            mockNode1.hasName = jest.fn(name => name === 'hmi-component');
-
-            const mockNode2Attrs = { id: 'node2', x: 30, y: 40, componentType: 'bit-switch', label: 'Switch 1' };
-            const mockNode2 = createMockKonvaInstance(mockNode2Attrs);
-            mockNode2.hasName = jest.fn(name => name === 'hmi-component');
-
-            konvaInterface.layer.find = jest.fn().mockReturnValueOnce([mockNode1, mockNode2]);
-
-            const layout = KonvaManager.getHmiLayoutAsJson();
-            expect(layout).toHaveLength(2);
-            expect(layout[0]).toEqual(expect.objectContaining(mockNode1Attrs));
-            expect(layout[1]).toEqual(expect.objectContaining(mockNode2Attrs));
+            const jsonLayout = getHmiLayoutAsJson();
+            expect(jsonLayout.length).toBe(1);
+            expect(jsonLayout[0].componentType).toBeUndefined();
+            expect(consoleWarnSpy).toHaveBeenCalledWith(
+                "[KonvaManager] Node id-no-type is missing 'componentType' in attrs during serialization. It may not load correctly."
+            );
+            consoleWarnSpy.mockRestore();
         });
     });
 
     describe("clearCanvas", () => {
-       test("should destroy all HMI components and reset transformer", () => {
-            const mockComponent1 = createMockKonvaInstance({ id: 'c1'});
-            mockComponent1.hasName = jest.fn(name => name === 'hmi-component');
-            const mockComponent2 = createMockKonvaInstance({ id: 'c2'});
-            mockComponent2.hasName = jest.fn(name => name === 'hmi-component');
+        test("should destroy all components and clear transformer", () => {
+            const mockNode1 = { destroy: jest.fn() };
+            const mockNode2 = { destroy: jest.fn() };
+            mainLayerInstance._mockHmiNodes = [mockNode1, mockNode2];
 
-            konvaInterface.layer.find = jest.fn().mockReturnValue([mockComponent1, mockComponent2]);
+            clearCanvas();
 
-            KonvaManager.clearCanvas();
+            expect(mockNode1.destroy).toHaveBeenCalled();
+            expect(mockNode2.destroy).toHaveBeenCalled();
+            expect(transformerInstance.nodes).toHaveBeenCalledWith([]);
+            expect(mainLayerInstance.batchDraw).toHaveBeenCalled();
+        });
+         test("should handle uninitialized layer or transformer gracefully", () => {
+            const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(()=>{});
+            _konvaObjectsForTesting.layer = null;
+            clearCanvas();
+            expect(consoleErrorSpy).toHaveBeenCalledWith("[KonvaManager] Layer or Transformer not initialized for clearCanvas.");
 
-            expect(mockComponent1.destroy).toHaveBeenCalledTimes(1);
-            expect(mockComponent2.destroy).toHaveBeenCalledTimes(1);
-            expect(konvaInterface.tr.nodes).toHaveBeenCalledWith([]);
-            expect(konvaInterface.layer.batchDraw).toHaveBeenCalledTimes(1);
-       });
+            _konvaObjectsForTesting.layer = mainLayerInstance;
+            _konvaObjectsForTesting.tr = null;
+            clearCanvas();
+            expect(consoleErrorSpy).toHaveBeenCalledWith("[KonvaManager] Layer or Transformer not initialized for clearCanvas.");
+            consoleErrorSpy.mockRestore();
+            _konvaObjectsForTesting.tr = transformerInstance; // Restore
+        });
     });
 });

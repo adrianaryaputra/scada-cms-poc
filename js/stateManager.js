@@ -2,26 +2,32 @@
  * @file Manages the application's state, including HMI component configurations,
  * device variable values (tagDatabase), and undo/redo functionality.
  *
+ * @module js/stateManager
+ *
+ * @description
  * The state managed by this module primarily consists of:
  * 1.  **HMI Component Configurations**: The properties and layout of all HMI components
  *     currently on the Konva.js canvas. This includes their type, position (x, y),
  *     unique ID, and other specific attributes (e.g., colors, text, linked device/variable).
+ *     Stored as part of the `state` object in `undoStack`/`redoStack`.
  * 2.  **Device Variable Values (Tag Database)**: A live record of the current values
  *     for variables associated with configured devices. This acts as a client-side
- *     cache of device data.
+ *     cache of device data. The structure is `tagDatabase[deviceId][variableName] = value`.
  *
  * The module provides mechanisms to:
- * - Save snapshots of the current application state (components + tags).
+ * - Save snapshots of the current application state (HMI components + tagDatabase).
  * - Restore the application to a previously saved state.
  * - Implement undo and redo functionality based on these state snapshots.
  * - Get and set individual device variable values, triggering UI updates for
- *   linked HMI components.
+ *   linked HMI components and the device manager UI.
  *
- * It interacts closely with `componentFactory` (for recreating components during state restoration),
- * `konvaManager` (indirectly, via layer and transformer references, to access HMI components),
- * `deviceManager` (to update live variable displays in the UI), and `ProjectManager`
- * (to mark the project as "dirty" when state changes).
- * @module js/stateManager
+ * Key Interactions:
+ * - `componentFactory`: Used for recreating HMI components during state restoration.
+ * - `Konva.Layer` & `Konva.Transformer`: Accessed to get HMI component data for saving,
+ *   and to clear/repopulate components during restoration.
+ * - `deviceManager.updateLiveVariableValueInManagerUI`: Called to update the variable display
+ *   in the device manager UI when a tag value changes.
+ * - `ProjectManager.setDirty`: Called to mark the project as modified when the state changes.
  */
 
 import { updateLiveVariableValueInManagerUI } from "./deviceManager.js";
@@ -30,26 +36,29 @@ import ProjectManager from "./projectManager.js";
 // --- Module-Level State Variables ---
 
 /**
- * Stores snapshots of the application state (as stringified JSON) for undo operations.
- * Each element in the array represents a previous state of the HMI components and tagDatabase.
+ * Stores snapshots of the application state for undo operations.
+ * Each element is a stringified JSON object: `{ components: Array<object>, tags: object }`.
+ * - `components`: An array of serialized HMI component data. Each object includes
+ *   `id`, `x`, `y`, `componentType`, and other `attrs`.
+ * - `tags`: A snapshot of the `tagDatabase` at that point in time.
  * @private
  * @type {Array<string>}
  */
 let undoStack = [];
 
 /**
- * Stores snapshots of the application state (as stringified JSON) for redo operations.
- * This stack is populated when an undo action is performed.
+ * Stores snapshots of the application state for redo operations.
+ * Structure is identical to `undoStack`. Populated when an undo action occurs.
  * @private
  * @type {Array<string>}
  */
 let redoStack = [];
 
 /**
- * A live database (object) storing the current values of all device variables (tags).
- * The structure is hierarchical: `tagDatabase[deviceId][variableName] = value`.
+ * A live database storing the current values of all device variables (tags).
+ * Structure: `tagDatabase[deviceId: string][variableName: string]: any`
  * This object is updated by `setDeviceVariableValue` and read by `getDeviceVariableValue`
- * and HMI components.
+ * and HMI components (indirectly via their `updateState` methods).
  * @private
  * @type {Object<string, Object<string, *>>}
  */
@@ -59,54 +68,53 @@ let tagDatabase = {};
 // These are initialized by `initStateManager`.
 
 /**
- * Reference to the componentFactory module.
+ * Reference to the `componentFactory` module.
  * @private
- * @type {object}
+ * @type {import('./componentFactory.js').componentFactory | null}
  */
-let componentFactoryRef;
+let componentFactoryRef = null;
+
 /**
  * Reference to the main Konva.Layer where HMI components are drawn.
  * @private
- * @type {Konva.Layer}
+ * @type {import('konva/lib/Layer').Layer | null}
  */
-let layerRef;
+let layerRef = null;
+
 /**
  * Reference to the Konva.Transformer used for selecting and manipulating components.
  * @private
- * @type {Konva.Transformer}
+ * @type {import('konva/lib/shapes/Transformer').Transformer | null}
  */
-let trRef;
+let trRef = null;
+
 /**
  * Reference to the DOM element for the Undo button.
  * @private
- * @type {HTMLElement}
+ * @type {HTMLButtonElement | null}
  */
-let undoBtnRef;
+let undoBtnRef = null;
+
 /**
  * Reference to the DOM element for the Redo button.
  * @private
- * @type {HTMLElement}
+ * @type {HTMLButtonElement | null}
  */
-let redoBtnRef;
+let redoBtnRef = null;
 
 // --- Initialization ---
 
 /**
- * Initializes the StateManager with necessary references from other modules (like `componentFactory`)
- * and Konva objects (main layer, transformer). It also takes references to the undo and redo
- * button DOM elements to manage their enabled/disabled states.
+ * Initializes the StateManager with necessary references.
  * This function should be called once during application startup.
- * An initial state (typically empty) is saved to start the undo history.
+ * It stores references to other modules and Konva objects required for state
+ * operations and sets up the initial undo/redo state.
  *
- * @export
- * @param {object} factory - Reference to the `componentFactory` module, used for recreating components
- *                           when restoring a state.
- * @param {Konva.Layer} layer - Reference to the main Konva.Layer where HMI components are rendered.
- *                              Used for accessing components to save or restore their state.
- * @param {Konva.Transformer} tr - Reference to the Konva.Transformer used for component selection.
- *                                 Needed to clear selections when restoring state.
- * @param {HTMLElement} undoBtn - The DOM element for the application's undo button.
- * @param {HTMLElement} redoBtn - The DOM element for the application's redo button.
+ * @param {import('./componentFactory.js').componentFactory} factory - Reference to the `componentFactory` for recreating components.
+ * @param {import('konva/lib/Layer').Layer} layer - Reference to the main Konva.Layer for HMI components.
+ * @param {import('konva/lib/shapes/Transformer').Transformer} tr - Reference to the Konva.Transformer for selections.
+ * @param {HTMLButtonElement} undoBtn - The DOM element for the application's undo button.
+ * @param {HTMLButtonElement} redoBtn - The DOM element for the application's redo button.
  */
 export function initStateManager(factory, layer, tr, undoBtn, redoBtn) {
     componentFactoryRef = factory;
@@ -115,7 +123,7 @@ export function initStateManager(factory, layer, tr, undoBtn, redoBtn) {
     undoBtnRef = undoBtn;
     redoBtnRef = redoBtn;
 
-    saveState(); // Save the initial (empty) state of the application.
+    saveState(); // Save the initial (empty) state.
     updateUndoRedoButtons(); // Update UI buttons based on initial stack state.
 }
 
@@ -123,10 +131,9 @@ export function initStateManager(factory, layer, tr, undoBtn, redoBtn) {
 
 /**
  * Returns a reference to the current `tagDatabase` object.
- * The `tagDatabase` stores the live values of device variables, structured as:
- * `{ deviceId: { variableName1: value1, variableName2: value2, ... }, ... }`.
+ * The `tagDatabase` stores live device variable values:
+ * `{ deviceId: { variableName1: value1, ... }, ... }`.
  *
- * @export
  * @returns {Object<string, Object<string, *>>} The current tag database.
  */
 export function getTagDatabase() {
@@ -134,23 +141,22 @@ export function getTagDatabase() {
 }
 
 /**
- * Returns the current undo stack. Each element in the array is a stringified JSON
- * representation of a past application state (HMI components and tagDatabase).
- * This can be useful for debugging or for more advanced state manipulation features.
+ * Returns the current undo stack.
+ * Each element is a stringified JSON representation of a past application state
+ * (`{ components: Array<object>, tags: object }`).
+ * Useful for debugging or advanced state manipulation.
  *
- * @export
- * @returns {Array<string>} The undo stack, where each element is a JSON string of a past state.
+ * @returns {Array<string>} The undo stack.
  */
 export function getUndoStack() {
     return undoStack;
 }
 
 /**
- * Returns the current redo stack. Each element is a stringified JSON representation
- * of a "future" state that was undone. This stack is populated when `handleUndo` is called.
+ * Returns the current redo stack.
+ * Structure is identical to `getUndoStack()`. Populated when `handleUndo` is called.
  *
- * @export
- * @returns {Array<string>} The redo stack, where each element is a JSON string of a state that can be redone.
+ * @returns {Array<string>} The redo stack.
  */
 export function getRedoStack() {
     return redoStack;
@@ -159,32 +165,35 @@ export function getRedoStack() {
 // --- Core State Manipulation: Save, Restore, Undo, Redo ---
 
 /**
- * Saves the current application state to the undo stack.
- * The state captured includes:
- * 1.  A list of all HMI components on the Konva layer, serializing their `id`, `x`, `y`
- *     coordinates, and all other attributes (`node.attrs`). This includes `componentType`,
- *     `deviceId`, `variableName`, and any component-specific properties.
- * 2.  A deep copy of the current `tagDatabase`, which holds the live values of device variables.
+ * Saves the current application state (HMI components and tagDatabase) to the undo stack.
  *
- * When a new state is saved:
- * - The `redoStack` is cleared, as any previous "redo" path is invalidated.
- * - The undo/redo UI buttons are updated to reflect the new stack sizes.
- * - The project is marked as "dirty" via `ProjectManager.setDirty(true)`.
+ * The saved state object is: `{ components: Array<object>, tags: object }`
+ * - `components`: Array of serialized HMI component data (id, x, y, attrs).
+ * - `tags`: A deep copy of the current `tagDatabase`.
  *
- * This function is crucial for the undo/redo mechanism and for ensuring that changes
- * can be reverted. It should be called after any significant user action that modifies
- * the HMI layout, component properties, or potentially when important tag values change
- * programmatically if that change should be undoable (though typically tag changes from
- * devices are not added to the undo stack directly by this function).
+ * Effects:
+ * - Clears the `redoStack`.
+ * - Updates undo/redo UI buttons.
+ * - Marks the project as "dirty" via `ProjectManager.setDirty(true)`.
  *
- * @export
+ * Called after significant user actions that modify HMI layout or properties.
+ * Tag changes from devices typically don't add to the undo stack directly via this function.
  */
 export function saveState() {
-    const state = { components: [], tags: { ...tagDatabase } }; // Deep copy tags for snapshot
+    if (!layerRef) {
+        console.warn("[StateManager] layerRef not available for saveState. State might be incomplete.");
+        // Still proceed to save tags and manage stacks, but component part will be empty.
+    }
+
+    const state = {
+        components: [],
+        tags: JSON.parse(JSON.stringify(tagDatabase)) // Ensure a deep copy of tags
+    };
+
     if (layerRef) {
         layerRef.find(".hmi-component").forEach((node) => {
             const attrsToSave = { ...node.attrs };
-            // Future: Exclude any large or unserializable Konva internal properties if necessary.
+            // Potential future optimization: Exclude large or unserializable Konva internal properties if any.
             // delete attrsToSave.someKonvaInternalProperty;
 
             const componentData = {
@@ -196,156 +205,168 @@ export function saveState() {
 
             if (!componentData.componentType) {
                 console.warn(
-                    `Component with ID ${node.id()} is missing componentType in attrs during saveState. Setting to 'Unknown'.`,
+                    `[StateManager] Component with ID ${node.id()} is missing componentType in attrs during saveState. Setting to 'Unknown'.`,
                 );
-                componentData.componentType = "Unknown";
+                componentData.componentType = "Unknown"; // Fallback
             }
             state.components.push(componentData);
         });
     }
+
     undoStack.push(JSON.stringify(state));
-    redoStack = []; // Any new state change clears the redo stack
+    redoStack = []; // Any new state change clears the redo stack.
     updateUndoRedoButtons();
 
     if (ProjectManager && typeof ProjectManager.setDirty === "function") {
         ProjectManager.setDirty(true);
+    } else {
+        console.warn("[StateManager] ProjectManager.setDirty is not available.");
     }
 }
 
 /**
- * Restores the application state from a given state string.
- * This function is used by the undo/redo system and when loading a project.
- * The process involves:
- * 1.  Parsing the `stateString` (expected to be JSON) into a state object.
- *     The state object should contain `components` (array) and `tags` (object).
- * 2.  Clearing all existing HMI components from the Konva layer and clearing any
- *     active selections in the transformer.
- * 3.  Restoring the `tagDatabase` with the `tags` data from the parsed state.
- * 4.  Iterating through the `components` data from the parsed state and recreating
- *     each HMI component using `componentFactoryRef.create()`.
- * 5.  Updating the undo/redo button states and repainting the Konva layer.
+ * Restores the application state from a given JSON string.
+ * Used by undo/redo and project loading.
  *
- * If the `stateString` is invalid or critical references (like `layerRef` or
- * `componentFactoryRef`) are missing, an error is logged, and the restoration is aborted.
+ * Process:
+ * 1. Parses `stateString` into `{ components: Array<object>, tags: object }`.
+ * 2. Clears existing HMI components from `layerRef` and selections from `trRef`.
+ * 3. Restores `tagDatabase` from `state.tags`.
+ * 4. Recreates HMI components using `componentFactoryRef.create()` from `state.components`.
+ * 5. Updates undo/redo buttons and repaints `layerRef`.
  *
- * @export
- * @param {string} stateString - A stringified JSON object representing the application state
- *                               to restore. This string should conform to the structure saved
- *                               by `saveState()` or `getCurrentState()`.
+ * Logs an error and aborts if `stateString` is invalid or critical references are missing.
+ *
+ * @param {string} stateString - A stringified JSON object of the application state to restore.
+ *                               Must conform to the structure saved by `saveState()`.
  */
 export function restoreState(stateString) {
+    let state;
     try {
-        const state = JSON.parse(stateString);
-        if (
-            !state ||
-            typeof state.components === "undefined" ||
-            typeof state.tags === "undefined"
-        ) {
-            console.error(
-                "[StateManager] Invalid state string provided to restoreState:",
-                stateString,
-            );
-            return;
-        }
-
-        if (layerRef && componentFactoryRef && trRef) {
-            // Clear existing components and selections
-            layerRef.find(".hmi-component").forEach((node) => node.destroy());
-            trRef.nodes([]); // Clear transformer selection
-
-            tagDatabase = { ...state.tags }; // Restore tagDatabase from the saved state
-
-            // Recreate components from the saved state data
-            state.components.forEach((componentData) => {
-                if (!componentData.componentType) {
-                    console.warn(
-                        "[StateManager] Skipping component in restoreState due to missing componentType:",
-                        componentData,
-                    );
-                    return;
-                }
-                const component = componentFactoryRef.create(
-                    componentData.componentType,
-                    componentData, // Pass all saved attributes including x, y, id
-                );
-                if (component) {
-                    layerRef.add(component);
-                } else {
-                    console.warn(
-                        `[StateManager] Failed to create component of type ${componentData.componentType} during restoreState.`,
-                    );
-                }
-            });
-        } else {
-            console.error(
-                "[StateManager] Critical references (layer, factory, transformer) missing for restoreState.",
-            );
-        }
-        updateUndoRedoButtons();
-        if (layerRef) layerRef.batchDraw(); // Repaint the layer after restoring components
+        state = JSON.parse(stateString);
     } catch (error) {
+        console.error("[StateManager] Error parsing state string for restoreState:", error, "State string:", stateString);
+        return; // Abort if parsing fails
+    }
+
+    if (!state || typeof state.components === "undefined" || typeof state.tags === "undefined") {
         console.error(
-            "[StateManager] Error parsing or restoring state:",
-            error,
-            "State string:",
+            "[StateManager] Invalid state object structure provided to restoreState. State:",
+            state,
+            "Original string:",
             stateString,
         );
-        // Potentially notify user of failed state restoration
+        return;
     }
+
+    if (!layerRef || !componentFactoryRef || !trRef) {
+        console.error("[StateManager] Critical references (layer, factory, or transformer) missing for restoreState.");
+        return;
+    }
+
+    // Clear existing components and selections
+    layerRef.find(".hmi-component").forEach((node) => node.destroy());
+    trRef.nodes([]);
+
+    // Restore tagDatabase from the saved state (ensure deep copy if state.tags might be mutated elsewhere)
+    tagDatabase = JSON.parse(JSON.stringify(state.tags));
+
+    // Recreate components from the saved state data
+    state.components.forEach((componentData) => {
+        if (!componentData.componentType) {
+            console.warn(
+                "[StateManager] Skipping component in restoreState due to missing componentType:",
+                componentData,
+            );
+            return; // Skip this component
+        }
+        try {
+            const component = componentFactoryRef.create(
+                componentData.componentType,
+                componentData, // Pass all saved attributes including x, y, id
+            );
+            if (component) {
+                layerRef.add(component);
+            } else {
+                console.warn(
+                    `[StateManager] Failed to create component of type ${componentData.componentType} during restoreState. Factory returned null/undefined.`,
+                );
+            }
+        } catch (e) {
+            console.error(`[StateManager] Error creating component type ${componentData.componentType} during restoreState:`, e, "Component Data:", componentData);
+        }
+    });
+
+    updateUndoRedoButtons();
+    layerRef.batchDraw(); // Repaint the layer after restoring components
 }
 
 /**
  * Handles the "undo" action.
- * If there are states in the `undoStack` (beyond the initial state), this function:
- * 1.  Removes (pops) the current state from the `undoStack`.
- * 2.  Pushes this removed (current) state onto the `redoStack`.
- * 3.  Retrieves the new last state from the `undoStack` (which is the state to revert to).
- * 4.  Calls `restoreState()` with this retrieved state to update the application.
- * It does nothing if the `undoStack` has one or zero elements, as the initial empty
- * state cannot be undone further.
- *
- * @export
+ * If `undoStack` has states to revert to (more than the initial state):
+ * 1. Pops the current state from `undoStack`.
+ * 2. Pushes this popped (current) state onto `redoStack`.
+ * 3. Retrieves the new last state from `undoStack` (the state to revert to).
+ * 4. Calls `restoreState()` with this retrieved state.
+ * Does nothing if `undoStack` has one or zero elements (initial empty state).
  */
 export function handleUndo() {
-    if (undoStack.length <= 1) return; // Cannot undo the initial empty state
+    if (undoStack.length <= 1) { // Cannot undo the initial empty state
+        console.log("[StateManager] Undo stack empty or at initial state. Nothing to undo.");
+        return;
+    }
     const currentState = undoStack.pop();
-    redoStack.push(currentState);
-    const lastState = undoStack[undoStack.length - 1];
-    restoreState(lastState);
+    if (currentState) { // Ensure pop was successful
+        redoStack.push(currentState);
+        const lastState = undoStack[undoStack.length - 1];
+        if (lastState) {
+            restoreState(lastState);
+        } else {
+            console.error("[StateManager] Undo resulted in an empty previous state in undoStack.");
+        }
+    } else {
+        console.error("[StateManager] Failed to pop current state from undoStack.");
+    }
 }
 
 /**
  * Handles the "redo" action.
- * If there are states in the `redoStack`, this function:
- * 1.  Removes (pops) the next state from the `redoStack`.
- * 2.  Pushes this state onto the `undoStack` (as it's now the current state).
- * 3.  Calls `restoreState()` with this state to update the application.
- * It does nothing if the `redoStack` is empty.
- *
- * @export
+ * If `redoStack` has states:
+ * 1. Pops the next state from `redoStack`.
+ * 2. Pushes this state onto `undoStack` (it's now the current state).
+ * 3. Calls `restoreState()` with this state.
+ * Does nothing if `redoStack` is empty.
  */
 export function handleRedo() {
-    if (redoStack.length === 0) return; // Nothing to redo
+    if (redoStack.length === 0) {
+        console.log("[StateManager] Redo stack empty. Nothing to redo.");
+        return;
+    }
     const nextState = redoStack.pop();
-    undoStack.push(nextState);
-    restoreState(nextState);
+    if (nextState) { // Ensure pop was successful
+        undoStack.push(nextState);
+        restoreState(nextState);
+    } else {
+        console.error("[StateManager] Failed to pop next state from redoStack.");
+    }
 }
 
 /**
  * Returns the current state of the application as a stringified JSON object.
- * This function captures the current HMI components and `tagDatabase` state,
- * similar to `saveState()`, but it does *not* modify the `undoStack` or `redoStack`,
- * nor does it mark the project as dirty. This is primarily useful for operations
- * like exporting the current project or providing context to other modules (e.g., an AI assistant)
- * without affecting the undo/redo history.
+ * Captures HMI components and `tagDatabase` state, similar to `saveState()`,
+ * but does *not* modify `undoStack`, `redoStack`, or project dirty status.
+ * Useful for exporting or providing context (e.g., to AI assistant)
+ * without affecting undo/redo history.
  *
- * @export
- * @returns {string} A stringified JSON representation of the current application state.
- *                   Returns a stringified minimal empty state (`{ components: [], tags: {} }`)
- *                   if an error occurs during stringification or if `layerRef` is unavailable.
+ * @returns {string} Stringified JSON of current state (`{ components: [], tags: {} }`).
+ *                   Returns minimal empty state string on error or if `layerRef` is unavailable.
  */
 export function getCurrentState() {
-    const state = { components: [], tags: { ...tagDatabase } };
+    const state = {
+        components: [],
+        tags: JSON.parse(JSON.stringify(tagDatabase)) // Deep copy
+    };
+
     if (layerRef) {
         layerRef.find(".hmi-component").forEach((node) => {
             const attrsToSave = { ...node.attrs };
@@ -358,7 +379,7 @@ export function getCurrentState() {
 
             if (!componentData.componentType) {
                 console.warn(
-                    `Component with ID ${node.id()} is missing componentType in attrs during getCurrentState. Setting to 'Unknown'.`,
+                    `[StateManager] Component with ID ${node.id()} is missing componentType in attrs during getCurrentState. Setting to 'Unknown'.`,
                 );
                 componentData.componentType = "Unknown";
             }
@@ -366,80 +387,78 @@ export function getCurrentState() {
         });
     } else {
         console.warn(
-            "[StateManager] layerRef not available for getCurrentState. State will be incomplete.",
+            "[StateManager] layerRef not available for getCurrentState. Component state will be empty.",
         );
     }
+
     try {
         return JSON.stringify(state);
     } catch (error) {
-        console.error(
-            "[StateManager] Error stringifying current state:",
-            error,
-        );
-        return JSON.stringify({ components: [], tags: {} }); // Return minimal valid state
+        console.error("[StateManager] Error stringifying current state:", error);
+        return JSON.stringify({ components: [], tags: {} }); // Fallback to minimal valid state
     }
 }
 
 /**
  * Updates the enabled/disabled state of the undo and redo UI buttons.
- * The undo button is disabled if the `undoStack` contains one or fewer states (as the
- * initial empty state is not considered undoable). The redo button is disabled if the
- * `redoStack` is empty. This function relies on `undoBtnRef` and `redoBtnRef`
- * (references to the button DOM elements) being correctly initialized by `initStateManager`.
- *
- * @export
+ * - Undo button disabled if `undoStack` has <= 1 state (initial state not undoable).
+ * - Redo button disabled if `redoStack` is empty.
+ * Relies on `undoBtnRef` and `redoBtnRef` being initialized.
  */
 export function updateUndoRedoButtons() {
-    if (undoBtnRef && redoBtnRef) {
-        undoBtnRef.disabled = undoStack.length <= 1; // Initial state is not undoable
+    if (undoBtnRef) {
+        undoBtnRef.disabled = undoStack.length <= 1;
+    } else {
+        // console.warn("[StateManager] undoBtnRef not available for updateUndoRedoButtons.");
+    }
+    if (redoBtnRef) {
         redoBtnRef.disabled = redoStack.length === 0;
     } else {
-        // This might happen if called before initStateManager, though unlikely with current flow.
-        // console.warn("[StateManager] Undo/Redo buttons not available for updateUndoRedoButtons.");
+        // console.warn("[StateManager] redoBtnRef not available for updateUndoRedoButtons.");
     }
 }
 
 // --- Device Variable State Management (Tag Database) ---
 
 /**
- * Retrieves the current value of a specific variable for a given device from the `tagDatabase`.
- * The `tagDatabase` stores values in a nested structure: `tagDatabase[deviceId][variableName]`.
+ * Retrieves the current value of a specific variable for a device from `tagDatabase`.
+ * `tagDatabase` structure: `tagDatabase[deviceId][variableName]`.
  *
- * @export
- * @param {string} deviceId - The ID of the device for which to retrieve the variable value.
- * @param {string} variableName - The name of the variable whose value is to be retrieved.
- * @returns {*} The current value of the variable. Returns `undefined` if the `deviceId`
- *              or `variableName` does not exist in the `tagDatabase`.
+ * @param {string} deviceId - ID of the device.
+ * @param {string} variableName - Name of the variable.
+ * @returns {*} The variable's current value, or `undefined` if not found.
  */
 export function getDeviceVariableValue(deviceId, variableName) {
-    if (tagDatabase[deviceId]) {
+    if (tagDatabase[deviceId] && typeof tagDatabase[deviceId] === 'object') {
         return tagDatabase[deviceId][variableName];
     }
     return undefined;
 }
 
 /**
- * Sets the value of a specific variable for a given device within the `tagDatabase`.
- * After updating the value in the `tagDatabase`, this function iterates through all
- * HMI components on the Konva layer. If a component is found to be linked to the
- * specified `deviceId` and `variableName` (via its `attrs`), its `updateState()`
+ * Sets the value of a specific device variable in `tagDatabase`.
+ * After updating, it iterates through HMI components on `layerRef`. If a component
+ * is linked to the specified `deviceId` and `variableName`, its `updateState()`
  * method is called to refresh its visual representation.
- * Additionally, it calls `updateLiveVariableValueInManagerUI` to attempt to update
- * the value displayed in the Variable Manager UI, if it's open for that device.
+ * Also calls `updateLiveVariableValueInManagerUI` to update the Device Manager UI.
  *
- * @export
- * @param {string} deviceId - The ID of the device for which the variable value is being set.
- * @param {string} variableName - The name of the variable to update.
+ * @param {string} deviceId - ID of the device.
+ * @param {string} variableName - Name of the variable to update.
  * @param {*} value - The new value for the variable.
  */
 export function setDeviceVariableValue(deviceId, variableName, value) {
+    if (typeof deviceId !== 'string' || typeof variableName !== 'string') {
+        console.error("[StateManager] Invalid deviceId or variableName for setDeviceVariableValue.", { deviceId, variableName });
+        return;
+    }
+
     if (!tagDatabase[deviceId]) {
         tagDatabase[deviceId] = {};
     }
-    const oldValue = tagDatabase[deviceId][variableName];
+    // const oldValue = tagDatabase[deviceId][variableName]; // For debugging if needed
     tagDatabase[deviceId][variableName] = value;
 
-    // console.log( // Keep this for debugging real-time updates if needed
+    // console.debug(
     //     `[StateManager] Set variable: Device ${deviceId}, Var ${variableName} = ${value} (Old: ${oldValue})`
     // );
 

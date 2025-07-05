@@ -1,269 +1,302 @@
 // js/__tests__/aiAssistant.test.js
 
-// --- Mocks ---
-jest.mock('../config.js', () => ({
-    GRID_SIZE: 10,
+import { GRID_SIZE } from "../config.js";
+import * as utils from "../utils.js";
+import { componentFactory } from "../componentFactory.js";
+import * as stateManager from "../stateManager.js";
+import { initAiAssistant } from "../aiAssistant.js"; // Assuming handleSendMessage and executeAIActions are not directly exported
+
+// Mock dependencies
+jest.mock("../config.js", () => ({
+    GRID_SIZE: 10, // Using a specific value for predictable prompt generation
 }));
 
-// Mock utils.js
-// Fungsi mock akan dibuat di dalam factory dan diakses melalui require
-// setelah jest.resetModules() dan require ulang di beforeEach.
-let mockUtilsDivInstance;
-jest.mock('../utils.js', () => ({
-    addMessageToChatLog: jest.fn((chatLogEl, chatHistoryArr, sender, text) => {
-        let currentTextVal = text;
-        mockUtilsDivInstance = {
-            appendChild: jest.fn(),
-            setAttribute: jest.fn(),
-            style: {},
-            get textContent() { return currentTextVal; },
-            set textContent(value) { currentTextVal = value; }
+jest.mock("../utils.js", () => ({
+    addMessageToChatLog: jest.fn((logEl, history, sender, text) => {
+        const mockMessageDiv = {
+            textContent: text,
+            appendChild: jest.fn(), // For spinner
+            remove: jest.fn() // For spinner (if spinner is child of messageDiv)
         };
-        if (chatHistoryArr && Array.isArray(chatHistoryArr)) {
-            chatHistoryArr.push({ role: sender, parts: [{ text: currentTextVal }] });
+        // Simulate DOM behavior for testing purposes if needed by other parts of the test
+        if (logEl && typeof logEl.appendChild === 'function') {
+            logEl.appendChild(mockMessageDiv);
         }
-        return mockUtilsDivInstance;
+        // Simulate history update (simplified)
+        // history.push({ role: sender, parts: [{ text }] });
+        return mockMessageDiv;
     }),
     addThinkingDetails: jest.fn(),
-    getCanvasContext: jest.fn(() => "mocked canvas context"),
+    getCanvasContext: jest.fn(() => "Mocked Canvas Context"),
     setLoadingState: jest.fn(),
 }));
 
-// Mock componentFactory.js
-const mockComponentInstance = { id: 'new-comp-id', attrs: { address: 'test-addr' }, updateState: jest.fn() };
-jest.mock('../componentFactory.js', () => ({
+jest.mock("../componentFactory.js", () => ({
     componentFactory: {
-        create: jest.fn().mockReturnValue(mockComponentInstance), // Default mock implementation
+        create: jest.fn(),
     },
 }));
 
-jest.mock('../stateManager.js', () => ({
+jest.mock("../stateManager.js", () => ({
     saveState: jest.fn(),
     deleteDeviceVariableState: jest.fn(),
 }));
 
-global.fetch = jest.fn();
+describe("AIAssistant", () => {
+    let mockChatLogEl, mockChatInputEl, mockSendChatBtnEl, mockGeminiApiKeyInputEl;
+    let mockKonvaLayer, mockKonvaStage, mockKonvaTr;
+    let chatHistory; // This will be the actual array used by the module
+    let getChatHistoryFunc, updateChatHistoryFunc; // These will be the functions passed to init
+    let originalFetch;
+    let mockLocalStorage;
 
-const utils = require('../utils.js');
-const componentFactoryModule = require('../componentFactory.js').componentFactory;
-const stateManagerModule = require('../stateManager.js');
-const { initAiAssistant } = require('../aiAssistant.js');
+    const setupDomAndKonvaMocks = () => {
+        mockChatLogEl = { appendChild: jest.fn(), scrollTop: 0, scrollHeight: 0, children: [] };
+        mockChatInputEl = { value: "", disabled: false, addEventListener: jest.fn() }; // Ensure addEventListener is mocked
+        mockSendChatBtnEl = { disabled: false, addEventListener: jest.fn() };
+        mockGeminiApiKeyInputEl = { value: "test-api-key-from-input" };
 
+        document.getElementById = jest.fn(id => {
+            if (id === "chat-log") return mockChatLogEl;
+            if (id === "chat-input") return mockChatInputEl;
+            if (id === "send-chat-btn") return mockSendChatBtnEl;
+            if (id === "gemini-api-key") return mockGeminiApiKeyInputEl;
+            return null;
+        });
 
-// --- Test Suite ---
-describe('AI Assistant', () => {
-    let chatLogEl, chatInputEl, sendChatBtnEl;
-    let getChatHistoryMock, updateChatHistoryMock;
-    let mockKonvaLayer, mockKonvaTr, mockKonvaStage;
-    let konvaRefsForAI;
-    let chatHistory;
+        mockKonvaLayer = {
+            findOne: jest.fn(),
+            add: jest.fn(),
+            // Add other Konva Layer methods if AIAssistant directly uses them
+        };
+        mockKonvaStage = { width: jest.fn(() => 800), height: jest.fn(() => 600) };
+        mockKonvaTr = { nodes: jest.fn(() => []) };
+    };
+
+    beforeAll(() => {
+        // Mock localStorage for Gemini API Key tests
+        mockLocalStorage = (() => {
+            let store = {};
+            return {
+                getItem: jest.fn(key => store[key] || null),
+                setItem: jest.fn((key, value) => { store[key] = value.toString(); }),
+                clear: jest.fn(() => { store = {}; }),
+                removeItem: jest.fn(key => delete store[key]),
+            };
+        })();
+        Object.defineProperty(window, 'localStorage', { value: mockLocalStorage, configurable: true });
+    });
+
 
     beforeEach(() => {
-        jest.resetModules();
+        jest.clearAllMocks();
+        setupDomAndKonvaMocks();
 
-        // Re-require modules to get fresh mocks if their internal state was changed by jest.resetModules()
-        // or if their mocks are defined using variables from outer scope that resetModules might affect.
-        // For simple jest.fn() mocks at module level, this might not be strictly needed after initial setup,
-        // but it's safer if mocks have complex setup or internal state.
-        const newUtils = require('../utils.js');
-        const newComponentFactoryModule = require('../componentFactory.js').componentFactory;
-        const newStateManagerModule = require('../stateManager.js');
-        const newAiAssistantModule = require('../aiAssistant.js');
-
-        // Assign to outer scope variables for use in tests
-        utils.addMessageToChatLog = newUtils.addMessageToChatLog;
-        utils.addThinkingDetails = newUtils.addThinkingDetails;
-        utils.getCanvasContext = newUtils.getCanvasContext;
-        utils.setLoadingState = newUtils.setLoadingState;
-        componentFactoryModule.create = newComponentFactoryModule.create;
-        stateManagerModule.saveState = newStateManagerModule.saveState;
-        stateManagerModule.deleteDeviceVariableState = newStateManagerModule.deleteDeviceVariableState;
-        // initAiAssistantFn = newAiAssistantModule.initAiAssistant; // initAiAssistant is already imported globally
-
-        // Clear all mocks
-        utils.addMessageToChatLog.mockClear();
-        utils.addThinkingDetails.mockClear();
-        utils.getCanvasContext.mockClear().mockReturnValue("mocked canvas context");
-        utils.setLoadingState.mockClear();
-        componentFactoryModule.create.mockClear().mockReturnValue(mockComponentInstance);
-        stateManagerModule.saveState.mockClear();
-        stateManagerModule.deleteDeviceVariableState.mockClear();
-        global.fetch.mockClear();
-
-        utils.addMessageToChatLog.mockImplementation((chatLogEl, chatHistoryArr, sender, text) => {
-            let currentTextVal = text;
-            const newMockDiv = {
-                appendChild: jest.fn(),
-                setAttribute: jest.fn(),
-                style: {},
-                get textContent() { return currentTextVal; },
-                set textContent(value) { currentTextVal = value; }
-            };
-            if (chatHistoryArr && Array.isArray(chatHistoryArr)) {
-                chatHistoryArr.push({ role: sender, parts: [{ text: currentTextVal }] });
-            }
-            return newMockDiv;
-        });
-
-        document.body.innerHTML = `
-            <div id="chat-log"></div>
-            <input id="chat-input" />
-            <button id="send-chat-btn"></button>
-            <input id="gemini-api-key" value="test-api-key" />
-        `;
-        chatLogEl = document.getElementById('chat-log');
-        chatInputEl = document.getElementById('chat-input');
-        sendChatBtnEl = document.getElementById('send-chat-btn');
-
+        // Reset and manage chatHistory directly for test observation
         chatHistory = [];
-        getChatHistoryMock = jest.fn(() => chatHistory);
-        updateChatHistoryMock = jest.fn((newHistory) => {
-            chatHistory = [...newHistory];
+        getChatHistoryFunc = jest.fn(() => chatHistory);
+        updateChatHistoryFunc = jest.fn(newHistory => {
+            chatHistory.length = 0; // Clear current
+            chatHistory.push(...newHistory); // Replace with new
         });
 
-        mockKonvaLayer = { findOne: jest.fn(), add: jest.fn() };
-        mockKonvaTr = {};
-        mockKonvaStage = { width: jest.fn(() => 800), height: jest.fn(() => 600) };
-        konvaRefsForAI = {
-            layer: mockKonvaLayer,
-            tr: mockKonvaTr,
-            stage: mockKonvaStage,
+        originalFetch = global.fetch;
+        global.fetch = jest.fn();
+
+        // Default localStorage to not having the key unless specified by a test
+        mockLocalStorage.getItem.mockImplementation(key => key === 'geminiApiKey' ? null : null);
+
+
+        initAiAssistant(
+            mockChatLogEl,
+            mockChatInputEl,
+            mockSendChatBtnEl,
+            getChatHistoryFunc, // Pass the getter
+            updateChatHistoryFunc, // Pass the setter
+            { stage: mockKonvaStage, layer: mockKonvaLayer, tr: mockKonvaTr },
+            {}
+        );
+    });
+    afterEach(() => {
+        global.fetch = originalFetch;
+    });
+
+
+    describe("initAiAssistant", () => {
+        test("should attach event listeners to send button and chat input", () => {
+            // Listeners are attached in initAiAssistant which is called in beforeEach
+            expect(mockSendChatBtnEl.addEventListener).toHaveBeenCalledWith("click", expect.any(Function));
+            expect(mockChatInputEl.addEventListener).toHaveBeenCalledWith("keydown", expect.any(Function));
+        });
+    });
+
+    describe("handleSendMessage (via event listeners)", () => {
+        // Helper to simulate user sending a message
+        const simulateUserSendMessage = (prompt) => {
+            mockChatInputEl.value = prompt;
+            // Find and trigger the click listener attached by initAiAssistant
+            const clickListenerCall = mockSendChatBtnEl.addEventListener.mock.calls.find(call => call[0] === 'click');
+            if (clickListenerCall && typeof clickListenerCall[1] === 'function') {
+                clickListenerCall[1](); // Execute the listener
+            } else {
+                throw new Error("Send button click listener not found or not a function.");
+            }
         };
 
-        Storage.prototype.getItem = jest.fn();
-        Storage.prototype.setItem = jest.fn();
-    });
-
-    describe('initAiAssistant', () => {
-        test('should attach event listeners to send button and chat input', () => {
-            const sendButtonSpy = jest.spyOn(sendChatBtnEl, 'addEventListener');
-            const inputSpy = jest.spyOn(chatInputEl, 'addEventListener');
-
-            initAiAssistant(
-                chatLogEl, chatInputEl, sendChatBtnEl,
-                getChatHistoryMock, updateChatHistoryMock,
-                konvaRefsForAI, {}
-            );
-
-            expect(sendButtonSpy).toHaveBeenCalledWith('click', expect.any(Function));
-            expect(inputSpy).toHaveBeenCalledWith('keydown', expect.any(Function));
-
-            sendButtonSpy.mockRestore();
-            inputSpy.mockRestore();
-        });
-    });
-
-    describe('handleSendMessage (via event listeners)', () => {
-        beforeEach(() => {
-            initAiAssistant(
-                chatLogEl, chatInputEl, sendChatBtnEl,
-                getChatHistoryMock, updateChatHistoryMock,
-                konvaRefsForAI, {}
-            );
-        });
-
-        test('should do nothing if user prompt is empty', async () => {
-            chatInputEl.value = "   ";
-            await sendChatBtnEl.click();
+        test("should do nothing if prompt is empty", async () => {
+            simulateUserSendMessage("");
             expect(utils.addMessageToChatLog).not.toHaveBeenCalled();
             expect(global.fetch).not.toHaveBeenCalled();
         });
 
-        test('should show error if API key is missing', async () => {
-            document.getElementById('gemini-api-key').value = "";
-            localStorage.getItem.mockReturnValueOnce(null);
+        test("should handle missing API key (from input and localStorage)", async () => {
+            mockGeminiApiKeyInputEl.value = "";
+            mockLocalStorage.getItem.mockReturnValueOnce(null);
 
-            chatInputEl.value = "Buat lampu";
-            await sendChatBtnEl.click();
+            simulateUserSendMessage("test prompt");
+            await new Promise(process.nextTick);
 
             expect(utils.addMessageToChatLog).toHaveBeenCalledTimes(2);
-            expect(utils.setLoadingState).toHaveBeenCalledTimes(2);
-
-            const lastMessage = chatHistory[chatHistory.length -1];
-            expect(lastMessage.parts[0].text).toBe("API Key Gemini belum diatur.");
+            const aiErrorMsgDiv = mockChatLogEl.appendChild.mock.calls[1][0];
+            expect(aiErrorMsgDiv.textContent).toBe("Gemini API Key is not set. Please configure it in AI Settings.");
             expect(global.fetch).not.toHaveBeenCalled();
+            expect(utils.setLoadingState).toHaveBeenLastCalledWith(mockChatInputEl, mockSendChatBtnEl, false);
         });
 
-        // TODO: Investigate why componentFactoryModule.create is not being called in the test environment
-        // despite logs in aiAssistant.js indicating it should be.
-        test.skip('SKIPPED: should call fetch with correct payload and process successful "add" action', async () => {
-            chatInputEl.value = "tambah lampu di 100,100";
-            const mockApiResponse = {
-                candidates: [{
-                    content: {
-                        parts: [{ text: JSON.stringify([{ action: "add", componentType: "bit-lamp", properties: { x: 100, y: 100, label: "Lampu Baru" } }]) }]
-                    }
-                }]
+        test("should use API key from localStorage if input is empty", async () => {
+            mockGeminiApiKeyInputEl.value = "";
+            mockLocalStorage.getItem.mockReturnValueOnce("ls-api-key-123");
+            global.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ candidates: [] }) });
+
+            simulateUserSendMessage("prompt with ls key");
+            await new Promise(process.nextTick);
+
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining("key=ls-api-key-123"),
+                expect.any(Object)
+            );
+        });
+
+        test("should use API key from input if present, overriding localStorage", async () => {
+            mockGeminiApiKeyInputEl.value = "input-api-key-789";
+            mockLocalStorage.getItem.mockReturnValueOnce("ls-api-key-123"); // This should be ignored
+            global.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ candidates: [] }) });
+
+            simulateUserSendMessage("prompt with input key");
+            await new Promise(process.nextTick);
+
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining("key=input-api-key-789"),
+                expect.any(Object)
+            );
+        });
+
+
+        test("should construct payload, call fetch, and executeAIActions on successful 'add' action", async () => {
+            const mockAiResponse = {
+                candidates: [{ content: { parts: [{ text: JSON.stringify([{ action: "add", componentType: "bit-lamp", properties: { x: 10, y: 10, label: "New Lamp" } }]) }] } }]
             };
-            global.fetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => mockApiResponse,
-            });
+            global.fetch.mockResolvedValueOnce({ ok: true, json: async () => mockAiResponse });
+            const mockCreatedComponent = { id: 'new-lamp-id', attrs:{} }; // Mock the created component
+            componentFactory.create.mockReturnValueOnce(mockCreatedComponent);
 
-            await sendChatBtnEl.click();
+            simulateUserSendMessage("add a lamp at 10,10 named New Lamp");
+            await new Promise(process.nextTick);
 
-            expect(global.fetch).toHaveBeenCalledTimes(1);
             expect(utils.getCanvasContext).toHaveBeenCalledWith(mockKonvaLayer, mockKonvaTr);
-
-            const fetchCallArg = JSON.parse(global.fetch.mock.calls[0][1].body);
-            expect(fetchCallArg.contents).toBeInstanceOf(Array);
-            expect(fetchCallArg.generationConfig.responseSchema).toBeDefined();
-
-            expect(componentFactoryModule.create).toHaveBeenCalledWith("bit-lamp", { x: 100, y: 100, label: "Lampu Baru" });
-            expect(mockKonvaLayer.add).toHaveBeenCalledWith(mockComponentInstance);
-            expect(stateManagerModule.saveState).toHaveBeenCalled();
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining("gemini-2.0-flash:generateContent?key=test-api-key-from-input"),
+                expect.objectContaining({
+                    method: "POST",
+                    body: expect.stringContaining("\"action\":\"add\"")
+                })
+            );
+            expect(componentFactory.create).toHaveBeenCalledWith("bit-lamp", { x: 10, y: 10, label: "New Lamp" });
+            expect(mockKonvaLayer.add).toHaveBeenCalledWith(mockCreatedComponent);
+            expect(stateManager.saveState).toHaveBeenCalled();
             expect(utils.addThinkingDetails).toHaveBeenCalled();
-
-            const lastMessage = chatHistory[chatHistory.length -1];
-            expect(lastMessage.parts[0].text).toBe("Baik, sudah saya laksanakan.");
+            const aiConfirmationMsgDiv = mockChatLogEl.appendChild.mock.calls.slice(-1)[0][0]; // Last message added should be AI's
+            expect(aiConfirmationMsgDiv.textContent).toBe("Okay, I've made the changes.");
         });
 
-        // TODO: Investigate why chatHistory text is not updated correctly for model error/clarification messages.
-        test.skip('SKIPPED: should handle API error response', async () => {
-            chatInputEl.value = "perintah gagal";
-            global.fetch.mockResolvedValueOnce({
-                ok: false,
-                status: 500,
-                text: async () => "Internal Server Error",
-            });
+        test("should handle API error response from fetch", async () => {
+            global.fetch.mockResolvedValueOnce({ ok: false, status: 500, text: async () => "Internal Server Error Details" });
 
-            await sendChatBtnEl.click();
-            expect(global.fetch).toHaveBeenCalledTimes(1);
-            const lastMessage = chatHistory[chatHistory.length -1];
-            expect(lastMessage.parts[0].text).toContain("Maaf, terjadi kesalahan: API Error: 500 Internal Server Error");
+            simulateUserSendMessage("trigger api error");
+            await new Promise(process.nextTick);
+
+            const aiErrorMsgDiv = mockChatLogEl.appendChild.mock.calls.slice(-1)[0][0];
+            expect(aiErrorMsgDiv.textContent).toContain("API Error: 500 - Internal Server Error Details");
         });
 
-        test('should handle network error during fetch', async () => {
-            chatInputEl.value = "perintah error jaringan";
-            global.fetch.mockRejectedValueOnce(new Error("Network failure"));
+        test("should handle network error during fetch call", async () => {
+            global.fetch.mockRejectedValueOnce(new Error("Network connection failed"));
 
-            await sendChatBtnEl.click();
-            expect(global.fetch).toHaveBeenCalledTimes(1);
-            const lastMessage = chatHistory[chatHistory.length -1];
-            expect(lastMessage.parts[0].text).toContain("Maaf, terjadi kesalahan: Network failure");
+            simulateUserSendMessage("trigger network error");
+            await new Promise(process.nextTick);
+
+            const aiErrorMsgDiv = mockChatLogEl.appendChild.mock.calls.slice(-1)[0][0];
+            expect(aiErrorMsgDiv.textContent).toContain("Network connection failed");
         });
 
-        // TODO: Investigate why chatHistory text is not updated correctly for model error/clarification messages.
-        test.skip('SKIPPED: should handle AI clarification message', async () => {
-            chatInputEl.value = "perintah kurang jelas";
-            const mockApiResponse = {
-                candidates: [{
-                    content: {
-                        parts: [{ text: JSON.stringify([{ action: "clarify", message: "ID mana yang Anda maksud?" }]) }]
-                    }
-                }]
+        test("should handle 'clarify' action from AI", async () => {
+            const clarificationMsg = "Which lamp do you mean?";
+            const mockAiResponse = {
+                candidates: [{ content: { parts: [{ text: JSON.stringify([{ action: "clarify", message: clarificationMsg }]) }] } }]
             };
-            global.fetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => mockApiResponse,
-            });
+            global.fetch.mockResolvedValueOnce({ ok: true, json: async () => mockAiResponse });
 
-            await sendChatBtnEl.click();
-            expect(global.fetch).toHaveBeenCalledTimes(1);
-            const lastMessage = chatHistory[chatHistory.length -1];
-            expect(lastMessage.parts[0].text).toBe("ID mana yang Anda maksud?");
-            expect(componentFactoryModule.create).not.toHaveBeenCalled();
-            expect(stateManagerModule.saveState).not.toHaveBeenCalled();
+            simulateUserSendMessage("update the lamp");
+            await new Promise(process.nextTick);
+
+            expect(componentFactory.create).not.toHaveBeenCalled(); // No component action
+            expect(stateManager.saveState).not.toHaveBeenCalled(); // No state change
+            const aiClarificationMsgDiv = mockChatLogEl.appendChild.mock.calls.slice(-1)[0][0];
+            expect(aiClarificationMsgDiv.textContent).toBe(clarificationMsg);
         });
     });
+
+    // Direct tests for executeAIActions (assuming it's made exportable for testing or tested via handleSendMessage)
+    // For this exercise, we'll assume it's private and its effects are covered by handleSendMessage tests.
+    // If it were public, tests would look like:
+    /*
+    describe("executeAIActions (if public)", () => {
+        beforeEach(() => {
+            // Ensure konvaRefsForAI is set up for executeAIActions if it's called directly
+            // This would typically be done by initAiAssistant, but if testing in isolation:
+            konvaRefsForAI = { layer: mockKonvaLayer, stage: mockKonvaStage, tr: mockKonvaTr };
+        });
+
+        test("should perform 'update' action on a found node", () => {
+            const mockNodeToUpdate = { setAttrs: jest.fn(), updateState: jest.fn(), attrs: {} };
+            mockKonvaLayer.findOne.mockReturnValueOnce(mockNodeToUpdate);
+            const actions = [{ action: "update", id: "node-123", properties: { label: "Updated Label" } }];
+
+            const result = executeAIActions(actions); // This function is not exported
+
+            expect(mockKonvaLayer.findOne).toHaveBeenCalledWith("#node-123");
+            expect(mockNodeToUpdate.setAttrs).toHaveBeenCalledWith({ label: "Updated Label" });
+            expect(mockNodeToUpdate.updateState).toHaveBeenCalled();
+            expect(result.actionTaken).toBe(true);
+            expect(stateManager.saveState).toHaveBeenCalled();
+        });
+         test("should perform 'delete' action and call deleteDeviceVariableState", () => {
+            const mockNodeToDelete = {
+                destroy: jest.fn(),
+                attrs: { deviceId: "dev1", variableName: "varX" },
+                id: () => "node-to-delete" // Mock id method if used by console log
+            };
+            mockKonvaLayer.findOne.mockReturnValueOnce(mockNodeToDelete);
+            const actions = [{ action: "delete", id: "node-to-delete" }];
+
+            const result = executeAIActions(actions);
+
+            expect(stateManager.deleteDeviceVariableState).toHaveBeenCalledWith("dev1", "varX");
+            expect(mockNodeToDelete.destroy).toHaveBeenCalled();
+            expect(result.actionTaken).toBe(true);
+            expect(stateManager.saveState).toHaveBeenCalled();
+        });
+    });
+    */
+
 });

@@ -1,40 +1,36 @@
 /**
  * @file This file contains various utility functions used across the HMI application.
  * These functions provide common functionalities such as updating UI status messages,
- * managing chat logs for the AI assistant, generating context from the HMI canvas,
- * and controlling UI loading states.
+ * managing chat logs for the AI assistant, generating context from the HMI canvas for the AI,
+ * and controlling UI loading states for asynchronous operations.
  * @module js/utils
  */
 
-let statusTimeoutId = null; // Variable to store the timeout ID for status updates
+/**
+ * Timeout ID for the status message, allowing it to be cleared if a new message arrives.
+ * @type {number | null}
+ * @private
+ */
+let statusTimeoutId = null;
 
 /**
- * Updates a status message displayed in the UI.
- * This function targets a DOM element with the ID "status-info".
- * It sets the text content of this element to the provided `message`.
- * If a `duration` greater than 0 is specified, the message will revert to a default
- * "Selamat datang!" message after that duration. Any existing timeout for a previous
- * status message is cleared before setting a new one.
+ * Updates a status message displayed in the UI, typically in an element with ID "status-info".
+ * The message can be set to auto-revert to a default message after a specified duration.
  *
- * @export
- * @param {string} message - The message text to display in the status area.
- * @param {number} [duration=2000] - The duration in milliseconds for how long the message
- *                                   should be displayed. If `0`, the message will persist
- *                                   until `updateStatus` is called again. After the specified
- *                                   duration (if > 0), the status message typically reverts
- *                                   to "Selamat datang!".
+ * @param {string} message - The message text to display.
+ * @param {number} [duration=2000] - Duration in milliseconds for the message to be displayed.
+ *                                   If `0`, the message persists until the next call.
+ *                                   After the duration (if > 0), the status reverts to "Selamat datang!".
+ * @param {string} [defaultMessage="Selamat datang!"] - The default message to revert to after duration.
  */
-export function updateStatus(message, duration = 2000) {
+export function updateStatus(message, duration = 2000, defaultMessage = "Selamat datang!") {
     const statusInfo = document.getElementById("status-info");
     if (!statusInfo) {
-        console.warn(
-            "Element with ID 'status-info' not found for updateStatus.",
-        );
+        console.warn("[Utils] Element with ID 'status-info' not found for updateStatus.");
         return;
     }
 
-    // Clear any existing timeout to prevent it from overriding the new message or its reversion.
-    if (statusTimeoutId) {
+    if (statusTimeoutId) { // Clear any existing timeout
         clearTimeout(statusTimeoutId);
         statusTimeoutId = null;
     }
@@ -43,165 +39,163 @@ export function updateStatus(message, duration = 2000) {
 
     if (duration > 0) {
         statusTimeoutId = setTimeout(() => {
-            // Only revert if the message currently displayed is the one we set.
-            // This prevents reverting if another updateStatus call happened in between.
+            // Only revert if the message hasn't been changed by another call in the meantime
             if (statusInfo.textContent === message) {
-                statusInfo.textContent = "Selamat datang!"; // Consider making this default message a parameter or constant
+                statusInfo.textContent = defaultMessage;
             }
-            statusTimeoutId = null; // Reset ID after timeout execution
+            statusTimeoutId = null;
         }, duration);
     }
 }
 
 /**
- * Adds a new message to a specified chat log DOM element and updates an array
- * that stores the chat history. It creates a new `div` for the message, styles it
- * based on the `sender` ("user" or "model"), appends it to the chat log,
- * and scrolls the log to ensure the new message is visible. The message is also
- * added to the `chatHistoryArr` in the format expected by the AI model.
+ * Adds a new message to a chat log DOM element and updates the chat history array.
+ * Creates a new `div` for the message, styles it based on the sender, appends it
+ * to the chat log, and scrolls the log to make the new message visible.
+ * The message is also added to `chatHistoryArr` in the format `{ role: sender, parts: [{ text }] }`.
  *
- * @export
- * @param {HTMLElement} chatLogEl - The DOM element that serves as the container for chat messages.
- * @param {Array<object>} chatHistoryArr - An array where chat history is stored. Each entry is an object
- *                                       typically with `role` (sender) and `parts` (message content).
- * @param {string} sender - A string indicating the sender of the message, usually "user" or "model".
- *                          This determines the styling of the message bubble.
- * @param {string} text - The text content of the message to be added.
- * @returns {HTMLDivElement} The newly created `div` element that represents the message in the chat log.
+ * @param {HTMLElement} chatLogElement - The DOM element serving as the chat log container.
+ * @param {Array<object>} chatHistoryArray - The array storing the chat history objects.
+ * @param {string} sender - Indicates the sender, typically "user" or "model".
+ *                          Determines the styling of the message bubble.
+ * @param {string} textContent - The text content of the message.
+ * @returns {HTMLDivElement | null} The newly created `div` element for the message, or `null` if `chatLogElement` is invalid.
  */
-export function addMessageToChatLog(chatLogEl, chatHistoryArr, sender, text) {
-    const messageDiv = document.createElement("div");
-    messageDiv.classList.add(
-        "chat-message",
-        sender === "user" ? "user-message" : "model-message",
-    );
-    messageDiv.textContent = text;
-    chatLogEl.appendChild(messageDiv);
-    // Ensure scroll properties are available and writable for testing and functionality
-    if (
-        typeof chatLogEl.scrollTop === "number" &&
-        typeof chatLogEl.scrollHeight === "number"
-    ) {
-        chatLogEl.scrollTop = chatLogEl.scrollHeight;
+export function addMessageToChatLog(chatLogElement, chatHistoryArray, sender, textContent) {
+    if (!chatLogElement || typeof chatLogElement.appendChild !== 'function') {
+        console.error("[Utils] Invalid chatLogEl provided to addMessageToChatLog.");
+        return null;
     }
-    chatHistoryArr.push({ role: sender, parts: [{ text }] });
+    if (!Array.isArray(chatHistoryArray)) {
+        console.error("[Utils] Invalid chatHistoryArray provided to addMessageToChatLog.");
+        // Potentially still add to DOM if chatLogEl is valid, but history won't be updated.
+    }
+
+    const messageDiv = document.createElement("div");
+    messageDiv.classList.add("chat-message", sender === "user" ? "user-message" : "model-message");
+    messageDiv.textContent = textContent;
+    chatLogElement.appendChild(messageDiv);
+
+    // Auto-scroll to the bottom of the chat log
+    if (typeof chatLogElement.scrollTop === "number" && typeof chatLogElement.scrollHeight === "number") {
+        chatLogElement.scrollTop = chatLogElement.scrollHeight;
+    }
+
+    if (Array.isArray(chatHistoryArray)) {
+        chatHistoryArray.push({ role: sender, parts: [{ text: textContent }] });
+    }
     return messageDiv;
 }
 
 /**
- * Adds a collapsible "thinking details" section to a specified chat log DOM element.
- * This is typically used to display the AI's internal plan or reasoning process
- * in a user-friendly, expandable format. The `planJson` string is parsed
- * and pretty-printed within a `<pre>` tag inside a `<details>` element.
- * The chat log is scrolled to ensure the new details section is visible.
+ * Adds a collapsible "thinking details" section to a chat log DOM element.
+ * Used to display the AI's internal plan or structured JSON response in an expandable format.
+ * The `planJsonString` is parsed and pretty-printed within `<pre>` tags.
  *
- * @export
- * @param {HTMLElement} chatLogEl - The DOM element that serves as the container for chat messages.
- * @param {string} planJson - A JSON string that represents the AI's thinking process or plan.
- *                            This string will be parsed and pretty-printed. If parsing fails,
- *                            an error message is displayed instead.
+ * @param {HTMLElement} chatLogElement - The DOM element for the chat log container.
+ * @param {string} planJsonString - A JSON string representing the AI's plan or structured data.
+ *                                  If parsing fails, an error message is displayed.
  */
-export function addThinkingDetails(chatLogEl, planJson) {
+export function addThinkingDetails(chatLogElement, planJsonString) {
+    if (!chatLogElement || typeof chatLogElement.appendChild !== 'function') {
+        console.error("[Utils] Invalid chatLogEl provided to addThinkingDetails.");
+        return;
+    }
+
     const details = document.createElement("details");
-    details.classList.add("thinking-details");
+    details.classList.add("thinking-details", "p-2", "my-1", "border", "border-gray-600", "rounded-md", "bg-gray-700", "text-xs");
+
     const summary = document.createElement("summary");
-    summary.textContent = "Proses Berpikir 🧠"; // Consider i18n or customization for this text
+    summary.textContent = "View AI Reasoning 🧠"; // User-friendly text
+    summary.classList.add("cursor-pointer", "font-semibold", "text-gray-300");
     details.appendChild(summary);
 
     const pre = document.createElement("pre");
+    pre.classList.add("mt-2", "p-2", "bg-gray-800", "rounded", "overflow-auto", "max-h-60"); // Styling for the preformatted text block
     try {
-        pre.textContent = JSON.stringify(JSON.parse(planJson), null, 2);
+        pre.textContent = JSON.stringify(JSON.parse(planJsonString), null, 2); // Pretty-print JSON
     } catch (error) {
-        console.error("Failed to parse planJson in addThinkingDetails:", error);
-        pre.textContent = "Error displaying thinking process: Invalid JSON.";
+        console.error("[Utils] Failed to parse planJsonString in addThinkingDetails:", error);
+        pre.textContent = "Error displaying AI reasoning: Invalid JSON format.";
     }
-
     details.appendChild(pre);
-    chatLogEl.appendChild(details);
-    // Ensure scroll properties are available and writable
-    if (
-        typeof chatLogEl.scrollTop === "number" &&
-        typeof chatLogEl.scrollHeight === "number"
-    ) {
-        chatLogEl.scrollTop = chatLogEl.scrollHeight;
+    chatLogElement.appendChild(details);
+
+    if (typeof chatLogElement.scrollTop === "number" && typeof chatLogElement.scrollHeight === "number") {
+        chatLogElement.scrollTop = chatLogElement.scrollHeight; // Scroll to new details
     }
 }
 
 /**
- * Generates a textual summary of the current state of the HMI canvas.
- * This summary includes a list of all HMI components present on the `currentLayer`
- * (detailing their type, ID, label, and address/binding) and a list of any
- * currently selected components in the `currentTr` (transformer).
- * This function is primarily used to provide context to the AI assistant.
+ * Generates a textual summary of the current HMI canvas state for AI context.
+ * Includes a list of all HMI components (type, ID, label, data binding) and any selected components.
  *
- * @export
- * @param {Konva.Layer} currentLayer - The Konva.Layer instance that contains all the HMI components.
- *                                     It must have a `find` method to locate components (e.g., by class name).
- * @param {Konva.Transformer} currentTr - The Konva.Transformer instance that holds the currently selected nodes.
- *                                        It must have a `nodes` method to get the array of selected nodes.
- * @returns {string} A string describing the current canvas content and selection.
- *                   Returns an error message string if `currentLayer` or `currentTr` are invalid.
+ * @param {import('konva/lib/Layer').Layer | null} konvaLayer - The Konva.Layer containing HMI components.
+ *                                     Must have a `find` method (e.g., `konvaLayer.find(".hmi-component")`).
+ * @param {import('konva/lib/shapes/Transformer').Transformer | null} konvaTransformer - The Konva.Transformer holding selected nodes.
+ *                                        Must have a `nodes()` method.
+ * @returns {string} A descriptive string of the canvas content and selection.
+ *                   Returns an error message if Konva objects are invalid.
  */
-export function getCanvasContext(currentLayer, currentTr) {
+export function getCanvasContext(konvaLayer, konvaTransformer) {
     let context = "";
-    // Basic checks for Konva objects
-    if (!currentLayer || typeof currentLayer.find !== "function") {
-        return "Error: Invalid Konva Layer provided.";
+
+    if (!konvaLayer || typeof konvaLayer.find !== "function") {
+        return "Error: HMI layer data is unavailable for AI context.";
     }
-    if (!currentTr || typeof currentTr.nodes !== "function") {
-        return "Error: Invalid Konva Transformer provided.";
+    if (!konvaTransformer || typeof konvaTransformer.nodes !== "function") {
+        return "Error: HMI selection data is unavailable for AI context.";
     }
 
-    const components = currentLayer.find(".hmi-component");
+    const components = konvaLayer.find(".hmi-component");
     if (components.length === 0) {
-        context += "Kanvas kosong.";
+        context += "The canvas is currently empty.\n";
     } else {
-        context += "Komponen di kanvas:\n";
-        context += components
-            .map(
-                (n) =>
-                    `- ${n.attrs.componentType || "N/A"} (id: "${n.id()}", label: "${
-                        n.attrs.label || "N/A"
-                    }", alamat: "${n.attrs.address || "N/A"}")`,
-            )
-            .join("\n");
+        context += "Components currently on the canvas:\n";
+        context += components.map(node => {
+            const attrs = node.attrs || {}; // Ensure attrs exists
+            const id = typeof node.id === 'function' ? node.id() : attrs.id || "N/A";
+            const type = attrs.componentType || "UnknownType";
+            const label = attrs.label || "No Label";
+            // Using deviceId and variableName as the primary binding info
+            const binding = attrs.deviceId && attrs.variableName ? ` (Bound to: ${attrs.deviceId}.${attrs.variableName})` : (attrs.address ? ` (Legacy Address: ${attrs.address})` : " (Not Bound)");
+            return `- Type: ${type}, ID: "${id}", Label: "${label}"${binding}`;
+        }).join("\n");
     }
 
-    const selectedNodes = currentTr.nodes();
+    const selectedNodes = konvaTransformer.nodes();
     if (selectedNodes.length > 0) {
-        context += `\n\nElemen Terpilih (${selectedNodes.length}):\n`;
-        context += selectedNodes
-            .map(
-                (n) =>
-                    `- ${n.attrs.componentType || "N/A"} (id: "${n.id()}", alamat: "${n.attrs.address || "N/A"}")`,
-            )
-            .join("\n");
+        context += `\n\nCurrently Selected Components (${selectedNodes.length}):\n`;
+        context += selectedNodes.map(node => {
+            const attrs = node.attrs || {};
+            const id = typeof node.id === 'function' ? node.id() : attrs.id || "N/A";
+            const type = attrs.componentType || "UnknownType";
+            const binding = attrs.deviceId && attrs.variableName ? ` (Bound to: ${attrs.deviceId}.${attrs.variableName})` : (attrs.address ? ` (Legacy Address: ${attrs.address})` : "");
+            return `- Type: ${type}, ID: "${id}"${binding}`;
+        }).join("\n");
+    } else {
+        context += "\n\nNo components are currently selected.";
     }
     return context;
 }
 
 /**
- * Enables or disables UI elements typically used for chat input, such as a text input
- * field and a send button. This is useful for preventing user input while an
- * asynchronous operation (like waiting for an AI response) is in progress.
+ * Enables or disables UI elements (typically chat input and send button) to indicate a loading state.
+ * Useful for preventing user input during asynchronous operations like AI API calls.
  *
- * @export
- * @param {HTMLInputElement|null} chatInputEl - The chat input DOM element. If `null` or not provided,
- *                                       a warning is logged, but the function continues.
- * @param {HTMLButtonElement|null} sendChatBtnEl - The send chat button DOM element. If `null` or not provided,
- *                                        a warning is logged, but the function continues.
- * @param {boolean} isLoading - If `true`, the input field and button will be disabled.
- *                              If `false`, they will be enabled.
+ * @param {HTMLInputElement | null} chatInputElement - The chat input DOM element.
+ * @param {HTMLButtonElement | null} sendChatButtonElement - The send chat button DOM element.
+ * @param {boolean} isLoading - `true` to disable elements (loading), `false` to enable them.
  */
-export function setLoadingState(chatInputEl, sendChatBtnEl, isLoading) {
-    if (chatInputEl) {
-        chatInputEl.disabled = isLoading;
+export function setLoadingState(chatInputElement, sendChatButtonElement, isLoading) {
+    if (chatInputElement) {
+        chatInputElement.disabled = isLoading;
     } else {
-        console.warn("chatInputEl not provided to setLoadingState");
+        // console.warn("[Utils] chatInputElement not provided to setLoadingState.");
     }
-    if (sendChatBtnEl) {
-        sendChatBtnEl.disabled = isLoading;
+    if (sendChatButtonElement) {
+        sendChatButtonElement.disabled = isLoading;
     } else {
-        console.warn("sendChatBtnEl not provided to setLoadingState");
+        // console.warn("[Utils] sendChatButtonElement not provided to setLoadingState.");
     }
 }
