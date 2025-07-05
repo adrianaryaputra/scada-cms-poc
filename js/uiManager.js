@@ -734,12 +734,17 @@ function _setupProjectManagementListeners() {
 
     if (newProjectBtn && projectManagerRef) {
         newProjectBtn.addEventListener("click", async () => {
-            if (projectManagerRef.isProjectDirty()) {
-                const confirmed = await showConfirmationModal("Unsaved changes will be lost. Create new project?", "Confirm New Project");
-                if (!confirmed) { showToast("New project creation cancelled.", "info"); return; }
+            console.log("[TEST_DEBUG] New project button clicked.");
+            const dirty = projectManagerRef.isProjectDirty();
+            console.log("[TEST_DEBUG] Project is dirty:", dirty);
+            if (dirty) {
+                console.log("[TEST_DEBUG] Calling showConfirmationModal...");
+                const confirmed = await self.showConfirmationModal("Unsaved changes will be lost. Create new project?", "Confirm New Project");
+                console.log("[TEST_DEBUG] Confirmation modal returned:", confirmed);
+                if (!confirmed) { self.showToast("New project creation cancelled.", "info"); return; }
             }
             projectManagerRef.newProject();
-            showToast("New project created.", "success");
+            self.showToast("New project created.", "success");
         });
     }
 
@@ -752,9 +757,9 @@ function _setupProjectManagementListeners() {
                 saveProjectBtn.textContent = "Saving...";
                 try {
                     await projectManagerRef.saveProjectToServer(currentName);
-                    showToast(`Project '${currentName}' saved successfully.`, "success");
+                    self.showToast(`Project '${currentName}' saved successfully.`, "success");
                 } catch (error) {
-                    showToast(`Failed to save project '${currentName}': ${error}`, "error");
+                    self.showToast(`Failed to save project '${currentName}': ${error}`, "error");
                 } finally {
                     saveProjectBtn.disabled = false;
                     saveProjectBtn.textContent = originalText;
@@ -1051,7 +1056,7 @@ function _createToastElement(message, type) {
  * @param {'info' | 'success' | 'error' | 'warning'} [type='info'] - The type of notification, influencing its appearance.
  * @param {number} [duration=3000] - Duration in milliseconds for the toast to be visible.
  */
-export function showToast(message, type = "info", duration = 3000) {
+function showToastImpl(message, type = "info", duration = 3000) {
     if (!toastContainerEl) {
         console.error("[UIManager] Toast container element not found. Cannot display toast.");
         alert(`${type.toUpperCase()}: ${message}`); // Fallback to alert

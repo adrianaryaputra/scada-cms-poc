@@ -400,8 +400,9 @@ function _closeDeviceManagerModal() {
  * @private
  */
 function _openDeviceFormModal(device = null) {
+    console.log("[DeviceManager TEST DEBUG] _openDeviceFormModal called. Device:", JSON.stringify(device));
     if (!deviceFormModal || !deviceForm || !deviceIdInput || !deviceNameInput || !deviceTypeInput || !deviceFormTitle) {
-        console.error("[DeviceManager] Crucial device form modal elements not found.");
+        console.error("[DeviceManager TEST DEBUG] Crucial device form modal elements not found for _openDeviceFormModal.");
         return;
     }
     deviceForm.reset(); // Clear previous form data
@@ -510,26 +511,31 @@ function _handleDeviceFormSubmit(e) {
     const id = deviceIdInput.value.trim();
     const name = deviceNameInput.value.trim();
     const type = deviceTypeInput.value;
+    const isCurrentlyEditing = deviceIdInput.readOnly; // Check if the form was in edit mode
 
     if (!name || !type) {
         alert("Device Name and Type are required fields.");
         return;
     }
 
-    const isEditing = !!(id && localDeviceCache.some((d) => d.id === id));
-    const generatedId = `device-${crypto.randomUUID()}`; // Generate UUID for new devices
+    // const isEditing = !!(id && localDeviceCache.some((d) => d.id === id)); // Old logic
+    const generatedId = `device-${crypto.randomUUID()}`;
 
     const deviceData = {
-        id: isEditing ? id : (id || generatedId), // Use existing ID if editing, or provided ID, or generate new
+        // id will be set below based on add/edit logic
         name: name,
         type: type,
-        variables: isEditing ? (localDeviceCache.find(d => d.id === id)?.variables || []) : [], // Preserve existing variables on edit
+        // Preserve existing variables only if truly editing an existing device's record
+        variables: isCurrentlyEditing && id ? (localDeviceCache.find(d => d.id === id)?.variables || []) : [],
     };
 
-    if (!isEditing && !id) { // If adding new and ID was empty, reflect generated ID in form (optional)
-        // deviceIdInput.value = deviceData.id; // Can be confusing if user expects their input or empty
+    if (isCurrentlyEditing) { // Form was opened for editing an existing device
+        deviceData.id = id; // Use the original ID from the readOnly field
+    } else { // Form was for adding a new device
+        deviceData.id = id || generatedId; // Use user-provided ID if any, else generate
+        // Check for duplicate ID only when adding a new device
+        // This check was correct, the if condition below was using 'isEditing'
     }
-
 
     // Populate type-specific properties
     switch (type) {
@@ -558,10 +564,11 @@ function _handleDeviceFormSubmit(e) {
             console.warn(`[DeviceManager] Submitting device with unhandled type: ${type}. No type-specific properties will be added.`);
     }
 
-    if (isEditing) {
+    if (isCurrentlyEditing) { // Corrected variable name here
         console.log("[DeviceManager] Emitting edit_device:", deviceData);
         socket.emit("edit_device", deviceData);
     } else {
+        // The duplicate check for 'add' path was already correct if isCurrentlyEditing is false
         if (localDeviceCache.some((d) => d.id === deviceData.id)) {
             alert(`Error: Device with ID ${deviceData.id} already exists. Please use a unique ID or edit the existing device.`);
             if (deviceIdInput && !deviceIdInput.readOnly) deviceIdInput.focus();

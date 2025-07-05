@@ -25,11 +25,23 @@ jest.mock("../deviceManager.js", () => ({
 }));
 
 // Mock ProjectManager - it's an object imported directly
-let mockProjectManagerSetDirty;
+// const mockProjectManagerSetDirtyFn = jest.fn(); // Moved inside mock factory
+
 jest.mock("../projectManager.js", () => {
-    mockProjectManagerSetDirty = jest.fn();
+    const originalModule = jest.requireActual("../projectManager.js");
+    const internalMockSetDirty = jest.fn();
+
+    const mockDefault = {
+        ...originalModule.default,
+        setDirty: internalMockSetDirty,
+        // Helper to access the mock function instance from tests
+        _getMockSetDirty: () => internalMockSetDirty,
+    };
+
     return {
-        setDirty: mockProjectManagerSetDirty,
+        __esModule: true,
+        ...originalModule, // Spread other named exports from original module
+        default: mockDefault,
     };
 });
 
@@ -40,6 +52,7 @@ let mockComponentFactoryRef;
 let mockUndoBtnRef;
 let mockRedoBtnRef;
 
+import ProjectManager from "../projectManager.js"; // Import the mocked ProjectManager at the top level
 // Helper to spy on restoreState as it's in the same module
 // We need to re-import and spy for specific tests.
 const stateManagerModule = require("../stateManager.js");
@@ -123,7 +136,7 @@ describe("StateManager", () => {
             mockUndoBtnRef,
             mockRedoBtnRef,
         );
-        mockProjectManagerSetDirty.mockClear();
+        ProjectManager._getMockSetDirty().mockClear();
     });
 
     describe("Initialization", () => {
@@ -148,7 +161,7 @@ describe("StateManager", () => {
             expect(savedState.components[0]).toEqual(expect.objectContaining({ id: "comp1", x: 10, y: 20, componentType: "lamp" }));
             expect(savedState.tags).toEqual({ dev1: { var1: 100 } });
             expect(stateManagerModule.getRedoStack().length).toBe(0);
-            expect(mockProjectManagerSetDirty).toHaveBeenCalledWith(true);
+            expect(ProjectManager._getMockSetDirty()).toHaveBeenCalledWith(true);
         });
 
         test("should clear redoStack", () => {
