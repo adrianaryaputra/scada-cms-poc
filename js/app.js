@@ -1,185 +1,233 @@
 /**
- * app.js - Main application entry point.
- * Initializes all core modules and sets up global event listeners.
- * Coordinates the overall application structure and flow.
+ * @file app.js
+ * @description Main application entry point. Initializes all core modules,
+ * sets up global event listeners, and coordinates the overall application structure and flow.
+ *
+ * The initialization sequence is crucial due to inter-module dependencies.
+ * Generally, modules providing interfaces (like UI and Konva managers) are initialized,
+ * then their references are passed to modules that consume them.
+ *
+ * Key Application Parts:
+ * - Simulation Mode: Toggles between design and real-time simulation.
+ * - Module Initialization: Sets up UI, Konva graphics, state management, component creation,
+ *   device communication, project handling, and AI assistance.
+ * - Global Event Handling: Manages undo/redo actions and prompts for unsaved changes.
  */
 
 import { GRID_SIZE } from "./config.js";
-import { addMessageToChatLog } from "./utils.js"; // Only addMessageToChatLog is directly used by app.js
+import { addMessageToChatLog } from "./utils.js";
 import {
     initStateManager,
     saveState,
-    handleUndo as smHandleUndo, // Renamed for clarity
-    handleRedo as smHandleRedo, // Renamed for clarity
-    getUndoStack, // Used by KonvaManager
+    handleUndo as smHandleUndo,
+    handleRedo as smHandleRedo,
+    getUndoStack,
 } from "./stateManager.js";
 import { componentFactory, initComponentFactory } from "./componentFactory.js";
 import { initKonvaManager } from "./konvaManager.js";
 import { initUiManager } from "./uiManager.js";
-import { initDeviceManager, getDeviceById } from "./deviceManager.js"; // getDeviceById is passed around
-import ProjectManager from "./projectManager.js"; // Import ProjectManager (nama baru)
+import { initDeviceManager, getDeviceById } from "./deviceManager.js";
+import ProjectManager from "./projectManager.js";
 import { initAiAssistant } from "./aiAssistant.js";
 import { initTopicExplorer } from "./topicExplorer.js";
 
 // --- Application State Variables ---
-let isSimulationMode = false; // Tracks if the application is in simulation or design mode
-let simulationInterval; // Interval ID for the simulation loop
-let chatHistory = []; // Stores the history of the AI assistant chat
 
-// --- Module References ---
-// These will hold references to initialized modules or their exported interfaces
-let konvaRefs = {}; // References related to Konva (stage, layers, etc.)
-let uiManagerRefs = {}; // References to UI manager functions (e.g., for context menu)
+/**
+ * @type {boolean} Tracks if the application is in simulation or design mode.
+ * @private
+ */
+let isSimulationMode = false;
 
-// --- DOM Element Caching (for elements directly used in this file) ---
-// Elements for AI Assistant are cached here as initAiAssistant is called from app.js
+/**
+ * @type {number|undefined} Interval ID for the simulation loop.
+ * @private
+ */
+let simulationInterval;
+
+/**
+ * @type {Array<object>} Stores the history of the AI assistant chat.
+ * Each object typically has `role` and `parts`.
+ * @private
+ */
+let chatHistory = [];
+
+// --- DOM Element References (Cached for performance) ---
+// Elements directly used or passed by app.js
+
+/** @type {HTMLElement|null} The chat log display area. */
 const chatLog = document.getElementById("chat-log");
+
+/** @type {HTMLInputElement|null} The chat input field. */
 const chatInput = document.getElementById("chat-input");
+
+/** @type {HTMLButtonElement|null} The button to send chat messages. */
 const sendChatBtn = document.getElementById("send-chat-btn");
+
+/** @type {HTMLButtonElement|null} The undo button. */
+const undoBtn = document.getElementById("undo-btn");
+
+/** @type {HTMLButtonElement|null} The redo button. */
+const redoBtn = document.getElementById("redo-btn");
 
 // --- Main Application Initialization ---
 window.addEventListener("load", () => {
-    // Cache DOM elements for Undo/Redo buttons
-    const undoBtn = document.getElementById("undo-btn");
-    const redoBtn = document.getElementById("redo-btn");
-
-    // --- Simulation Mode Management ---
-    // This function is passed to uiManager to control simulation state from UI components (e.g., toggle switch)
+    /**
+     * @function setIsSimulationModeAndInterval
+     * @description Sets the simulation mode and manages the simulation interval.
+     * When entering simulation mode, it starts an interval to periodically call `updateState()`
+     * on all HMI components on the Konva layer. Exiting simulation mode clears this interval.
+     * @param {boolean} value - True to enter simulation mode, false to exit.
+     * @private
+     */
     const setIsSimulationModeAndInterval = (value) => {
         isSimulationMode = value;
         if (isSimulationMode) {
-            // Start simulation loop: periodically update HMI components
             simulationInterval = setInterval(() => {
-                if (konvaRefs.layer) {
-                    // Ensure Konva layer is available
-                    konvaRefs.layer
+                // konvaRefs.layer might not be available immediately if init order changes slightly
+                if (konvaManagerInterface && konvaManagerInterface.layer) {
+                    konvaManagerInterface.layer
                         .find(".hmi-component")
                         .forEach((node) => node.updateState?.());
                 }
             }, 200); // Simulation update interval (e.g., 200ms)
         } else {
-            clearInterval(simulationInterval); // Stop simulation loop
+            clearInterval(simulationInterval);
         }
     };
 
-    // --- Initialize UI and Core Logic Modules ---
-    // Note: Order of initialization can be important due to dependencies.
+    // --- Module Initialization ---
+    // The order is important due to dependencies. Modules exporting interfaces
+    // are generally initialized before those that consume them.
 
-    // 1. UI Manager: Handles user interface elements, layout, and general UI interactions.
-    //    Dependencies: konvaRefs (passed initially empty, then set), getDeviceById.
-    uiManagerRefs = initUiManager(
-        konvaRefs, // Initially empty, will be populated by konvaManager and passed back
-        () => isSimulationMode, // Function to get current simulation mode state
-        setIsSimulationModeAndInterval, // Function to set simulation mode state
-        getDeviceById, // Function from deviceManager to get device details
-        ProjectManager, // Teruskan ProjectManager
-    );
-
-    // 2. Konva Manager: Manages the Konva stage, layers, shapes, and interactions.
-    //    Dependencies: uiManagerRefs (for context menu), getUndoStack (for AI).
-    konvaRefs = initKonvaManager(
-        "container", // ID of the Konva container div
-        "context-menu", // ID of the context menu div
-        () => isSimulationMode, // Function to get current simulation mode state
-        uiManagerRefs.hideContextMenu, // Function from uiManager
-        uiManagerRefs.populateContextMenu, // Function from uiManager
-        uiManagerRefs.selectNodes, // Function from uiManager
-        uiManagerRefs.setCurrentContextMenuNode, // Function from uiManager
-        uiManagerRefs.getCurrentContextMenuNode, // Function from uiManager
-        getUndoStack, // Function from stateManager
-    );
-
-    // Pass fully populated konvaRefs to uiManager if it has a setter for it
-    // This completes a common dependency-injection pattern where references are mutually exchanged post-init.
-    if (uiManagerRefs.setKonvaRefs) {
-        uiManagerRefs.setKonvaRefs(konvaRefs);
-    }
-
-    // 3. State Manager: Handles application state, including undo/redo and tag database.
-    //    Dependencies: componentFactory, konvaRefs, DOM buttons, getDeviceById.
-    initStateManager(
-        componentFactory, // from componentFactory module
-        konvaRefs.layer,
-        konvaRefs.tr, // Konva Transformer
-        undoBtn,
-        redoBtn,
-        getDeviceById, // Function from deviceManager
-    );
-
-    // 4. Component Factory: Responsible for creating HMI components.
-    //    Dependencies: konvaRefs, uiManagerRefs.selectNodes.
-    initComponentFactory(
-        konvaRefs.layer,
-        konvaRefs.tr,
-        konvaRefs.guideLayer,
-        () => isSimulationMode,
-        () => konvaRefs.stage, // Function to get Konva stage
-        konvaRefs.getDragStartPositions,
-        konvaRefs.setDragStartPositions,
-        konvaRefs.clearDragStartPositions,
-        uiManagerRefs.selectNodes, // Function from uiManager
-        konvaRefs.handleDragMove, // Function from konvaManager
-    );
-
-    // --- Initialize Networking and Feature Modules ---
-
-    // 5. ProjectManager (sebelumnya Layout Manager)
-    //    Diinisialisasi sebelum DeviceManager agar referensi setDirty bisa di-pass.
-    const deviceSocket = io("/devices"); // Buat socket di sini agar bisa di-pass ke keduanya
-    ProjectManager.init(konvaRefs, componentFactory, deviceSocket);
-
-    // 6. Device Manager & Topic Explorer
-    //    Sekarang initDeviceManager menerima ProjectManager.setDirty
-    initDeviceManager(
-        deviceSocket,
-        ProjectManager.setDirty.bind(ProjectManager),
-    ); // Pass setDirty, bind context
+    // 1. DeviceManager and TopicExplorer (Networking and Backend Communication)
+    //    - Establishes socket connection.
+    //    - `ProjectManager.setDirty` is passed as a callback for device changes.
+    //    - `getDeviceById` is used by stateManager, uiManager, and aiAssistant.
+    const deviceSocket = io("/devices"); // Socket for device and project communication
+    initDeviceManager(deviceSocket, ProjectManager.setDirty.bind(ProjectManager));
     initTopicExplorer(deviceSocket);
 
-    // 7. AI Assistant: Initializes the AI chat functionality.
-    //    Dependencies: DOM elements, chatHistory, konvaRefs, getDeviceById.
+    // 2. UI Manager: Handles UI elements, interactions, context menus, and mode toggling.
+    //    - Receives callbacks for simulation mode and device info.
+    //    - Receives ProjectManager for project operations.
+    //    - Its interface (`uiManagerInterface`) is used by KonvaManager.
+    //    - `konvaManagerInterface` is passed (initially empty) and later populated.
+    let konvaManagerInterface = {}; // Will be populated by initKonvaManager
+    const uiManagerInterface = initUiManager(
+        konvaManagerInterface, // Passed as a reference, will be populated by konvaManager
+        () => isSimulationMode,
+        setIsSimulationModeAndInterval,
+        getDeviceById,
+        ProjectManager,
+    );
+
+    // 3. Konva Manager: Manages the Konva stage, layers, shapes, and interactions.
+    //    - Uses functions from `uiManagerInterface` for context menu and selection.
+    //    - Uses `getUndoStack` from `stateManager` for AI context.
+    //    - Its interface (`konvaManagerInterface`) provides Konva objects (stage, layer, tr)
+    //      and functions needed by `componentFactory`, `stateManager`, `ProjectManager`, and `aiAssistant`.
+    konvaManagerInterface = initKonvaManager(
+        "container",
+        "context-menu",
+        () => isSimulationMode,
+        uiManagerInterface.hideContextMenu,
+        uiManagerInterface.populateContextMenu,
+        uiManagerInterface.selectNodes,
+        uiManagerInterface.setCurrentContextMenuNode,
+        uiManagerInterface.getCurrentContextMenuNode,
+        getUndoStack,
+    );
+
+    // Complete the dependency cycle: Provide the fully initialized konvaManagerInterface to uiManager.
+    if (uiManagerInterface.setKonvaRefs) {
+        uiManagerInterface.setKonvaRefs(konvaManagerInterface);
+    }
+
+    // 4. State Manager: Handles application state, undo/redo, and the tag database.
+    //    - Depends on `componentFactory` for recreating components.
+    //    - Uses Konva layer and transformer from `konvaManagerInterface`.
+    //    - Uses `getDeviceById` from `deviceManager`.
+    initStateManager(
+        componentFactory, // componentFactory object itself
+        konvaManagerInterface.layer,
+        konvaManagerInterface.tr,
+        undoBtn,
+        redoBtn,
+        getDeviceById,
+    );
+
+    // 5. Component Factory: Responsible for creating HMI components.
+    //    - Uses Konva objects from `konvaManagerInterface`.
+    //    - Uses `selectNodes` from `uiManagerInterface`.
+    //    - Uses simulation mode status.
+    initComponentFactory(
+        konvaManagerInterface.layer,
+        konvaManagerInterface.tr,
+        konvaManagerInterface.guideLayer,
+        () => isSimulationMode,
+        () => konvaManagerInterface.stage,
+        konvaManagerInterface.getDragStartPositions,
+        konvaManagerInterface.setDragStartPositions,
+        konvaManagerInterface.clearDragStartPositions,
+        uiManagerInterface.selectNodes,
+        konvaManagerInterface.handleDragMove,
+    );
+
+    // 6. Project Manager: Handles saving, loading, importing, and exporting projects.
+    //    - Uses `konvaManagerInterface` for HMI layout.
+    //    - Uses `componentFactory` for creating components on load/import.
+    //    - Uses `deviceSocket` for server communication.
+    ProjectManager.init(konvaManagerInterface, componentFactory, deviceSocket);
+
+    // 7. AI Assistant: Manages chat functionality and AI-driven HMI modifications.
+    //    - Uses DOM elements for chat UI.
+    //    - Manages `chatHistory`.
+    //    - Uses `konvaManagerInterface` for canvas context.
+    //    - Uses `getDeviceById` for component property suggestions.
     initAiAssistant(
-        chatLog, // DOM element for chat log
-        chatInput, // DOM element for chat input
-        sendChatBtn, // DOM element for send button
-        () => chatHistory, // Function to get current chat history
+        chatLog,
+        chatInput,
+        sendChatBtn,
+        () => chatHistory,
         (newHistory) => {
             chatHistory = newHistory;
-        }, // Function to update chat history
-        konvaRefs,
-        getDeviceById, // Function from deviceManager
+        },
+        konvaManagerInterface,
+        getDeviceById,
     );
 
-    // --- Final Setup ---
+    // --- Final Application Setup ---
 
-    // Save the initial state of the application (e.g., empty canvas)
+    // Save the initial state (e.g., empty canvas) for undo history.
     saveState();
 
-    // Add initial greeting message from AI assistant
-    addMessageToChatLog(
-        chatLog,
-        chatHistory,
-        "model",
-        "Halo! Saya asisten AI Anda. Apa yang bisa saya bantu rancang hari ini?",
-    );
+    // Add initial greeting message from AI assistant to the chat.
+    if (chatLog) {
+        addMessageToChatLog(
+            chatLog,
+            chatHistory,
+            "model",
+            "Halo! Saya asisten AI Anda. Apa yang bisa saya bantu rancang hari ini?",
+        );
+    }
 
-    // Attach event listeners for Undo/Redo buttons
+    // Attach event listeners for Undo/Redo buttons.
     if (undoBtn) undoBtn.addEventListener("click", smHandleUndo);
     if (redoBtn) redoBtn.addEventListener("click", smHandleRedo);
 
-    // --- Konfirmasi Sebelum Keluar Jika Ada Perubahan Belum Disimpan ---
-    // Event listener untuk project management buttons dipindahkan ke uiManager.js
+    // Add a global event listener to confirm before leaving if there are unsaved changes.
     window.addEventListener("beforeunload", (event) => {
         if (ProjectManager.isProjectDirty()) {
-            // Menggunakan ProjectManager dan nama fungsi baru
-            // Standar browser memerlukan returnValue untuk di-set.
-            event.preventDefault();
-            event.returnValue = "";
-            // Browser akan menampilkan dialog konfirmasi generik.
-            // Pesan kustom tidak lagi didukung oleh kebanyakan browser modern.
+            event.preventDefault(); // Required to trigger the browser's built-in confirmation dialog.
+            event.returnValue = ""; // Required for some browsers.
+            // Custom messages in the dialog are largely unsupported by modern browsers for security reasons.
         }
     });
+
+    console.log("Aplikasi HMI berhasil diinisialisasi.");
 });
 
 // Export GRID_SIZE for potential use by other modules (e.g., aiAssistant for layout calculations)
+// No other exports are needed from app.js as it serves as the main entry and coordinator.
 export { GRID_SIZE };

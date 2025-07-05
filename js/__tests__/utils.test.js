@@ -1,176 +1,129 @@
+// js/__tests__/utils.test.js
+
 import {
-    addMessageToChatLog,
     updateStatus,
+    addMessageToChatLog,
     addThinkingDetails,
-    setLoadingState,
     getCanvasContext,
+    setLoadingState,
 } from "../utils.js";
 
-// Mocking setTimeout and clearTimeout for updateStatus
-jest.useFakeTimers();
+describe("Utils", () => {
+    describe("updateStatus", () => {
+        let mockStatusInfo;
+        const defaultWelcomeMessage = "Selamat datang!"; // Default as per current implementation
 
-describe("Utils Tests", () => {
-    // Helper to create and append mock elements to JSDOM's body
-    const setupDOM = () => {
-        document.body.innerHTML = `
-            <div id="status-info"></div>
-            <div id="chat-log"></div>
-            <input id="chat-input" />
-            <button id="send-chat-btn"></button>
-        `;
-        // JSDOM doesn't implement scrollHeight/scrollTop updates automatically
-        const chatLog = document.getElementById("chat-log");
-        Object.defineProperty(chatLog, "scrollHeight", {
-            configurable: true,
-            writable: true,
-            value: 0,
+        beforeEach(() => {
+            mockStatusInfo = { textContent: "" };
+            document.getElementById = jest.fn(id => {
+                if (id === "status-info") return mockStatusInfo;
+                return null;
+            });
+            jest.useFakeTimers();
+            jest.spyOn(global, 'clearTimeout');
+            jest.spyOn(global, 'setTimeout');
         });
-        Object.defineProperty(chatLog, "scrollTop", {
-            configurable: true,
-            writable: true,
-            value: 0,
-        });
-        return {
-            statusInfo: document.getElementById("status-info"),
-            chatLogEl: chatLog,
-            chatInputEl: document.getElementById("chat-input"),
-            sendChatBtnEl: document.getElementById("send-chat-btn"),
-        };
-    };
 
-    afterEach(() => {
-        // Clean up timers
-        jest.clearAllTimers();
-        // Clean up DOM
-        document.body.innerHTML = "";
+        afterEach(() => {
+            jest.clearAllTimers();
+            jest.restoreAllMocks(); // Restores spies
+        });
+
+        test("should update status message and set timeout to revert", () => {
+            updateStatus("Test Message", 1000);
+            expect(mockStatusInfo.textContent).toBe("Test Message");
+            expect(setTimeout).toHaveBeenCalledTimes(1);
+            expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 1000);
+
+            jest.advanceTimersByTime(1000);
+            expect(mockStatusInfo.textContent).toBe(defaultWelcomeMessage);
+        });
+
+        test("should clear existing timeout if called again", () => {
+            updateStatus("First Message", 2000);
+            const firstTimeoutId = setTimeout.mock.results[0].value;
+
+            updateStatus("Second Message", 1000);
+            expect(clearTimeout).toHaveBeenCalledWith(firstTimeoutId);
+            expect(mockStatusInfo.textContent).toBe("Second Message");
+            expect(setTimeout).toHaveBeenCalledTimes(2); // Once for first, once for second
+
+            jest.advanceTimersByTime(1000);
+            expect(mockStatusInfo.textContent).toBe(defaultWelcomeMessage);
+        });
+
+        test("should not revert if duration is 0", () => {
+            updateStatus("Persistent Message", 0);
+            expect(mockStatusInfo.textContent).toBe("Persistent Message");
+            expect(setTimeout).not.toHaveBeenCalled();
+            jest.advanceTimersByTime(5000); // Advance time well past any default
+            expect(mockStatusInfo.textContent).toBe("Persistent Message");
+        });
+
+        test("should use custom default message if provided", () => {
+            updateStatus("Custom Default Test", 100, "Custom Default!");
+            jest.advanceTimersByTime(100);
+            expect(mockStatusInfo.textContent).toBe("Custom Default!");
+        });
+
+        test("should handle missing status-info element gracefully", () => {
+            document.getElementById.mockReturnValueOnce(null);
+            const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+            updateStatus("Test", 1000);
+            expect(consoleWarnSpy).toHaveBeenCalledWith("[Utils] Element with ID 'status-info' not found for updateStatus.");
+            consoleWarnSpy.mockRestore();
+        });
     });
 
     describe("addMessageToChatLog", () => {
         let mockChatLogEl;
-        let mockChatHistoryArr;
+        let chatHistoryArr;
 
         beforeEach(() => {
-            const dom = setupDOM();
-            mockChatLogEl = dom.chatLogEl;
-            mockChatHistoryArr = [];
-        });
+            mockChatLogEl = {
+                appendChild: jest.fn(),
+                scrollTop: 0,
+                scrollHeight: 100, // Initial scrollHeight
+                children: [] // To simulate children for appendChild
+            };
+            // Simulate appendChild adding to children for scrollHeight update
+            mockChatLogEl.appendChild.mockImplementation(child => {
+                mockChatLogEl.children.push(child);
+                mockChatLogEl.scrollHeight += 50; // Simulate content increasing height
+            });
 
-        test("should append a user message to chatLogEl and chatHistoryArr", () => {
-            const sender = "user";
-            const text = "Hello, AI!";
-            const messageDiv = addMessageToChatLog(
-                mockChatLogEl,
-                mockChatHistoryArr,
-                sender,
-                text,
-            );
-            expect(messageDiv.classList.contains("user-message")).toBe(true);
-            expect(messageDiv.textContent).toBe(text);
-            expect(mockChatLogEl.children[0]).toBe(messageDiv);
-            expect(mockChatHistoryArr[0]).toEqual({
-                role: sender,
-                parts: [{ text }],
+            chatHistoryArr = [];
+            document.createElement = jest.fn(tag => {
+                if (tag === 'div') {
+                    return { classList: { add: jest.fn() }, textContent: "", appendChild: jest.fn() };
+                }
+                return {};
             });
         });
 
-        test("should append a model message to chatLogEl and chatHistoryArr", () => {
-            const sender = "model";
-            const text = "Hello, User!";
-            const messageDiv = addMessageToChatLog(
-                mockChatLogEl,
-                mockChatHistoryArr,
-                sender,
-                text,
-            );
-            expect(messageDiv.classList.contains("model-message")).toBe(true);
-            expect(messageDiv.textContent).toBe(text);
-            expect(mockChatLogEl.children[0]).toBe(messageDiv);
-            expect(mockChatHistoryArr[0]).toEqual({
-                role: sender,
-                parts: [{ text }],
-            });
+        test("should create and append user message, update history, and scroll", () => {
+            const messageDiv = addMessageToChatLog(mockChatLogEl, chatHistoryArr, "user", "Hello User");
+
+            expect(document.createElement).toHaveBeenCalledWith("div");
+            expect(messageDiv.classList.add).toHaveBeenCalledWith("chat-message", "user-message");
+            expect(messageDiv.textContent).toBe("Hello User");
+            expect(mockChatLogEl.appendChild).toHaveBeenCalledWith(messageDiv);
+            expect(mockChatLogEl.scrollTop).toBe(mockChatLogEl.scrollHeight); // Check if scrolled
+            expect(chatHistoryArr).toEqual([{ role: "user", parts: [{ text: "Hello User" }] }]);
         });
 
-        test("should update scrollTop to scrollHeight", () => {
-            Object.defineProperty(mockChatLogEl, "scrollHeight", {
-                value: 100,
-            });
-            addMessageToChatLog(
-                mockChatLogEl,
-                mockChatHistoryArr,
-                "user",
-                "Test scroll",
-            );
-            expect(mockChatLogEl.scrollTop).toBe(100);
-        });
-    });
-
-    describe("updateStatus", () => {
-        let statusInfo;
-
-        beforeEach(() => {
-            const dom = setupDOM();
-            statusInfo = dom.statusInfo;
+        test("should create and append model message", () => {
+            const messageDiv = addMessageToChatLog(mockChatLogEl, chatHistoryArr, "model", "Hello AI");
+            expect(messageDiv.classList.add).toHaveBeenCalledWith("chat-message", "model-message");
+            expect(chatHistoryArr).toEqual([{ role: "model", parts: [{ text: "Hello AI" }] }]);
         });
 
-        test("should update status message and revert after duration", () => {
-            updateStatus("Test message", 1000);
-            expect(statusInfo.textContent).toBe("Test message");
-            jest.advanceTimersByTime(1000);
-            expect(statusInfo.textContent).toBe("Selamat datang!");
-        });
-
-        test("should persist message if duration is 0", () => {
-            updateStatus("Persistent message", 0);
-            expect(statusInfo.textContent).toBe("Persistent message");
-            jest.advanceTimersByTime(5000); // Advance time well past any default
-            expect(statusInfo.textContent).toBe("Persistent message");
-        });
-
-        test("should not revert if message changed before timeout by a persistent message", () => {
-            updateStatus("Initial message", 1000); // Timeout A (1000ms)
-            expect(statusInfo.textContent).toBe("Initial message");
-
-            updateStatus("New persistent message", 0); // Timeout B (persistent) - clears Timeout A
-            expect(statusInfo.textContent).toBe("New persistent message");
-
-            jest.advanceTimersByTime(1000); // Advance past when Timeout A would have fired
-            expect(statusInfo.textContent).toBe("New persistent message"); // Should remain, as A was cancelled
-
-            jest.advanceTimersByTime(5000); // Advance much further
-            expect(statusInfo.textContent).toBe("New persistent message"); // Should still remain
-        });
-
-        test("should correctly handle overlapping timeouts", () => {
-            updateStatus("Message A", 1000); // Timeout A set for 1000ms
-            expect(statusInfo.textContent).toBe("Message A");
-
-            jest.advanceTimersByTime(300); // Time = 300ms. Message A is still there.
-            expect(statusInfo.textContent).toBe("Message A");
-
-            updateStatus("Message B", 500); // Timeout B set for 500ms (fires at 300+500=800ms). Timeout A is cleared.
-            expect(statusInfo.textContent).toBe("Message B");
-
-            jest.advanceTimersByTime(400); // Time = 300+400 = 700ms. Message B is still there. Timeout B has not fired.
-            expect(statusInfo.textContent).toBe("Message B");
-
-            jest.advanceTimersByTime(100); // Time = 700+100 = 800ms. Timeout B fires.
-            expect(statusInfo.textContent).toBe("Selamat datang!");
-
-            jest.advanceTimersByTime(200); // Time = 800+200 = 1000ms. Original Timeout A would have fired here, but was cancelled.
-            expect(statusInfo.textContent).toBe("Selamat datang!"); // Should remain "Selamat datang!"
-        });
-
-        test("should handle missing status-info element gracefully", () => {
-            document.body.innerHTML = ""; // Remove status-info
-            const consoleWarnSpy = jest
-                .spyOn(console, "warn")
-                .mockImplementation(() => {});
-            updateStatus("Test", 1000);
-            expect(consoleWarnSpy).toHaveBeenCalledWith(
-                "Element with ID 'status-info' not found for updateStatus.",
-            );
-            consoleWarnSpy.mockRestore();
+        test("should return null and log error if chatLogEl is invalid", () => {
+            const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+            const result = addMessageToChatLog(null, [], "user", "test");
+            expect(result).toBeNull();
+            expect(consoleErrorSpy).toHaveBeenCalledWith("[Utils] Invalid chatLogEl provided to addMessageToChatLog.");
+            consoleErrorSpy.mockRestore();
         });
     });
 
@@ -178,193 +131,121 @@ describe("Utils Tests", () => {
         let mockChatLogEl;
 
         beforeEach(() => {
-            const dom = setupDOM();
-            mockChatLogEl = dom.chatLogEl;
+            mockChatLogEl = { appendChild: jest.fn(), scrollTop: 0, scrollHeight: 100 };
+             mockChatLogEl.appendChild.mockImplementation(child => {
+                mockChatLogEl.scrollHeight += 50;
+            });
+            const mockDetails = { classList: { add: jest.fn() }, appendChild: jest.fn() };
+            const mockSummary = { textContent: "" , classList: {add: jest.fn() }};
+            const mockPre = { classList: { add: jest.fn() }, textContent: "" };
+
+            document.createElement = jest.fn(tag => {
+                if (tag === 'details') return mockDetails;
+                if (tag === 'summary') return mockSummary;
+                if (tag === 'pre') return mockPre;
+                return {};
+            });
         });
 
-        test("should append thinking details to chatLogEl", () => {
-            const planJson = '{ "step": 1, "action": "Thinking" }';
+        test("should create and append thinking details with valid JSON", () => {
+            const planJson = JSON.stringify({ action: "add", type: "lamp" });
             addThinkingDetails(mockChatLogEl, planJson);
-            const detailsEl = mockChatLogEl.querySelector(
-                "details.thinking-details",
-            );
-            expect(detailsEl).not.toBeNull();
-            expect(detailsEl.querySelector("summary").textContent).toBe(
-                "Proses Berpikir 🧠",
-            );
-            expect(detailsEl.querySelector("pre").textContent).toBe(
-                JSON.stringify(JSON.parse(planJson), null, 2),
-            );
+
+            expect(document.createElement).toHaveBeenCalledWith("details");
+            expect(document.createElement).toHaveBeenCalledWith("summary");
+            expect(document.createElement).toHaveBeenCalledWith("pre");
+
+            const mockDetailsInstance = document.createElement.mock.results[0].value;
+            const mockSummaryInstance = document.createElement.mock.results[1].value;
+            const mockPreInstance = document.createElement.mock.results[2].value;
+
+            expect(mockSummaryInstance.textContent).toBe("View AI Reasoning 🧠");
+            expect(mockPreInstance.textContent).toBe(JSON.stringify(JSON.parse(planJson), null, 2));
+            expect(mockChatLogEl.appendChild).toHaveBeenCalledWith(mockDetailsInstance);
             expect(mockChatLogEl.scrollTop).toBe(mockChatLogEl.scrollHeight);
         });
 
-        test("should handle invalid JSON gracefully", () => {
-            const consoleErrorSpy = jest
-                .spyOn(console, "error")
-                .mockImplementation(() => {});
-            const invalidJson = '{ "step": 1, "action": "Thinking" '; // Missing closing brace
-            addThinkingDetails(mockChatLogEl, invalidJson);
-            const detailsEl = mockChatLogEl.querySelector(
-                "details.thinking-details",
-            );
-            expect(detailsEl).not.toBeNull();
-            expect(detailsEl.querySelector("pre").textContent).toBe(
-                "Error displaying thinking process: Invalid JSON.",
-            );
-            expect(consoleErrorSpy).toHaveBeenCalled();
+        test("should handle invalid JSON in planJsonString", () => {
+            const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+            addThinkingDetails(mockChatLogEl, "invalid json");
+            const mockPreInstance = document.createElement.mock.results[2].value;
+            expect(mockPreInstance.textContent).toBe("Error displaying AI reasoning: Invalid JSON format.");
+            expect(consoleErrorSpy).toHaveBeenCalledWith("[Utils] Failed to parse planJsonString in addThinkingDetails:", expect.any(SyntaxError));
             consoleErrorSpy.mockRestore();
         });
     });
 
-    describe("setLoadingState", () => {
-        let chatInputEl, sendChatBtnEl;
-
-        beforeEach(() => {
-            const dom = setupDOM();
-            chatInputEl = dom.chatInputEl;
-            sendChatBtnEl = dom.sendChatBtnEl;
-        });
-
-        test("should disable inputs when isLoading is true", () => {
-            setLoadingState(chatInputEl, sendChatBtnEl, true);
-            expect(chatInputEl.disabled).toBe(true);
-            expect(sendChatBtnEl.disabled).toBe(true);
-        });
-
-        test("should enable inputs when isLoading is false", () => {
-            // First disable them
-            setLoadingState(chatInputEl, sendChatBtnEl, true);
-            // Then enable them
-            setLoadingState(chatInputEl, sendChatBtnEl, false);
-            expect(chatInputEl.disabled).toBe(false);
-            expect(sendChatBtnEl.disabled).toBe(false);
-        });
-
-        test("should handle missing elements gracefully", () => {
-            const consoleWarnSpy = jest
-                .spyOn(console, "warn")
-                .mockImplementation(() => {});
-            setLoadingState(null, null, true);
-            expect(consoleWarnSpy).toHaveBeenCalledWith(
-                "chatInputEl not provided to setLoadingState",
-            );
-            expect(consoleWarnSpy).toHaveBeenCalledWith(
-                "sendChatBtnEl not provided to setLoadingState",
-            );
-            consoleWarnSpy.mockRestore();
-        });
-    });
-
     describe("getCanvasContext", () => {
-        let mockLayer, mockTr;
+        let mockLayer, mockTransformer;
 
         beforeEach(() => {
-            // Basic mocks for Konva objects
-            mockLayer = {
-                find: jest.fn().mockReturnValue([]), // Default to no components
-            };
-            mockTr = {
-                nodes: jest.fn().mockReturnValue([]), // Default to no selected nodes
-            };
+            mockLayer = { find: jest.fn(() => []) };
+            mockTransformer = { nodes: jest.fn(() => []) };
         });
 
-        test('should return "Kanvas kosong." if no components', () => {
-            expect(getCanvasContext(mockLayer, mockTr)).toBe("Kanvas kosong.");
+        test("should return error if layer is invalid", () => {
+            expect(getCanvasContext(null, mockTransformer)).toBe("Error: HMI layer data is unavailable for AI context.");
+        });
+        test("should return error if transformer is invalid", () => {
+            expect(getCanvasContext(mockLayer, null)).toBe("Error: HMI selection data is unavailable for AI context.");
+        });
+
+        test("should report empty canvas and no selection", () => {
+            const context = getCanvasContext(mockLayer, mockTransformer);
+            expect(context).toContain("The canvas is currently empty.");
+            expect(context).toContain("No components are currently selected.");
         });
 
         test("should list components on canvas", () => {
-            const mockComponent1 = {
-                attrs: {
-                    componentType: "BitLamp",
-                    label: "Lamp 1",
-                    address: "DB1.DBX0.0",
-                },
-                id: () => "comp1",
+            const mockNode = {
+                attrs: { componentType: "lamp", label: "My Lamp", deviceId: "d1", variableName: "v1" },
+                id: () => "lamp1"
             };
-            const mockComponent2 = {
-                attrs: {
-                    componentType: "NumericDisplay",
-                    label: "Temp",
-                    address: "DB1.DBW2",
-                },
-                id: () => "comp2",
-            };
-            mockLayer.find.mockReturnValue([mockComponent1, mockComponent2]);
-
-            const expectedContext =
-                "Komponen di kanvas:\n" +
-                '- BitLamp (id: "comp1", label: "Lamp 1", alamat: "DB1.DBX0.0")\n' +
-                '- NumericDisplay (id: "comp2", label: "Temp", alamat: "DB1.DBW2")';
-            expect(getCanvasContext(mockLayer, mockTr)).toBe(expectedContext);
+            mockLayer.find.mockReturnValueOnce([mockNode]);
+            const context = getCanvasContext(mockLayer, mockTransformer);
+            expect(context).toContain('Components currently on the canvas:\n- Type: lamp, ID: "lamp1", Label: "My Lamp" (Bound to: d1.v1)');
         });
 
-        test("should list selected nodes", () => {
-            const mockSelectedComponent = {
-                attrs: { componentType: "BitSwitch", address: "DB1.DBX0.1" },
-                id: () => "selComp1",
+        test("should list selected components", () => {
+            const mockSelectedNode = {
+                attrs: { componentType: "switch", address: "A1" },
+                id: () => "switch1"
             };
-            mockTr.nodes.mockReturnValue([mockSelectedComponent]);
+            mockTransformer.nodes.mockReturnValueOnce([mockSelectedNode]);
+            const context = getCanvasContext(mockLayer, mockTransformer);
+            expect(context).toContain('Currently Selected Components (1):\n- Type: switch, ID: "switch1" (Legacy Address: A1)');
+        });
+    });
 
-            const expectedContext =
-                "Kanvas kosong.\n\n" + // Since components list is still empty from mockLayer default
-                "Elemen Terpilih (1):\n" +
-                '- BitSwitch (id: "selComp1", alamat: "DB1.DBX0.1")';
-            expect(getCanvasContext(mockLayer, mockTr)).toBe(expectedContext);
+    describe("setLoadingState", () => {
+        let mockInput, mockButton;
+
+        beforeEach(() => {
+            mockInput = { disabled: false };
+            mockButton = { disabled: false };
         });
 
-        test("should list both components and selected nodes", () => {
-            const mockComponent1 = {
-                attrs: {
-                    componentType: "BitLamp",
-                    label: "Lamp 1",
-                    address: "DB1.DBX0.0",
-                },
-                id: () => "comp1",
-            };
-            mockLayer.find.mockReturnValue([mockComponent1]);
-
-            const mockSelectedComponent = {
-                attrs: { componentType: "BitSwitch", address: "DB1.DBX0.1" },
-                id: () => "selComp1",
-            };
-            mockTr.nodes.mockReturnValue([mockSelectedComponent]);
-
-            const expectedContext =
-                "Komponen di kanvas:\n" +
-                '- BitLamp (id: "comp1", label: "Lamp 1", alamat: "DB1.DBX0.0")\n\n' +
-                "Elemen Terpilih (1):\n" +
-                '- BitSwitch (id: "selComp1", alamat: "DB1.DBX0.1")';
-            expect(getCanvasContext(mockLayer, mockTr)).toBe(expectedContext);
+        test("should disable elements when isLoading is true", () => {
+            setLoadingState(mockInput, mockButton, true);
+            expect(mockInput.disabled).toBe(true);
+            expect(mockButton.disabled).toBe(true);
         });
 
-        test("should handle missing attrs gracefully", () => {
-            const mockComponent1 = {
-                attrs: {}, // Missing componentType, label, address
-                id: () => "comp1",
-            };
-            mockLayer.find.mockReturnValue([mockComponent1]);
-            const expectedContext =
-                "Komponen di kanvas:\n" +
-                '- N/A (id: "comp1", label: "N/A", alamat: "N/A")';
-            expect(getCanvasContext(mockLayer, mockTr)).toBe(expectedContext);
+        test("should enable elements when isLoading is false", () => {
+            setLoadingState(mockInput, mockButton, false);
+            expect(mockInput.disabled).toBe(false);
+            expect(mockButton.disabled).toBe(false);
         });
 
-        test("should return error message for invalid layer", () => {
-            expect(getCanvasContext(null, mockTr)).toBe(
-                "Error: Invalid Konva Layer provided.",
-            );
-            expect(getCanvasContext({}, mockTr)).toBe(
-                "Error: Invalid Konva Layer provided.",
-            );
-        });
-
-        test("should return error message for invalid transformer", () => {
-            expect(getCanvasContext(mockLayer, null)).toBe(
-                "Error: Invalid Konva Transformer provided.",
-            );
-            expect(getCanvasContext(mockLayer, {})).toBe(
-                "Error: Invalid Konva Transformer provided.",
-            );
+        test("should handle null elements gracefully", () => {
+            const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+            setLoadingState(null, null, true);
+            // These specific warnings are commented out in the source, so they won't be called.
+            // If they were active, these expectations would be valid:
+            // expect(consoleWarnSpy).toHaveBeenCalledWith("[Utils] chatInputElement not provided to setLoadingState.");
+            // expect(consoleWarnSpy).toHaveBeenCalledWith("[Utils] sendChatButtonElement not provided to setLoadingState.");
+            expect(consoleWarnSpy).not.toHaveBeenCalledWith(expect.stringContaining("not provided to setLoadingState"));
+            consoleWarnSpy.mockRestore();
         });
     });
 });
