@@ -1,6 +1,21 @@
-// js/topicExplorer.js
+/**
+ * @file Manages the MQTT Topic Explorer modal.
+ * This module provides functionality for users to subscribe to MQTT topics (or topic filters),
+ * view incoming messages, and select specific data points from JSON payloads using a JSON path.
+ * The selected topic and JSON path can then be used to populate fields in a device variable configuration form.
+ * It communicates with the server via Socket.IO for temporary topic subscriptions.
+ *
+ * @module js/topicExplorer
+ * @requires ./renderjson.js - For pretty-printing JSON payloads.
+ */
 import renderjson from "./renderjson.js"; // Import renderjson
 
+/**
+ * The Socket.IO client instance used for communication with the server.
+ * Set by {@link initTopicExplorer}.
+ * @private
+ * @type {object|null}
+ */
 let socket; // Socket.IO client instance, to be set by initTopicExplorer
 let currentExploringDeviceId = null;
 let currentExploringVariableRowElement = null; // The DOM element (mqtt-variable-row) that triggered the explorer
@@ -19,6 +34,20 @@ let topicExplorerModal,
     explorerUseTopicBtn, // Button to use Topic (without path)
     explorerUseTopicPathBtn; // Button to use Topic AND Path
 
+/**
+ * Initializes the Topic Explorer module.
+ * This function must be called once during application setup. It caches references
+ * to the DOM elements that make up the Topic Explorer modal UI and sets up
+ * event listeners for user interactions within the modal (e.g., subscribing to topics,
+ * closing the modal, using selected data). It also registers a Socket.IO listener
+ * for `server_temp_message` to receive messages from temporary topic subscriptions made
+ * via the explorer.
+ *
+ * @export
+ * @param {object} ioSocket - The active Socket.IO client instance. This instance is used
+ *                            to send temporary subscription requests to the server and
+ *                            receive messages.
+ */
 export function initTopicExplorer(ioSocket) {
     socket = ioSocket;
 
@@ -82,6 +111,37 @@ export function initTopicExplorer(ioSocket) {
     }
 }
 
+/**
+ * Opens the Topic Explorer modal and prepares it for a new exploration session.
+ * This function is typically called from another part of the UI, such as a
+ * device variable configuration form, when the user wants to explore topics
+ * for a specific device.
+ *
+ * It performs the following actions:
+ * - Stores the `deviceId`, `deviceName`, and a reference to the `variableRowElement`
+ *   (the DOM element from the calling form, used to later populate with selected data).
+ * - Sets the title of the modal to include the device name and ID.
+ * - Pre-fills the topic input field with `currentSubTopic` if provided.
+ * - Clears any previous message logs and JSON path selections.
+ * - Manages the state of any existing temporary subscription, unsubscribing if the
+ *   topic input has changed since the last session or if a different topic was active.
+ * - Updates the "Subscribe/Unsubscribe" button text based on the current subscription state.
+ * - Makes the Topic Explorer modal visible.
+ *
+ * @export
+ * @param {string} deviceId - The ID of the device for which topics are being explored.
+ *                            This ID is used in communication with the server for subscriptions.
+ * @param {string} deviceName - The name of the device, used for display in the modal title.
+ * @param {HTMLElement} variableRowElement - A reference to a DOM element (typically a row or container
+ *                                          in a form) that contains the input fields for the subscription
+ *                                          topic and JSON path. This element will be updated when the
+ *                                          user chooses to use data from the explorer.
+ *                                          The function expects this element to contain child elements
+ *                                          that can be selected with `.variable-subscribe-topic`
+ *                                          and `.variable-jsonpath-subscribe`.
+ * @param {string} [currentSubTopic=""] - The current subscription topic value from the calling form,
+ *                                       used to pre-fill the explorer's topic input.
+ */
 export function openTopicExplorer(
     deviceId,
     deviceName,
@@ -125,6 +185,13 @@ export function openTopicExplorer(
     topicExplorerModal.classList.remove("hidden");
 }
 
+/**
+ * Closes the Topic Explorer modal.
+ * It ensures that any active temporary topic subscription is unsubscribed from,
+ * hides the modal, and resets module-level state related to the current exploration session
+ * (e.g., `currentExploringDeviceId`, `currentExploringVariableRowElement`, `lastClickedActualTopic`).
+ * @private
+ */
 function closeExplorer() {
     if (currentTemporaryTopic) {
         unsubscribeFromCurrentTemporaryTopic(); // Clean up subscription on close
@@ -135,6 +202,14 @@ function closeExplorer() {
     lastClickedActualTopic = null; // Reset
 }
 
+/**
+ * Handles the click event of the "Subscribe/Unsubscribe" button in the Topic Explorer.
+ * If currently subscribed to the topic in the input field, it unsubscribes.
+ * Otherwise, it unsubscribes from any previous topic (if different) and then
+ * subscribes to the new topic by emitting a `client_temp_subscribe_request`
+ * to the server. It also updates the button text accordingly and clears the message log.
+ * @private
+ */
 function handleSubscribeToggle() {
     if (!socket || !currentExploringDeviceId || !explorerTopicInput) return;
 
@@ -166,6 +241,13 @@ function handleSubscribeToggle() {
     }
 }
 
+/**
+ * Unsubscribes from the currently active temporary topic.
+ * It emits a `client_temp_unsubscribe_request` to the server, logs the action,
+ * resets `currentTemporaryTopic`, updates the subscribe button text, and clears
+ * `lastClickedActualTopic`.
+ * @private
+ */
 function unsubscribeFromCurrentTemporaryTopic() {
     if (socket && currentTemporaryTopic && currentExploringDeviceId) {
         socket.emit("client_temp_unsubscribe_request", {
@@ -179,6 +261,17 @@ function unsubscribeFromCurrentTemporaryTopic() {
     lastClickedActualTopic = null; // Reset clicked topic
 }
 
+/**
+ * Logs a message to the Topic Explorer's message log area.
+ * If `topic` is provided, it's treated as an incoming MQTT message. The `payload`
+ * is parsed as JSON (if possible) and rendered using the `renderjson` library.
+ * If `topic` is `null`, the `payload` is treated as a status message and displayed as plain text.
+ * The function also manages the maximum number of messages in the log.
+ *
+ * @private
+ * @param {string|null} topic - The MQTT topic of the message. If `null`, `payload` is a status message.
+ * @param {string} payload - The message payload (if `topic` is not `null`) or the status message text.
+ */
 function logMessage(topic, payload) {
     if (!explorerMessageLog) return;
 
@@ -243,6 +336,16 @@ function logMessage(topic, payload) {
     explorerMessageLog.scrollTop = explorerMessageLog.scrollHeight;
 }
 
+/**
+ * Handles click events within the message log, specifically for messages rendered by `renderjson`.
+ * When a user clicks on a key or value within a rendered JSON object, this function
+ * attempts to construct the JSON path to the clicked element.
+ * The constructed path is then displayed in the `explorerJsonPathInput` field.
+ * It also updates `lastClickedActualTopic` with the topic of the message entry that was clicked.
+ *
+ * @private
+ * @param {MouseEvent} event - The click event object.
+ */
 function handleJsonMessageClick(event) {
     // console.log('[TopicExplorer] handleJsonMessageClick triggered.');
     const messageEntryDiv = event.target.closest(".message-entry");
@@ -343,6 +446,18 @@ function handleJsonMessageClick(event) {
     }
 }
 
+/**
+ * Binds the selected topic and (optionally) JSON path from the Topic Explorer
+ * back to the input fields in the device variable configuration form.
+ * The `currentExploringVariableRowElement` (set when `openTopicExplorer` was called)
+ * is used to find the target input fields for the topic and JSON path.
+ * It prioritizes `lastClickedActualTopic` for the topic field if available;
+ * otherwise, it uses the topic/filter from the explorer's input field.
+ *
+ * @private
+ * @param {boolean} usePath - If `true`, the JSON path from `explorerJsonPathInput` is also bound.
+ *                            If `false`, the JSON path field in the form is cleared.
+ */
 function bindDataToVariableForm(usePath) {
     if (!currentExploringVariableRowElement || !explorerTopicInput) return;
 

@@ -1,4 +1,11 @@
-// js/layoutManager.js
+/**
+ * @file Manages project-related operations including creating, loading, saving (to server),
+ * exporting (to file), and importing (from file) HMI projects.
+ * It coordinates with KonvaManager for HMI layout data, DeviceManager for device configurations,
+ * and StateManager for saving project states. It also handles communication with the server
+ * via Socket.IO for server-side project operations.
+ * @module js/projectManager
+ */
 import { saveState /* resetHistory */ } from "./stateManager.js"; // Import langsung
 import {
     getAllDeviceConfigsForExport,
@@ -17,9 +24,23 @@ let currentProjectName = null; // Sebelumnya currentLayoutName
 let isDirty = false;
 let isLoadingProject = false; // Flag untuk menandakan proses load/import
 
+/**
+ * @namespace ProjectManager
+ * @description Main object for managing HMI projects. It handles creation, loading, saving,
+ *              exporting, and importing of projects, coordinating with various other modules.
+ */
 const ProjectManager = {
-    // Rename objek
-    // Hapus stateManager dari parameter init
+    /**
+     * Initializes the ProjectManager with necessary references to other modules.
+     * This function should be called once during application setup.
+     *
+     * @param {object} konvaManager - A reference to the initialized KonvaManager instance,
+     *                                used to access HMI layout data and clear the canvas.
+     * @param {object} componentFactory - A reference to the componentFactory, used for
+     *                                    creating HMI components when loading or importing projects.
+     * @param {object} socket - The active Socket.IO client instance, used for communication
+     *                          with the server for project operations (save, load, list).
+     */
     init(konvaManager, componentFactory, socket) {
         konvaManagerRef = konvaManager;
         componentFactoryRef = componentFactory;
@@ -32,8 +53,12 @@ const ProjectManager = {
         // atau meng-hook ke saveState di stateManager.
     },
 
-    // Fungsi ini untuk sementara masih mengambil data HMI saja
-    // Akan diubah nanti untuk mengambil seluruh data project
+    /**
+     * Retrieves the HMI layout data from the KonvaManager.
+     * This data typically includes an array of all HMI components and their properties.
+     *
+     * @returns {Array<object>} An array of HMI component data objects, or an empty array if an error occurs.
+     */
     getHmiDataForProject() {
         // Diubah namanya dari getCurrentHmiDataAsJson
         if (
@@ -46,6 +71,12 @@ const ProjectManager = {
         return [];
     },
 
+    /**
+     * Retrieves the device configuration data from the DeviceManager.
+     * This data includes an array of all configured devices and their settings.
+     *
+     * @returns {Array<object>} An array of device configuration objects, or an empty array if an error occurs.
+     */
     getDeviceDataForProject() {
         if (typeof getAllDeviceConfigsForExport === "function") {
             return getAllDeviceConfigsForExport();
@@ -56,6 +87,16 @@ const ProjectManager = {
         return [];
     },
 
+    /**
+     * Compiles all relevant data for the current project into a single object.
+     * This includes HMI layout, device configurations, project name, version,
+     * and modification timestamp. This object is typically used for saving
+     * or exporting the project.
+     *
+     * @returns {object} An object containing the complete current project data.
+     *                   Includes `projectName`, `projectVersion`, `lastModified`,
+     *                   `hmiLayout` (array), `deviceConfigs` (array), and `projectSettings` (object).
+     */
     getCurrentProjectData() {
         const hmiLayout = this.getHmiDataForProject();
         const deviceConfigs = this.getDeviceDataForProject();
@@ -73,37 +114,77 @@ const ProjectManager = {
         };
     },
 
+    /**
+     * Sets the "dirty" status of the project.
+     * A project is considered dirty if it has unsaved changes.
+     *
+     * @param {boolean} status - `true` if the project has unsaved changes, `false` otherwise.
+     */
     setDirty(status) {
         isDirty = status;
         // Mungkin update UI untuk menunjukkan status dirty (misalnya, tanda bintang di judul)
         console.log("Project dirty status:", isDirty); // Update log
     },
 
+    /**
+     * Checks if the current project has unsaved changes.
+     *
+     * @returns {boolean} `true` if the project is dirty, `false` otherwise.
+     */
     isProjectDirty() {
         // Sebelumnya isLayoutDirty
         return isDirty;
     },
 
+    /**
+     * Gets the name of the currently loaded project.
+     *
+     * @returns {string|null} The name of the current project, or `null` if no project is loaded or named.
+     */
     getCurrentProjectName() {
         // Sebelumnya getCurrentLayoutName
         return currentProjectName;
     },
 
+    /**
+     * Sets the name for the current project.
+     *
+     * @param {string|null} name - The name to set for the current project.
+     *                               Can be `null` if a new, unnamed project is created.
+     */
     setCurrentProjectName(name) {
         // Sebelumnya setCurrentLayoutName
         currentProjectName = name;
     },
 
+    /**
+     * Sets the loading status flag for project operations.
+     * This is used to indicate that a project is currently being loaded or imported,
+     * which might influence other parts of the application (e.g., disabling certain UI elements).
+     *
+     * @param {boolean} status - `true` if a project loading/importing operation is in progress, `false` otherwise.
+     */
     setIsLoadingProject(status) {
         isLoadingProject = status;
     },
 
+    /**
+     * Gets the current loading status for project operations.
+     *
+     * @returns {boolean} `true` if a project is being loaded/imported, `false` otherwise.
+     */
     getIsLoadingProject() {
         return isLoadingProject;
     },
 
-    // Fungsi ini untuk sementara masih bekerja seperti newLayout
-    // Akan diubah nanti untuk menghapus device juga
+    /**
+     * Creates a new, empty project.
+     * This function clears all devices from the client-side (which also requests server deletion),
+     * clears the HMI canvas, resets the project name, and sets the dirty status to false.
+     * It also saves an initial empty state for the undo/redo history.
+     * Note: Confirmation for unsaved changes should be handled by the caller (e.g., uiManager)
+     * before invoking this method.
+     */
     newProject() {
         // Konfirmasi isDirty sekarang ditangani oleh uiManager sebelum memanggil ini
         console.log("[ProjectManager] newProject dipanggil.");
@@ -144,7 +225,12 @@ const ProjectManager = {
         // Mungkin perlu emit event atau callback jika ada modul lain yang perlu tahu
     },
 
-    // Fungsi ini sekarang akan mengekspor seluruh data project
+    /**
+     * Exports the current project data (HMI layout and device configurations) to a JSON file.
+     * The project data is retrieved using `getCurrentProjectData()`. If there is no data to export,
+     * an alert is shown. Otherwise, the data is stringified to JSON and downloaded by the browser
+     * with a filename based on the project name and current date.
+     */
     exportProject() {
         const projectData = this.getCurrentProjectData();
 
@@ -176,7 +262,21 @@ const ProjectManager = {
         console.log(`Project diekspor sebagai ${filename}`); // Update log
     },
 
-    // Fungsi ini sekarang akan menyimpan seluruh data project
+    /**
+     * Saves the current project data to the server under the given project name.
+     * It retrieves the complete project data using `getCurrentProjectData()`,
+     * then emits a `project:save` event to the server via Socket.IO.
+     * The function returns a Promise that resolves with the server's response upon
+     * successful save, or rejects if the project name is empty, the socket is not connected,
+     * an error occurs during saving, or a timeout is reached.
+     * It also handles specific `operation_error` events from the server that might be
+     * benign (e.g., "device not found for deletion") and should not fail the overall save operation.
+     *
+     * @param {string} projectName - The name under which to save the project on the server.
+     * @returns {Promise<object>} A promise that resolves with the server's acknowledgment response
+     *                            (typically `{ success: true, name: string, message?: string }`)
+     *                            or rejects with an error message string.
+     */
     saveProjectToServer(projectName) {
         if (!projectName || projectName.trim() === "") {
             alert("Nama project tidak boleh kosong.");
@@ -309,7 +409,24 @@ const ProjectManager = {
         });
     },
 
-    // Fungsi ini sekarang akan memuat seluruh data project
+    /**
+     * Loads a project from the server by its name.
+     * It emits a `project:load` event to the server and waits for a `project:loaded_data`
+     * response. Upon receiving the data, it clears the current HMI canvas,
+     * re-creates HMI components based on the loaded layout, and updates the project name
+     * and dirty status. Device configurations are expected to be handled by the
+     * `deviceManager` upon receiving an `initial_device_list` event from the server
+     * (triggered by the project load on the server-side).
+     * The function returns a Promise that resolves with the loaded project data or
+     * rejects if an error occurs or a timeout is reached.
+     * Note: Confirmation for unsaved changes in the current project should be handled
+     * by the caller (e.g., uiManager) before invoking this method.
+     *
+     * @param {string} projectName - The name of the project to load from the server.
+     * @returns {Promise<object>} A promise that resolves with the loaded project data object
+     *                            (containing `projectName`, `hmiLayout`, `deviceConfigs`, etc.)
+     *                            or rejects with an error message string.
+     */
     loadProjectFromServer(projectName) {
         if (!projectName || projectName.trim() === "") {
             alert("Nama project untuk dimuat tidak boleh kosong.");
@@ -491,6 +608,16 @@ const ProjectManager = {
         });
     },
 
+    /**
+     * Fetches the list of available project names from the server.
+     * Emits a `project:list` event via Socket.IO and expects a `project:list_results`
+     * event in response, containing an array of project name strings.
+     * Returns a Promise that resolves with the array of project names or rejects
+     * if an error occurs or a timeout is reached.
+     *
+     * @returns {Promise<Array<string>>} A promise that resolves with an array of available project names.
+     *                                     Rejects with an error message string on failure or timeout.
+     */
     getAvailableProjectsFromServer() {
         if (!socketRef) {
             console.error(
@@ -546,8 +673,23 @@ const ProjectManager = {
         });
     },
 
-    // Fungsi ini untuk sementara masih mengimpor HMI saja
-    // Akan diubah nanti untuk mengimpor seluruh data project
+    /**
+     * Imports a project from a local JSON file.
+     * The user selects a file, which is then read and parsed.
+     * The function expects the file to contain a valid project data object
+     * (with `hmiLayout` and `deviceConfigs` arrays).
+     * Before importing, it clears the current project (similar to `newProject()`).
+     * Then, it reconstructs the HMI layout using `componentFactory` and initializes
+     * device configurations using `initializeDevicesFromConfigs` from `deviceManager`.
+     * The imported project's name is set, and its status is marked as dirty.
+     * Returns a Promise that resolves with the parsed project data or rejects if an error occurs.
+     * Note: Confirmation for unsaved changes in the current project should be handled
+     * by the caller (e.g., uiManager) before invoking this method.
+     *
+     * @param {File} file - The File object representing the JSON project file to import.
+     * @returns {Promise<object>} A promise that resolves with the imported project data object
+     *                            or rejects with an error message string.
+     */
     importProjectFromFile(file) {
         // Sebelumnya importLayoutFromFile
         if (!file) {

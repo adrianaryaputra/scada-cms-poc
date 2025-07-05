@@ -78,10 +78,24 @@ let variableFormModal,
 
 /**
  * Initializes the DeviceManager module.
- * Sets up Socket.IO listeners, caches DOM elements for modals and forms,
- * and attaches event listeners for UI interactions.
- * @param {object} socketInstance - The Socket.IO client instance.
- * @param {function} projectManagerSetDirtyFunc - Function from ProjectManager to mark the project as dirty.
+ * This function is responsible for setting up the connection with the server via Socket.IO
+ * for device-related communications. It caches references to essential DOM elements
+ * used for managing devices and their variables (modals, forms, lists).
+ * It also attaches numerous event listeners to UI elements to handle user interactions
+ * such as opening modals, submitting forms for adding/editing devices and variables,
+ * and deleting devices/variables. Finally, it registers listeners for various Socket.IO
+ * events from the server to keep the local device cache and UI synchronized with the
+ * server state (e.g., when devices are added, updated, or deleted, or when variable
+ * values change).
+ *
+ * @export
+ * @param {object} socketInstance - The active Socket.IO client instance connected to the `/devices` namespace.
+ *                                  This instance is used for all real-time communication regarding devices.
+ * @param {function} projectManagerSetDirtyFunc - A callback function from the ProjectManager module.
+ *                                                This function is called to mark the current project
+ *                                                as "dirty" (modified) whenever a device or variable
+ *                                                configuration change occurs that should prompt the user
+ *                                                to save the project.
  */
 export function initDeviceManager(socketInstance, projectManagerSetDirtyFunc) {
     if (
@@ -1404,28 +1418,43 @@ function _deleteVariable(deviceId, varId) {
 
 /**
  * Retrieves the local cache of all configured devices.
- * @returns {Array<object>} An array of device configuration objects.
+ * This cache is maintained by listening to Socket.IO events from the server.
+ * It represents the client's current understanding of the available devices.
+ *
+ * @export
+ * @returns {Array<object>} An array of device configuration objects. Each object
+ *                          typically includes properties like `id`, `name`, `type`,
+ *                          `connected` (status), and type-specific configuration
+ *                          (e.g., `host`, `port` for MQTT/Modbus).
  */
 export function getDevices() {
     return localDeviceCache;
 }
 
 /**
- * Retrieves a specific device configuration by its ID.
- * @param {string} id - The ID of the device to retrieve.
- * @returns {object|null} The device configuration object, or null if not found.
+ * Retrieves a specific device configuration from the local cache by its ID.
+ *
+ * @export
+ * @param {string} id - The unique ID of the device to retrieve.
+ * @returns {object|null} The device configuration object if found; otherwise, `null`.
  */
 export function getDeviceById(id) {
     return localDeviceCache.find((device) => device.id === id) || null;
 }
 
 /**
- * Sends data to a specific variable on a device via the server.
- * The `nameOrAddress` parameter is treated as `variableName` for "internal" devices,
- * and as a generic `address` for other device types (for potential legacy or direct addressing).
- * @param {string} deviceId - The ID of the target device.
- * @param {string} nameOrAddress - The name of the variable (for internal devices) or the address (for other types).
- * @param {*} value - The value to write to the variable/address.
+ * Sends a request to the server to write a value to a specific variable or address on a device.
+ * This function constructs a payload based on the device type. For "internal" devices,
+ * it assumes `nameOrAddress` refers to a `variableName`. For other device types,
+ * `nameOrAddress` is treated as a generic `address`.
+ * The actual write operation and interpretation of `variableName` or `address`
+ * is handled by the server-side device implementation.
+ *
+ * @export
+ * @param {string} deviceId - The unique ID of the target device.
+ * @param {string} nameOrAddress - The name of the variable (if device type is "internal")
+ *                                 or the address/identifier (for other device types) to write to.
+ * @param {*} value - The value to be written.
  */
 export function writeDataToServer(deviceId, nameOrAddress, value) {
     if (socket && socket.connected) {
@@ -1455,10 +1484,16 @@ export function writeDataToServer(deviceId, nameOrAddress, value) {
 }
 
 /**
- * Updates the displayed value of a variable in the Variable Manager UI if it's currently open and showing that variable.
- * @param {string} deviceId - The ID of the device.
- * @param {string} variableName - The name of the variable.
- * @param {*} newValue - The new value to display.
+ * Updates the displayed value of a specific variable within the Variable Manager UI.
+ * This function is typically called when a `device_variable_update` event is received
+ * from the server, and the Variable Manager modal is currently open and displaying
+ * variables for the relevant device. It ensures that the user sees live data updates
+ * in the UI. The value is truncated if it's a long string or stringified JSON object.
+ *
+ * @export
+ * @param {string} deviceId - The ID of the device to which the variable belongs.
+ * @param {string} variableName - The name of the variable whose display needs updating.
+ * @param {*} newValue - The new value of the variable.
  */
 export function updateLiveVariableValueInManagerUI(
     deviceId,
@@ -1495,9 +1530,15 @@ export function updateLiveVariableValueInManagerUI(
 }
 
 /**
- * Retrieves all device configurations from the local cache for export.
- * Creates a deep copy to prevent unintended modifications.
- * @returns {Array<object>} An array of device configuration objects.
+ * Retrieves all current device configurations from the local cache, intended for project export.
+ * This function creates a deep copy of the `localDeviceCache` to prevent any unintended
+ * modifications to the live cache during the export process. The `localDeviceCache`
+ * is expected to store the pure configuration data for devices, suitable for saving
+ * to a project file.
+ *
+ * @export
+ * @returns {Array<object>} An array of device configuration objects. If deep copying fails,
+ *                          it attempts to return a shallow copy or an empty array as a fallback.
  */
 export function getAllDeviceConfigsForExport() {
     // Membuat deep copy dari setiap objek konfigurasi untuk menghindari modifikasi tidak sengaja
@@ -1513,9 +1554,14 @@ export function getAllDeviceConfigsForExport() {
 }
 
 /**
- * Clears all devices from the client-side.
- * Empties the localDeviceCache, removes associated state from stateManager,
- * and requests device deletion from the server for each device.
+ * Clears all devices from the client-side and requests their deletion from the server.
+ * This function iterates through all devices in the `localDeviceCache`,
+ * removes their associated state from the `stateManager`, and sends a
+ * `delete_device` request to the server for each device. Finally, it clears
+ * the `localDeviceCache` and updates the UI. This is typically used when
+ * the user wants to clear the entire project or start a new one.
+ *
+ * @export
  */
 export function clearAllClientDevices() {
     if (localDeviceCache && localDeviceCache.length > 0) {
@@ -1542,9 +1588,14 @@ export function clearAllClientDevices() {
 }
 
 /**
- * Clears the local device cache and associated client-side state (from stateManager)
- * without notifying the server. This is typically used when loading a new project,
- * where the server will then send a new list of devices.
+ * Clears the local device cache and associated client-side state from the `stateManager`
+ * *without* sending delete requests to the server. This function is primarily used
+ * when a new project is being loaded. In such scenarios, the server will typically
+ * send a fresh list of devices associated with the new project, making individual
+ * server-side deletions unnecessary and potentially causing race conditions if not handled carefully.
+ * After clearing, it updates the UI to reflect the empty device list.
+ *
+ * @export
  */
 export function clearLocalDeviceCacheAndState() {
     if (localDeviceCache && localDeviceCache.length > 0) {
@@ -1566,13 +1617,23 @@ export function clearLocalDeviceCacheAndState() {
 }
 
 /**
- * Initializes or replaces all client-side devices based on an array of device configurations.
- * This function first clears all existing client devices (which also requests server-side deletion),
- * then sends "add_device" requests to the server for each new configuration.
- * The server's responses ('device_added' events) will repopulate the local cache and UI.
- * @param {Array<object>} deviceConfigsArray - An array of device configuration objects.
- * @returns {Promise<void>} A promise that resolves when all add requests have been sent,
- *                          or rejects if the socket is not connected.
+ * Initializes or replaces all client-side devices based on a provided array of device configurations.
+ * This is typically used when loading a project. The process involves:
+ * 1. Clearing all currently known client-side devices. This action also triggers
+ *    requests to the server to delete these devices from its active instances.
+ * 2. Iterating through the `deviceConfigsArray` and sending an `add_device` request
+ *    to the server for each configuration.
+ * The server is expected to respond to these `add_device` requests with `device_added`
+ * events, which will then repopulate the client's `localDeviceCache` and update the UI.
+ * If a device configuration in the array lacks an ID, a new one is generated.
+ *
+ * @export
+ * @async
+ * @param {Array<object>} deviceConfigsArray - An array of device configuration objects
+ *                                           that should become the new set of active devices.
+ * @returns {Promise<void>} A promise that resolves when all `add_device` requests have been
+ *                          sent to the server. It rejects with an error message if the
+ *                          socket is not connected.
  */
 export async function initializeDevicesFromConfigs(deviceConfigsArray) {
     console.log(

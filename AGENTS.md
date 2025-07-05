@@ -97,3 +97,7 @@ Aplikasi ini adalah **SCADA (Supervisory Control and Data Acquisition) / HMI (Hu
 - Pastikan untuk menjaga konsistensi kode dan mengikuti pola yang sudah ada.
 - Jika ada tugas terkait AI, `js/aiAssistant.js` adalah tempat utama untuk dilihat.
 - Untuk tugas visual/UI, `js/konvaManager.js` dan `js/uiManager.js` serta file CSS akan relevan.
+
+## Catatan Pengembangan Terkini:
+
+- **2024-07-18:** Menghadapi kesulitan dalam membuat unit test untuk `js/konvaManager.js` menggunakan Jest. Secara spesifik, panggilan ke `gridLayer.add(new Konva.Line(...))` di dalam fungsi `drawGrid` tidak terdeteksi oleh `toHaveBeenCalled()` pada mock instance `gridLayer`, meskipun panggilan ke metode lain pada instance yang sama (seperti `destroyChildren()`) berhasil terdeteksi. Berbagai strategi debugging telah dicoba, termasuk memastikan mock instance yang benar digunakan (dengan mengekspor objek internal untuk pengujian) dan memverifikasi bahwa metode tersebut memang di-mock sebagai `jest.fn()`. Masalah ini untuk sementara ditunda untuk melanjutkan progres pada area lain.
